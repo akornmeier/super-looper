@@ -37,10 +37,18 @@ export function validateFrontmatter(raw: string, sourcePath?: string): Validatio
 
   // js-yaml hydrates an unquoted `date: 2026-06-16` into a Date (YAML 1.1
   // timestamp type), but the schema's contract is a YYYY-MM-DD string as
-  // written in the file. Normalize back to that string before validating.
-  // Date-only timestamps are stored as UTC midnight, so the UTC slice is exact.
+  // written in the file. A date-only value hydrates to UTC midnight; normalize
+  // it back to its YYYY-MM-DD string. A value carrying a time or offset
+  // component is NOT a plain date — keep it as a full ISO string so the
+  // schema's YYYY-MM-DD regex rejects it rather than silently day-shifting it.
   if (data.date instanceof Date) {
-    data.date = data.date.toISOString().slice(0, 10)
+    const d = data.date
+    const isDateOnly =
+      d.getUTCHours() === 0 &&
+      d.getUTCMinutes() === 0 &&
+      d.getUTCSeconds() === 0 &&
+      d.getUTCMilliseconds() === 0
+    data.date = isDateOnly ? d.toISOString().slice(0, 10) : d.toISOString()
   }
 
   const schema = schemaFor(data.problem_type)

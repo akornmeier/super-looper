@@ -209,6 +209,109 @@ describe("validateFrontmatter", () => {
     expect(result.valid).toBe(false)
     expect(result.errors.length).toBeGreaterThan(0)
   })
+
+  test("an unquoted date-only value passes (Date hydration normalized)", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(true)
+  })
+
+  test("a full timestamp in date is rejected, not silently day-shifted", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16 23:30:00 -05:00",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.field === "date")).toBe(true)
+  })
+
+  test("bug symptoms exceeding max 5 fails naming symptoms", () => {
+    const symptoms = Array.from({ length: 6 }, (_, i) => `  - s${i}`).join("\n")
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: build_error",
+          "component: build_tooling",
+          "severity: high",
+          "symptoms:",
+          symptoms,
+          "root_cause: type_error",
+          "resolution_type: code_fix",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.field === "symptoms")).toBe(true)
+  })
+
+  test("knowledge applies_when exceeding max 5 fails naming applies_when", () => {
+    const items = Array.from({ length: 6 }, (_, i) => `  - w${i}`).join("\n")
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+          "applies_when:",
+          items,
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.field === "applies_when")).toBe(true)
+  })
+
+  test("invalid severity enum fails naming severity", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: urgent",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.field === "severity")).toBe(true)
+  })
+
+  test("empty module fails naming module", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          'module: ""',
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.field === "module")).toBe(true)
+  })
 })
 
 // --- CLI: scripts/solutions/validate-frontmatter.ts -------------------------
@@ -264,5 +367,29 @@ describe("validate-frontmatter CLI", () => {
   test("corpus mode over the (empty) docs/solutions exits 0", () => {
     const result = runCli([CORPUS])
     expect(result.code).toBe(0)
+  })
+
+  test("a nonexistent path exits 2 (usage)", () => {
+    const result = runCli([path.join(tmpdir(), "does-not-exist-xyz-123.md")])
+    expect(result.code).toBe(2)
+  })
+
+  test("corpus mode with an invalid doc exits 1", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "solutions-corpus-"))
+    writeFileSync(
+      path.join(dir, "bad.md"),
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: not_a_real_type",
+          "component: tooling",
+          "severity: low",
+        ].join("\n"),
+      ),
+      "utf8",
+    )
+    const result = runCli([dir])
+    expect(result.code).toBe(1)
   })
 })

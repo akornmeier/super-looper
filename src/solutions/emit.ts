@@ -181,6 +181,7 @@ fields like \`description:\` have their own quoting rules (see plugin
 export function renderSchemaYaml(): string {
   const F = FIELD_DESCRIPTIONS
   const q = (value: string): string => JSON.stringify(value)
+  const reservedList = YAML_RESERVED_INDICATORS.join(", ")
 
   return `# Documentation schema for learnings written by sl-compound
 # Treat this as the canonical frontmatter contract for docs/solutions/.
@@ -314,7 +315,7 @@ validation_rules:
   - "date must match YYYY-MM-DD format"
   - "framework_version, if provided, only applies to bug-track docs"
   - "tags should be lowercase and hyphen-separated"
-  - "Array-of-strings frontmatter items (symptoms, applies_when, tags, related_components, or any future array field) must be wrapped in double quotes when the value starts with a YAML reserved indicator (\`, [, *, &, !, |, >, %, @, ?) or contains the substring \`: \` — otherwise strict YAML parsers reject the file"
+  - "Array-of-strings frontmatter items (symptoms, applies_when, tags, related_components, or any future array field) must be wrapped in double quotes when the value starts with a YAML reserved indicator (${reservedList}) or contains the substring \`: \` — otherwise strict YAML parsers reject the file"
 `
 }
 

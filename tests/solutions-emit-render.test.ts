@@ -86,6 +86,23 @@ describe("enum coverage", () => {
   })
 })
 
+describe("enum YAML safety", () => {
+  test("every enum value is a safe unquoted YAML scalar", () => {
+    // The renderer emits enum values unquoted; a value containing a YAML
+    // indicator character would produce an invalid generated schema.yaml.
+    const safe = /^[a-z][a-z0-9_]*$/
+    const allEnums = [
+      ...BUG_PROBLEM_TYPES,
+      ...KNOWLEDGE_PROBLEM_TYPES,
+      ...COMPONENTS,
+      ...ROOT_CAUSES,
+      ...RESOLUTION_TYPES,
+      ...SEVERITIES,
+    ]
+    for (const value of allEnums) expect(value).toMatch(safe)
+  })
+})
+
 describe("emitDocs drift mechanics", () => {
   test("reports all changed on a fresh root without writing when write:false", async () => {
     const root = makeRoot()

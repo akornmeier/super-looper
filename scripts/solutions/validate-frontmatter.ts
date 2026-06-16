@@ -31,7 +31,12 @@ async function validateOne(filePath: string): Promise<boolean> {
   return false
 }
 
-const stat = await fs.stat(target)
+const stat = await fs.stat(target).catch(() => null)
+if (!stat) {
+  console.error(`usage: cannot read "${target}" (no such file or directory)`)
+  process.exit(2)
+}
+
 let ok = true
 if (stat.isDirectory()) {
   // Corpus mode: walkFiles returns every file regardless of extension, so
