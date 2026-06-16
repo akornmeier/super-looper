@@ -11,7 +11,8 @@
     "plugin:validate": "claude plugin validate .claude-plugin/marketplace.json && claude plugin validate plugins/super-looper",
     "release:preview": "bun run scripts/release/preview.ts",
     "release:sync-metadata": "bun run scripts/release/sync-metadata.ts --write",
-    "release:validate": "bun run scripts/release/validate.ts"
+    "release:validate": "bun run scripts/release/validate.ts",
+    "solutions:validate": "bun run scripts/solutions/validate-frontmatter.ts docs/solutions"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
