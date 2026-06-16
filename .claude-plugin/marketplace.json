@@ -1,0 +1,32 @@
+{
+  "name": "super-looper-plugin",
+  "owner": {
+    "name": "Anthony Kornmeier",
+    "url": "https://github.com/akornmeier"
+  },
+  "metadata": {
+    "description": "Plugin marketplace for Claude Code extensions",
+    "version": "1.0.2"
+  },
+  "plugins": [
+    {
+      "name": "super-looper",
+      "description": "AI-powered development tools that get smarter with every use. Make each unit of engineering work easier than the last.",
+      "author": {
+        "name": "Anthony Kornmeier",
+        "url": "https://github.com/akornmeier",
+        "email": "tony@kornmeier.me"
+      },
+      "homepage": "https://github.com/akornmeier/super-looper",
+      "tags": [
+        "ai-powered",
+        "super-looper",
+        "workflow-automation",
+        "code-review",
+        "quality",
+        "knowledge-management"
+      ],
+      "source": "./plugins/super-looper"
+    }
+  ]
+}

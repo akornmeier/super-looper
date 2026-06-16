@@ -1,0 +1,13 @@
+.DS_Store
+*.log
+logs/
+node_modules/
+todos/
+.worktrees
+.context/
+.claude/worktrees/
+.claude/data/
+__pycache__/
+*.pyc
+
+.super-looper/*.local.yaml
