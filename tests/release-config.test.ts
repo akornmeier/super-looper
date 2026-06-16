@@ -1,0 +1,98 @@
+import { describe, expect, test } from "bun:test"
+import { validateReleasePleaseConfig } from "../src/release/config"
+
+describe("release-please config validation", () => {
+  test("rejects upward-relative changelog paths", () => {
+    const errors = validateReleasePleaseConfig({
+      packages: {
+        ".": {
+          "changelog-path": "CHANGELOG.md",
+        },
+        "plugins/super-looper": {
+          "changelog-path": "../../CHANGELOG.md",
+        },
+      },
+    })
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('Package "plugins/super-looper"')
+    expect(errors[0]).toContain("../../CHANGELOG.md")
+  })
+
+  test("allows package-local changelog paths and skipped changelogs", () => {
+    const errors = validateReleasePleaseConfig({
+      packages: {
+        ".": {
+          "changelog-path": "CHANGELOG.md",
+        },
+        "plugins/super-looper": {
+          "skip-changelog": true,
+        },
+        ".claude-plugin": {
+          "changelog-path": "CHANGELOG.md",
+        },
+      },
+    })
+
+    expect(errors).toEqual([])
+  })
+
+  // The `manifest` argument is the released (base-branch) version, so an
+  // at-or-below pin means the release already shipped -- the pin is stale.
+  test("rejects a stale release-as pin that is not ahead of the released version", () => {
+    const errors = validateReleasePleaseConfig(
+      {
+        packages: {
+          ".claude-plugin": { "release-as": "1.0.2" },
+          "plugins/super-looper": { "release-as": "3.0.0" },
+        },
+      },
+      {
+        ".claude-plugin": "1.0.2",
+        "plugins/super-looper": "3.13.0",
+      },
+    )
+
+    expect(errors).toHaveLength(2)
+    expect(errors[0]).toContain('Package ".claude-plugin"')
+    expect(errors[0]).toContain("stale")
+    expect(errors[0]).toContain("1.0.2")
+    expect(errors[1]).toContain('Package "plugins/super-looper"')
+    expect(errors[1]).toContain("3.0.0")
+  })
+
+  // A forward pin is ahead of the released version. This is also the state of an
+  // in-flight release-please PR when compared against the base manifest (the
+  // release has not shipped yet), so it must pass.
+  test("allows a forward release-as pin that is ahead of the released version", () => {
+    const errors = validateReleasePleaseConfig(
+      {
+        packages: {
+          ".claude-plugin": { "release-as": "1.0.3" },
+          "plugins/super-looper": { "release-as": "3.14.0" },
+        },
+      },
+      {
+        ".claude-plugin": "1.0.2",
+        "plugins/super-looper": "3.13.0",
+      },
+    )
+
+    expect(errors).toEqual([])
+  })
+
+  // No released baseline (e.g. the base manifest could not be read) means
+  // staleness is unprovable, so the pin is allowed rather than risk blocking a
+  // legitimate release.
+  test("allows a release-as pin when the released version is unknown", () => {
+    const errors = validateReleasePleaseConfig({
+      packages: {
+        ".": {
+          "release-as": "3.0.2",
+        },
+      },
+    })
+
+    expect(errors).toEqual([])
+  })
+})

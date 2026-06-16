@@ -1,0 +1,235 @@
+# `sl-plan`
+
+> Establish the guardrails an implementation needs — decisions, units, files, tests, scope, risks — without prescribing the actual code or step-by-step choreography. Plans capture the **WHAT**; the implementing agent figures out the **HOW**.
+
+`sl-plan` produces plans that are **decision documents with execution guardrails**, not implementation choreography. The plan captures what decisions have been made, what scope is in or out, what atomic units of work exist, what files each unit touches, what test scenarios must pass, and what risks need mitigation. It does **not** pre-write code, exact API signatures, or step-by-step shell command sequences — those are for the implementing agent (`sl-work`, another AI agent, or a human) to determine when code is in front of them.
+
+This separation matters. Plans that pre-write implementation tend to be wrong by the time you implement them: signatures don't compile, choreography is stale, micro-steps obscure the real decisions. Plans that capture guardrails stay portable for weeks or months and respect the judgment the implementer brings at execution time.
+
+It works for any multi-step task where structure helps — software features, refactors, bug fixes, study plans, research workflows, event planning, even things like annual hot-water-tank maintenance. The same engine; the same U-ID stability; the same right-sized template.
+
+This is the third step in the super-looper ideation chain:
+
+```text
+/sl-ideate         /sl-brainstorm      /sl-plan             /sl-work
+"What's worth      "What does this     "What's needed       "Build it."
+ exploring?"        need to be?"        to accomplish
+                                        this?"
+```
+
+But it stands alone just as well — many teams reach for `sl-plan` directly with a requirements doc, GitHub issue, PRD, rough description, or non-software multi-step task.
+
+---
+
+## TL;DR
+
+| Question | Answer |
+|----------|--------|
+| What does it do? | Researches context, captures decisions and scope, breaks work into atomic units with stable IDs, enumerates test scenarios per unit, and auto-strengthens weak sections via a confidence check |
+| When to use it | Requirements ready and execution guardrails needed; solo planning when the task is clear; non-software multi-step tasks (study plans, research, maintenance, events, trips) |
+| What it produces | Plan in `docs/plans/YYYY-MM-DD-NNN-<type>-<name>-plan.md` |
+| What's next | `/sl-work`, create a tracked issue, open in Proof for review, or pause |
+| Distinguishing | Guardrails over choreography (WHAT, not HOW); U-IDs (stable); origin tracing (R/A/F/AE → U); test scenarios per unit; automatic deepening; multi-agent research |
+
+---
+
+## The Problem
+
+Plans written by humans (or AI without structure) tend to fail in predictable ways:
+
+- **Renumbering chaos** — refactor the unit list and every reference in the issue, PR, and conversation is now wrong
+- **Vague test "scenarios"** — "test the new behavior" tells the implementer nothing
+- **Forgotten origin context** — the brainstorm decided this was for a specific actor, but the plan never mentions them
+- **Half-resolved questions** — "TBD: figure out caching strategy" sitting in the plan months later
+- **Implementation choreography** — exact method signatures, micro-steps, or shell sequences pre-written, then wrong by the time implementation actually starts
+- **No depth check** — the author has no signal whether the plan is grounded enough to execute
+
+## The Solution
+
+`sl-plan` separates **WHAT decisions need to be honored** from **HOW to satisfy them in code**:
+
+- The plan captures decisions, scope boundaries, atomic units, files, test scenarios, and risks — the shape and constraints of execution
+- It does not pre-write code, exact API signatures, or step-by-step shell choreography — those decisions are deferred to the implementing agent at execution time
+- Stable U-IDs survive reordering, splitting, and deletion — so blocker references and PR mentions stay valid across plan edits
+- Plan-decisions are traceable back to origin (R-IDs from brainstorm; AE-IDs cited in test scenarios)
+- Research runs in parallel before structuring (repo, learnings, framework docs, best practices, spec flow)
+- A confidence check runs automatically after writing the plan and dispatches targeted sub-agents to strengthen weak sections
+- Planning-time vs implementation-time questions are explicitly separated — no fake certainty
+
+---
+
+## What Makes It Novel
+
+### 1. Guardrails over choreography — WHAT, not HOW
+
+Plans capture decisions and constraints, not code: decisions made (with rationale), scope boundaries, atomic units of work, files touched, test scenarios that must pass, and risks needing mitigation. Plans deliberately exclude exact method signatures, framework-specific syntax, step-by-step shell sequences, and pseudo-code dressed up as implementation specification. The implementing agent reads the plan, sees the guardrails, and figures out HOW to satisfy them with code in front of them. **Decisions belong in the plan; implementation choices belong at execution time.**
+
+> Why? Plans that pre-write implementation are brittle: pre-committed signatures don't compile, choreographed steps go stale, and they rob the implementer of judgment that should be made with current context. Plans that stick to guardrails stay portable across weeks of code change, across implementer (human or AI), and across edits during deepening.
+
+This is also what makes the same engine work for non-software tasks. A hot-water-tank-maintenance plan has decisions, units, files-equivalent (which valves, which manuals), test scenarios ("verify no leaks after refill"), and risks — but no code. The frame transfers cleanly.
+
+### 2. U-IDs — implementation units have stable, never-renumbered identifiers
+
+Each unit's heading is `- U1. **Name**`, `- U2. **Name**`, etc. The stability rule: never renumber existing IDs after reordering, splitting, or deleting. Splits keep the original U-ID on the original concept; new units take the next unused number; deletions leave gaps (gaps are fine, never backfilled).
+
+This matters because `sl-work` references units by U-ID across plan edits. Renumbering during a deepening pass silently breaks every blocker reference, every PR description that cites a unit, and every downstream conversation. The stability rule prevents that class of bug.
+
+### 3. Origin tracing — R/A/F/AE IDs from brainstorm flow through the plan
+
+When the plan is sourced from a `sl-brainstorm` requirements doc, identifiers flow through: Requirements (R-IDs) trace into the plan's Requirements section; Actors (A-IDs) carry forward when they affect behavior or permissions; Key Flows (F-IDs) cite into implementation units that realize them; Acceptance Examples (AE-IDs) cite into test scenarios that enforce them (`Covers AE3. <scenario>`). Every section of the origin doc is verified against the plan before finalization. Nothing silently drops.
+
+### 4. Test scenarios per unit, in named categories
+
+Every feature-bearing unit enumerates test scenarios from each applicable category — happy path, edge cases (boundaries, empty/nil, concurrency), error/failure paths (invalid input, downstream failures, permissions), and integration (cross-layer behaviors mocks alone won't prove). Each scenario names the input, action, and expected outcome — specific enough that the implementer doesn't have to invent coverage.
+
+### 5. Confidence check and automatic deepening
+
+After the plan is written, `sl-plan` automatically scores sections against checklists with risk-weighted bonuses, picks the top weak sections, dispatches targeted sub-agents to strengthen them (correctness reviewer for implementation units, data integrity guardian for migrations, architecture strategist for key technical decisions), and synthesizes findings back into the plan. Auto mode integrates findings directly; interactive mode (when you ask to deepen an existing plan) presents findings for accept/reject. The expensive moment to discover a thin section is during execution, not during planning.
+
+### 6. Multi-agent research, in parallel
+
+Phase 1 always runs local research in parallel — repo-research-analyst (technology, architecture, patterns) and learnings-researcher (institutional memory from `docs/solutions/`), plus spec-flow-analyzer (edge-case completeness for Standard/Deep plans) and optional Slack research. External research is then decided **by intent**, not a single on/off switch: an explicit request ("research competitors", "best practices from the web", "which library") always runs and overrides strong local patterns, while implicit signals (thin local patterns, or an unsettled external option set the recommendations depend on) can trigger it too. The intent routes the agent — framework-docs-researcher and best-practices-researcher for *how to build it well* (implementation-guidance), web-researcher for *what options or prior art exist* (landscape/competitor scans); mixed requests run the landscape scan first, then docs on the shortlist.
+
+### 7. Universal planning — same engine for non-software work
+
+The guardrails-not-choreography frame transfers cleanly across domains. Real (non-hypothetical) uses include annual hot-water-tank maintenance, study plans, trip planning, research workflows, and event planning. The non-software path skips the software-specific confidence check, but U-IDs, dependency ordering, scope boundaries, test/verification scenarios, and the right-sized template all carry over unchanged.
+
+Universal planning also distinguishes two **dispositions**. *Plan-seeking* tasks (trip, study curriculum, event) produce a saved plan — the artifact is the deliverable. *Answer-seeking* tasks are investigative or analytical questions ("how often does X happen — is it a big deal?", "how does our approach compare to Y?") where the *answer* is the deliverable and no one wants a plan file. For those, `sl-plan` doesn't bail and doesn't write a document: it states a brief, right-sized plan-of-attack in chat — working scaffold that both steers the agent and shows the human the approach — then executes it (research and synthesis, never code) and delivers the answer. The plan is spoken in the language of the question, not the language of the skill; internal machinery stays hidden while caveats that affect trust in the answer are always surfaced. Only genuinely trivial single-fact lookups skip planning entirely and get answered outright.
+
+### 8. Approach altitude — a plan for the plan when a deliverable is hard
+
+For a hard problem, `sl-plan` can answer one level up: produce a grounded **approach-plan** (a plan for *how the deliverable will be made*) and hold at a checkpoint before committing — a way to get structure and certainty instead of zero-shotting a fragile result. It's entered explicitly ("plan for a plan", "don't write it yet — plan how you'd approach it") and, rarely, offered proactively — only when the method is genuinely unsettled *and* getting it wrong is costly, so it never becomes a nag. After light recon of the provided inputs (skim, not deep-read), it lays out the approach in chat, file-optional and deepenable. At the checkpoint you run it now or save it for later. The boundary it draws is **code vs. knowledge-work**, not plan vs. execute: code still flows to `sl-work`'s normal path, while a non-code deliverable is marked `execution: knowledge-work` and runs through `sl-work`'s lightweight carve-out (or any agent — the plan stays portable). `sl-plan` itself never executes; it produces the approach-plan and hands off.
+
+---
+
+## Quick Example
+
+You invoke `sl-plan` with a requirements doc from `sl-brainstorm`. The skill detects the origin, uses it as primary input, and verifies no resolve-before-planning blockers remain.
+
+It dispatches research in parallel — repo analyst, learnings researcher — and detects strong local patterns with no external comparison requested, so it skips external research (an explicit "research competitors" or "best practices from the web" request would have overridden that and run a landscape or implementation-guidance scan instead). A spec-flow analyzer runs to surface edge cases. The brainstorm-sourced scoping synthesis surfaces a tier-shaped summary (prose, bullets, or mix depending on plan depth and what communicates best) plus zero or more "Call outs" — the plan-time forks where another reasonable agent might choose differently (e.g., "mute state stored on the subscription, not the user"). Confirm or redirect; the auto-proceed skip only fires for Lightweight plans with no forks worth flagging — Standard and Deep plans always get the explicit checkpoint.
+
+The plan is written. The confidence check then runs automatically — it identifies that `Risks & Dependencies` is thin on the mute-leak risk and that one unit's test scenarios miss permission edge cases, dispatches a data-integrity reviewer and a correctness reviewer, and synthesizes their findings back into the plan. The plan is stamped with a `deepened:` date.
+
+Document review then runs in headless mode. The cheap minimum dispatches (coherence + feasibility) since the plan has origin set and touches no high-stakes domains; `safe_auto` fixes (a typo, a broken cross-reference) apply silently. Remaining findings surface as a one-line summary above the post-generation menu — e.g., `Doc review applied 2 fixes. 3 decisions, 1 FYI remain.` The menu surfaces: start `/sl-work`, run deeper doc review (when actionable findings remain), create a tracked issue, open in Proof for HITL review, or pause.
+
+---
+
+## When to Reach For It
+
+Reach for `sl-plan` when:
+
+- You have a requirements doc from `sl-brainstorm` ready
+- You have a GitHub issue, PRD, or feature description that's clear enough
+- The work is multi-step and benefits from sequencing, dependency ordering, and scope boundaries
+- You want test or verification scenarios enumerated before execution
+- You're picking up a stale plan and want it deepened (use "deepen the plan" or "deepening pass")
+- The task is **non-software but multi-step** — study plan, event, trip, maintenance routine, research workflow, personal project
+
+Skip `sl-plan` when:
+
+- The task is genuinely one-step (just do it; or `sl-work` for direct execution)
+- The product or outcome isn't yet decided → `sl-brainstorm` first
+- The bug has a known root cause and an obvious fix → `sl-debug` or just fix it
+
+---
+
+## Use as Part of the Chained Workflow
+
+```text
+/sl-ideate          (optional)
+   |
+   v
+/sl-brainstorm      (define one direction)
+   |  requirements / brief — R/A/F/AE-IDs in software mode
+   v
+/sl-plan
+   |  guardrails — U-IDs traced to R/A/F/AE-IDs
+   |  test scenarios with AE-link convention (Covers AE<N>)
+   |  scope boundaries preserved (incl. "Outside this product's identity")
+   |  confidence-checked and auto-deepened
+   v
+/sl-work            (execute against the guardrails)
+   |  reads U-IDs as the unit of execution
+   |  figures out the actual HOW with code in front of it
+   |  derives progress from git, not plan body
+   v
+/sl-code-review     (optional)
+   |
+   v
+/sl-compound        — capture the learning
+```
+
+The handoff from `sl-plan` to `sl-work` is concrete: `sl-work` reads U-IDs, file paths, scope boundaries, and test scenarios — then determines the actual implementation. The plan tells the implementer **what must be true** when the unit is done; the implementer figures out **how to make it true**. This division is what makes plans portable across implementer and across time.
+
+---
+
+## Use Standalone
+
+Many people reach for `sl-plan` directly when they already have what to do — for software and equally often for non-software multi-step tasks.
+
+**Software:**
+
+- **From a GitHub issue** — `/sl-plan https://github.com/.../issues/1234` (or paste the issue body)
+- **From a PRD** — `/sl-plan` with the PRD path; the planning bootstrap reads it as origin
+- **From a rough idea** — `/sl-plan "add background email digest at 8am UTC"` runs the bootstrap; the synthesis lets you correct scope before research dispatches
+- **Re-deepening an existing plan** — `/sl-plan deepen the auth-rewrite plan` — interactive mode where agents present findings one by one for accept/reject
+- **Cross-repo planning** — `/sl-plan "fix the busyblock bug in cli-printing-press"` from a different repo; the cross-repo target is announced and the plan lands in the target's `docs/plans/`
+
+**Non-software (universal-planning mode):**
+
+- **Maintenance tasks** — annual hot-water-tank maintenance, with verification at each unit
+- **Study plans** — phased units with prerequisites and per-unit knowledge checks
+- **Trip planning** — bookings, packing, daily itinerary, contingency boundaries
+- **Research workflows** — literature gathering, synthesis, drafting phases with explicit deliverables
+- **Event planning** — venue, vendors, agenda, day-of run-of-show, follow-ups
+- **Personal projects** — workshop build-outs, home renovations
+
+In universal-planning mode, the U-IDs, dependency ordering, scope boundaries, and right-sized template all carry over. The software-specific confidence check is skipped; everything else runs the same way.
+
+---
+
+## Reference
+
+| Argument | Effect |
+|----------|--------|
+| _(empty)_ | Asks for the task description |
+| `<feature description>` | Solo planning; runs the bootstrap |
+| `<requirements doc path>` | Origin-sourced planning |
+| `<plan path>` | Resume offer (or deepen, if intent matches) |
+| `deepen the plan` / `deepening pass` | Re-deepen fast path (interactive mode) |
+| `<bug description>` | Routes to `sl-debug` suggestion menu |
+| `<task in another repo>` | Cross-repo announcement, plan lands in target |
+| `output:html` | Write the plan as a single self-contained HTML file instead of markdown. Exclusive — the plan is `.md` OR `.html`, never both. Default is markdown. Set `plan_output: html` in `.super-looper/config.local.yaml` to make HTML the default. Pipeline mode (LFG, `disable-model-invocation`) always forces markdown so downstream automation gets a stable text shape. |
+
+---
+
+## FAQ
+
+**Doesn't a plan tell you HOW to build something?**
+Not in `sl-plan`'s framing. The plan tells you what must be honored — decisions, scope, units, files, tests, risks. It deliberately does not pre-write code, exact API signatures, or step-by-step shell choreography. The implementing agent figures out HOW with code in front of them. This separation keeps plans portable, prevents brittle pre-commitments, and respects the judgment the implementer brings at execution time. It's also what lets the same engine plan a software refactor, a hot-water-tank maintenance, and a 6-week study plan with the same structural rigor.
+
+**Why U-IDs instead of just numbered units?**
+Numbering breaks when units are reordered, split, or deleted — every reference in the issue, PR, and downstream conversation becomes wrong. U-IDs are stable: reorder leaves them in place, splits keep the original on the original concept, deletes leave gaps. `sl-work`'s blocker references work across plan edits because of this.
+
+**Why does the confidence check run automatically?**
+The expensive moment to discover a thin section is during execution, not during planning. Auto-deepening dispatches targeted research while research context is still warm — much cheaper than re-research weeks later when implementation surfaces a missed risk.
+
+**What if I want to keep the existing plan and just review it?**
+Use the deepen-intent fast path: `/sl-plan deepen <plan>`. It runs in interactive mode — agents present findings one by one for accept/reject. The user has surgical control over which changes integrate.
+
+**What about implementation code in the plan?**
+Disallowed by default. Pseudo-code and DSL grammars are permitted in High-Level Technical Design when they communicate the **shape** of the solution, framed explicitly as **directional guidance, not implementation specification**. Exact method signatures, imports, framework-specific syntax, and step-by-step shell sequences do not belong in plans.
+
+**Is it really useful for non-software plans?**
+Yes — and it's increasingly common. Universal-planning preserves the U-ID concept, dependency ordering, right-sized template, and guardrails-not-choreography frame. Real uses include hot-water-tank maintenance, study plans, trip planning, research workflows, and event planning.
+
+---
+
+## See Also
+
+- [`sl-brainstorm`](./sl-brainstorm.md) — produce the requirements doc that becomes the plan's origin
+- [`sl-ideate`](./sl-ideate.md) — upstream "what to even work on" ideation
+- [`sl-work`](./sl-work.md) — execute the plan U-ID by U-ID
+- [`sl-doc-review`](./sl-doc-review.md) — persona-based review of the plan
+- [`sl-debug`](./sl-debug.md) — bug-shaped prompts route here
+- [`sl-strategy`](./sl-strategy.md) — anchor plans to documented product strategy
