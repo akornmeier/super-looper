@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { load } from "js-yaml"
 import { mkdtempSync, writeFileSync, existsSync } from "node:fs"
-import { mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {

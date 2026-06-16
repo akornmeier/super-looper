@@ -22,7 +22,7 @@ import {
   YAML_RESERVED_INDICATORS,
   type ProblemType,
 } from "./doc-model"
-import { pathExists, readText, writeText } from "../utils/files"
+import { readText, writeText } from "../utils/files"
 
 export type FileUpdate = {
   path: string
@@ -334,7 +334,12 @@ export async function emitDocs(
   for (const dir of DESTINATIONS) {
     for (const [name, content] of files) {
       const filePath = path.join(root, dir, name)
-      const existing = (await pathExists(filePath)) ? await readText(filePath) : null
+      // Read directly and treat a missing file as "no current content" rather
+      // than pre-checking existence (one syscall, no TOCTOU window).
+      const existing = await readText(filePath).catch((err: unknown) => {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
+        throw err
+      })
       const changed = existing !== content
       updates.push({ path: filePath, changed })
       if (write && changed) await writeText(filePath, content)
