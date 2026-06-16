@@ -160,6 +160,16 @@ ${reservedList}
 Also quote if the value contains the substring \`": "\` — that punctuation
 confuses flow-style parsers.
 
+Example — before (breaks strict YAML):
+
+    symptoms:
+      - \`sudo dscacheutil -flushcache\` does not restore in-container mDNS
+
+Example — after (parses cleanly):
+
+    symptoms:
+      - "\`sudo dscacheutil -flushcache\` does not restore in-container mDNS"
+
 This rule applies to all array-of-strings frontmatter fields. Scalar string
 fields like \`description:\` have their own quoting rules (see plugin
 \`AGENTS.md\` under "YAML Frontmatter").

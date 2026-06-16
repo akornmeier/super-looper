@@ -1,6 +1,9 @@
 # Documentation schema for learnings written by sl-compound
 # Treat this as the canonical frontmatter contract for docs/solutions/.
 #
+# GENERATED FILE — do not edit by hand. Run `bun run solutions:emit` to regenerate.
+# Source of truth: src/solutions/schema.ts (enums) + src/solutions/doc-model.ts.
+#
 # The schema has two tracks based on problem_type:
 #   Bug track  — problem_type is a defect or failure (build_error, test_failure, etc.)
 #   Knowledge track — problem_type is guidance or practice (best_practice, workflow_issue, etc.)
@@ -57,10 +60,10 @@ required_fields:
       - ui_bug
       - integration_issue
       - logic_error
-      - developer_experience
-      - workflow_issue
       - best_practice
       - documentation_gap
+      - workflow_issue
+      - developer_experience
       - architecture_pattern
       - design_pattern
       - tooling_decision
@@ -70,21 +73,25 @@ required_fields:
   component:
     type: enum
     values:
-      - rails_model
-      - rails_controller
-      - rails_view
-      - service_object
-      - background_job
+      - react_component
+      - vue_component
+      - design_system
+      - accessibility_rule
+      - browser_extension
+      - mcp_server
+      - backend_function
+      - api_client
+      - state_management
+      - routing
+      - styling
+      - types
       - database
-      - frontend_stimulus
-      - hotwire_turbo
-      - email_processing
-      - brief_system
-      - assistant
       - authentication
-      - payments
-      - development_workflow
+      - build_tooling
+      - e2e_test
+      - storybook
       - testing_framework
+      - development_workflow
       - documentation
       - tooling
     description: "Component involved"
@@ -110,19 +117,24 @@ track_rules:
       root_cause:
         type: enum
         values:
-          - missing_association
-          - missing_include
-          - missing_index
           - wrong_api
-          - scope_issue
-          - thread_violation
+          - type_error
+          - logic_error
+          - stale_closure
+          - missing_dependency
+          - reactivity_bug
+          - hydration_mismatch
+          - race_condition
           - async_timing
+          - missing_aria
+          - focus_management
           - memory_leak
           - config_error
-          - logic_error
-          - test_isolation
+          - bundler_config
+          - dependency_conflict
           - missing_validation
           - missing_permission
+          - test_isolation
           - missing_workflow_step
           - inadequate_documentation
           - missing_tooling
@@ -156,19 +168,24 @@ track_rules:
       root_cause:
         type: enum
         values:
-          - missing_association
-          - missing_include
-          - missing_index
           - wrong_api
-          - scope_issue
-          - thread_violation
+          - type_error
+          - logic_error
+          - stale_closure
+          - missing_dependency
+          - reactivity_bug
+          - hydration_mismatch
+          - race_condition
           - async_timing
+          - missing_aria
+          - focus_management
           - memory_leak
           - config_error
-          - logic_error
-          - test_isolation
+          - bundler_config
+          - dependency_conflict
           - missing_validation
           - missing_permission
+          - test_isolation
           - missing_workflow_step
           - inadequate_documentation
           - missing_tooling
@@ -202,10 +219,9 @@ optional_fields:
 
 # --- Fields optional for bug track only -------------------------------------
 bug_optional_fields:
-  rails_version:
+  framework_version:
     type: string
-    pattern: '^\d+\.\d+\.\d+$'
-    description: "Rails version in X.Y.Z format. Only relevant for bug-track docs."
+    description: "Framework and version, e.g. react@19.0.0 or vue@3.5.13. Only relevant for bug-track docs."
 
 # --- Backward compatibility --------------------------------------------------
 # Docs created before the track system was introduced may have bug-track
@@ -226,6 +242,6 @@ validation_rules:
   - "Enum fields must match allowed values exactly"
   - "Array fields must respect min_items/max_items when specified"
   - "date must match YYYY-MM-DD format"
-  - "rails_version, if provided, must match X.Y.Z format and only applies to bug-track docs"
+  - "framework_version, if provided, only applies to bug-track docs"
   - "tags should be lowercase and hyphen-separated"
   - "Array-of-strings frontmatter items (symptoms, applies_when, tags, related_components, or any future array field) must be wrapped in double quotes when the value starts with a YAML reserved indicator (`, [, *, &, !, |, >, %, @, ?) or contains the substring `: ` — otherwise strict YAML parsers reject the file"
