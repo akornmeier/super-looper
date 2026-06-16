@@ -14,7 +14,8 @@
     "release:validate": "bun run scripts/release/validate.ts"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
