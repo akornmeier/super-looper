@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="super-looper-logo.png" alt="Super Looper" width="200" />
+</p>
+
 # Super Looper
 
 [![Build Status](https://github.com/akornmeier/super-looper/actions/workflows/ci.yml/badge.svg)](https://github.com/akornmeier/super-looper/actions/workflows/ci.yml)
