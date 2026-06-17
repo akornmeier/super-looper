@@ -79,8 +79,13 @@ Run `bun run release:validate` first; it names what drifted. Then pick one:
 1. **Forward-sync** — the manifest is the intended truth and a *derived* file fell
    behind (e.g. `marketplace.json metadata.version` lags the manifest, or a
    description was edited).
-   Fix: `bun run release:sync-metadata` (rewrites the derived metadata from the
-   manifest + constants), commit, PR.
+   Fix: `bun run release:sync-metadata` rewrites the descriptions from the
+   constants, but it does **not** read the manifest — `metadata.version` is only
+   rewritten when you pass the target explicitly. To repair a `metadata.version`
+   drift, feed it the manifest value:
+   `bun run release:sync-metadata --version:marketplace=$(jq -r '.[".claude-plugin"]' .github/.release-please-manifest.json)`.
+   Then commit, PR. (Without `--version:marketplace=...`, the description-only
+   re-sync leaves the version drift in place and `release:validate` keeps failing.)
 
 2. **Backward-revert** — a feature PR **hand-edited** a release-owned version
    (`plugin.json $.version`, `marketplace.json metadata.version`, or the manifest
@@ -133,7 +138,11 @@ Release metadata drift detected:
 - .../.claude-plugin/marketplace.json
 ```
 
-Fix (forward-sync): `bun run release:sync-metadata`, commit, PR.
+Fix (forward-sync): pass the manifest value, since `release:sync-metadata` does
+not read the manifest and only rewrites `metadata.version` when given the target:
+`bun run release:sync-metadata --version:marketplace=$(jq -r '.[".claude-plugin"]' .github/.release-please-manifest.json)`,
+then commit, PR. A bare `bun run release:sync-metadata` re-syncs descriptions only
+and leaves the version drift unresolved.
 
 ## When the rules were violated (direct merge / direct push)
 
