@@ -88,7 +88,7 @@ function printargsStub(argsMarker: string): string {
   )
 }
 
-function mkdir(name: string): string {
+function mkdirInWork(name: string): string {
   const p = path.join(work, name)
   fs.mkdirSync(p, { recursive: true })
   return p
@@ -142,7 +142,7 @@ describe("required input", () => {
   })
 
   test("--target without a seed exits non-zero and names the seed flag", async () => {
-    const t = mkdir("target")
+    const t = mkdirInWork("target")
     const { exitCode, stderr } = await runLoop(["--target", t])
     expect(exitCode).not.toBe(0)
     expect(stderr).toContain("--seed")
@@ -154,7 +154,7 @@ describe("required input", () => {
 // ---------------------------------------------------------------------------
 describe("isolation guard", () => {
   test("target == plugin-dir is refused with a self-edit error", async () => {
-    const dir = mkdir("plugin")
+    const dir = mkdirInWork("plugin")
     const { exitCode, stderr } = await runLoop([
       "--target", dir, "--plugin-dir", dir, "--seed", "x",
     ])
@@ -163,8 +163,8 @@ describe("isolation guard", () => {
   })
 
   test("target as a descendant of plugin-dir is refused", async () => {
-    const plugin = mkdir("plugin")
-    const target = mkdir("plugin/inner")
+    const plugin = mkdirInWork("plugin")
+    const target = mkdirInWork("plugin/inner")
     const { exitCode, stderr } = await runLoop([
       "--target", target, "--plugin-dir", plugin, "--seed", "x",
     ])
@@ -173,8 +173,8 @@ describe("isolation guard", () => {
   })
 
   test("target as an ancestor of plugin-dir is refused", async () => {
-    const target = mkdir("outer")
-    const plugin = mkdir("outer/plugin")
+    const target = mkdirInWork("outer")
+    const plugin = mkdirInWork("outer/plugin")
     const { exitCode, stderr } = await runLoop([
       "--target", target, "--plugin-dir", plugin, "--seed", "x",
     ])
@@ -188,9 +188,9 @@ describe("isolation guard", () => {
 // ---------------------------------------------------------------------------
 describe("verification mode required", () => {
   test("github mode with no remote and no --verify-cmd fails fast", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, false) // repo, but no remote
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { exitCode, stderr } = await runLoop(
       ["--target", target, "--plugin-dir", plugin, "--seed", "x"],
       stubs(),
@@ -205,8 +205,8 @@ describe("verification mode required", () => {
 // ---------------------------------------------------------------------------
 describe("--dry-run", () => {
   test("prints a command with env -i allowlist, plugin-dir, model, bypass flag, and target", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const { exitCode, stdout } = await runLoop([
       "--target", target, "--plugin-dir", plugin,
       "--model", "opus", "--seed", "do the thing", "--dry-run",
@@ -223,8 +223,8 @@ describe("--dry-run", () => {
   })
 
   test("redacts token values rather than printing them", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const { stdout } = await runLoop(
       ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--dry-run"],
       { env: { GH_TOKEN: "supersecret-token-value" } },
@@ -234,8 +234,8 @@ describe("--dry-run", () => {
   })
 
   test("the constructed verification targets the target, never this repo's gate scripts", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const { stdout } = await runLoop([
       "--target", target, "--plugin-dir", plugin, "--seed", "x", "--dry-run",
     ])
@@ -246,8 +246,8 @@ describe("--dry-run", () => {
   })
 
   test("wires the wall-clock flag into a process-group-signalling timeout wrapper", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const { stdout } = await runLoop(
       [
         "--target", target, "--plugin-dir", plugin, "--seed", "x",
@@ -262,8 +262,8 @@ describe("--dry-run", () => {
   })
 
   test("--verify-cmd selects command-mode verification and prints the command", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const { stdout } = await runLoop([
       "--target", target, "--plugin-dir", plugin, "--seed", "x",
       "--dry-run", "--verify-cmd", "make", "test",
@@ -292,9 +292,9 @@ describe("stop predicate is target-scoped", () => {
 // ---------------------------------------------------------------------------
 describe("DONE routing vs success", () => {
   test("DONE present AND target CI green => success with PR URL", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, true)
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { marker, env } = stubs()
     const claude = claudeStub("claude", `working...\n${SENTINEL}`, 0, marker)
     const { exitCode, stdout } = await runLoop(
@@ -315,9 +315,9 @@ describe("DONE routing vs success", () => {
   })
 
   test("DONE present BUT target CI red => DONE-but-red failure, not success", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, true)
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { marker, env } = stubs()
     const claude = claudeStub("claude", `working...\n${SENTINEL}`, 0, marker)
     const { exitCode, stderr } = await runLoop(
@@ -336,9 +336,9 @@ describe("DONE routing vs success", () => {
   })
 
   test("DONE absent => failure (no success on a crashed run)", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, true)
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { marker, env } = stubs()
     const claude = claudeStub("claude", "partial work, then died", 1, marker)
     const { exitCode } = await runLoop(
@@ -355,9 +355,9 @@ describe("DONE routing vs success", () => {
 // ---------------------------------------------------------------------------
 describe("sentinel robustness", () => {
   test("DONE echoed mid-transcript (not at end) does not trigger success", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, true)
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { marker, env } = stubs()
     // sentinel appears, but the LAST non-empty line is something else.
     const claude = claudeStub("claude", `${SENTINEL}\nactually still working, no real finish`, 0, marker)
@@ -374,9 +374,9 @@ describe("sentinel robustness", () => {
 // ---------------------------------------------------------------------------
 describe("retry reconciliation", () => {
   test("crash-without-DONE but an open PR exists routes to verification, no re-launch", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, true)
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { marker, env } = stubs()
     const claude = claudeStub("claude", "crashed before DONE", 1, marker)
     const { exitCode, stdout } = await runLoop(
@@ -398,9 +398,9 @@ describe("retry reconciliation", () => {
   })
 
   test("repeated crash with no PR resets to clean base and exhausts the cap", async () => {
-    const target = mkdir("target")
+    const target = mkdirInWork("target")
     gitInit(target, true)
-    const plugin = mkdir("plugin")
+    const plugin = mkdirInWork("plugin")
     const { marker, env } = stubs()
     const claude = claudeStub("claude", "crash, no DONE", 1, marker)
     const { exitCode, stderr } = await runLoop(
@@ -419,8 +419,8 @@ describe("retry reconciliation", () => {
 // ---------------------------------------------------------------------------
 describe("--verify-cmd argv vector", () => {
   test("metacharacter args are passed verbatim as separate argv tokens (not shell-split)", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const argsMarker = path.join(work, "verify-args.log")
     const verify = printargsStub(argsMarker)
     const { marker, env } = stubs()
@@ -439,8 +439,8 @@ describe("--verify-cmd argv vector", () => {
   })
 
   test("command-mode verification red => DONE-but-red failure", async () => {
-    const target = mkdir("target")
-    const plugin = mkdir("plugin")
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
     const argsMarker = path.join(work, "verify-args.log")
     const verify = printargsStub(argsMarker)
     const { marker, env } = stubs()

@@ -34,6 +34,8 @@ readonly EX_NO_VERIFY=4
 readonly EX_CAP=5
 readonly EX_TIMEOUT=6
 readonly EX_DONE_RED=7
+# coreutils timeout(1) exits 124 when it terminates a timed-out command.
+readonly TIMEOUT_EXIT_STATUS=124
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
@@ -306,7 +308,7 @@ while :; do
     break
   fi
 
-  if [ "$run_status" -eq 124 ]; then
+  if [ "$run_status" -eq "$TIMEOUT_EXIT_STATUS" ]; then
     timed_out=1
     log "attempt $attempt timed out (no DONE)"
   else
@@ -342,7 +344,7 @@ if [ "$done_reached" -ne 1 ]; then
 fi
 
 # --- Verification (TARGET-scoped, evaluated AFTER DONE) -----------------------
-verify_green=1
+verify_green=0
 if [ "$VERIFY_MODE" = "command" ]; then
   if [ "${#VERIFY_CMD[@]}" -gt 0 ]; then
     if "${VERIFY_CMD[@]}" >>"$LOG_FILE" 2>&1; then verify_green=1; else verify_green=0; fi
