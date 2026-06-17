@@ -14,26 +14,32 @@ Report bugs encountered while using the super-looper plugin. This skill gathers 
 Ask the user the following questions using `AskUserQuestion` (call `ToolSearch` with `select:AskUserQuestion` first if its schema isn't loaded). Fall back to numbered options in chat only if it is unavailable or the call errors. Never silently skip the question:
 
 **Question 1: Bug Category**
+
 - What type of issue are you experiencing?
 - Options: Agent not working, Command not working, Skill not working, MCP server issue, Installation problem, Other
 
 **Question 2: Specific Component**
+
 - Which specific component is affected?
 - Ask for the name of the agent, command, skill, or MCP server
 
 **Question 3: What Happened (Actual Behavior)**
+
 - Ask: "What happened when you used this component?"
 - Get a clear description of the actual behavior
 
 **Question 4: What Should Have Happened (Expected Behavior)**
+
 - Ask: "What did you expect to happen instead?"
 - Get a clear description of expected behavior
 
 **Question 5: Steps to Reproduce**
+
 - Ask: "What steps did you take before the bug occurred?"
 - Get reproduction steps
 
 **Question 6: Error Messages**
+
 - Ask: "Did you see any error messages? If so, please share them."
 - Capture any error output
 
@@ -42,6 +48,7 @@ Ask the user the following questions using `AskUserQuestion` (call `ToolSearch` 
 Automatically gather environment details:
 
 **OS info:**
+
 ```bash
 uname -a
 ```
@@ -49,6 +56,7 @@ uname -a
 **Plugin version:** Read the plugin manifest or installed plugin metadata at `~/.claude/plugins/installed_plugins.json`.
 
 **Agent CLI version:**
+
 ```bash
 claude --version
 ```
@@ -95,7 +103,8 @@ Create a well-structured bug report with:
 [Any other relevant information]
 
 ---
-*Reported via `/sl-report-bug` skill*
+
+_Reported via `/sl-report-bug` skill_
 ```
 
 ## Step 4: Create GitHub Issue
@@ -111,6 +120,7 @@ gh issue create \
 ```
 
 **Note:** If labels don't exist, create without labels:
+
 ```bash
 gh issue create \
   --repo akornmeier/super-looper \
@@ -121,9 +131,10 @@ gh issue create \
 ## Step 5: Confirm Submission
 
 After the issue is created:
+
 1. Display the issue URL to the user
 2. Thank them for reporting the bug
-3. Let them know the maintainer (Kieran Klaassen) will be notified
+3. Let them know the maintainer (Anthony Kornmeier) will be notified
 
 ## Output Format
 
@@ -146,6 +157,7 @@ The maintainer will review your report and respond as soon as possible.
 ## Privacy Notice
 
 This skill does NOT collect:
+
 - Personal information
 - API keys or credentials
 - Private code from projects
