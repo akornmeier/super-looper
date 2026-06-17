@@ -1,0 +1,134 @@
+# Loop driver (`scripts/loop.sh`) — operator guide
+
+`loop.sh` runs the `lfg` pipeline **unattended** against a target repo: seed one
+task, walk away, and the loop plans → works → reviews → fixes → opens a PR →
+reaches green. It is a thin headless invoker around `lfg` (which already loops CI
+to green); `loop.sh` adds only headless launch, permission bypass, a cap,
+target/plugin wiring, and a final target-scoped stop-predicate check.
+
+## Quick start
+
+```bash
+# Faithful GitHub-CI run against a throwaway with a remote + Actions:
+GH_TOKEN=<repo-scoped-token> bash scripts/loop.sh \
+  --target /abs/path/to/throwaway \
+  --seed-file "$PWD/examples/loop-seed.md"
+
+# Local proxy (no Actions): verify with the target's own command:
+bash scripts/loop.sh \
+  --target /abs/path/to/throwaway \
+  --seed-file "$PWD/examples/loop-seed.md" \
+  --verify-cmd bun test
+```
+
+`scripts/loop.example.env` is a copy-and-edit wrapper that prints the constructed
+command (`--dry-run`) and then runs it. Always preview with `--dry-run` first.
+
+## Flags
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--target <dir>` | _(required)_ | Directory the loop runs in and edits. |
+| `--seed <text>` | _(one required)_ | Seed task, inline. |
+| `--seed-file <path>` | _(one required)_ | Seed task read from a file. |
+| `--plugin-dir <path>` | this repo root | Pinned Super Looper checkout loaded via `--plugin-dir`. |
+| `--model <model>` | `opus` | Top-level orchestrator model (`opus` or `fable`). |
+| `--timeout <seconds>` | `1800` | Per-attempt wall-clock cap. |
+| `--kill-after <seconds>` | `20` | SIGKILL grace after the timeout SIGTERM. |
+| `--max-retries <N>` | `2` | Re-launch attempts after a crash-without-`DONE`. |
+| `--log-dir <dir>` | `/tmp/super-looper/loop` | Run-log directory (audit trail). |
+| `--verify-cmd <cmd...>` | _(off)_ | Local verification command. **Must be last** — consumes the rest of the args and runs them as an argv vector (never `eval`'d). When omitted, verification uses the target's GitHub CI. |
+| `--dry-run` | off | Print the constructed command + verification; do not run. |
+| `-h`, `--help` | | Usage. |
+
+## Verification modes (one is always required)
+
+- **GitHub-CI mode (default).** When the target has a git remote and no
+  `--verify-cmd` is given, success requires an **open PR** for the target branch
+  with **green `gh pr checks`**. This is the faithful "reach CI-green" bar.
+- **Command mode.** `--verify-cmd <cmd...>` runs a local command; success
+  requires it to exit `0`. Use for targets without Actions.
+- **No verification available** (no remote *and* no `--verify-cmd`) → the driver
+  **fails fast** (`exit 4`). There is no unverified success path.
+
+`DONE` is a **routing** signal, not a success signal: `lfg` emits
+`<promise>DONE</promise>` in every exit path — including when it gives up on red
+CI. The driver detects `DONE` only to know the run *finished* (matching the last
+output line, so a mid-transcript echo never counts), then gates success on the
+independent verification above. `DONE` + red verification reports a
+**DONE-but-red** failure, not success.
+
+## Cap and retry reconciliation
+
+Each attempt is bounded by `--timeout` (a SIGTERM, escalating to SIGKILL after
+`--kill-after`). The driver never loops unbounded.
+
+`lfg` has no resume entry point — re-running it on a half-finished branch would
+re-plan and stack commits. So a crash-**without**-`DONE` reconciles before
+retrying:
+
+- If an **open PR already exists** for the target branch → terminal: route to
+  verification, do **not** re-launch.
+- Otherwise → reset the target to its **clean base** and retry, up to
+  `--max-retries`. After the cap is exhausted, exit non-zero.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success — `DONE` (or reconciled open PR) **and** verification green. |
+| `2` | Usage / missing input. |
+| `3` | Isolation guard refused (self-edit hazard). |
+| `4` | No verification mode available. |
+| `5` | Cap exhausted — crashed without `DONE`, no open PR. |
+| `6` | Timeout — last attempt timed out without `DONE`. |
+| `7` | DONE-but-red — finished, but target verification is red. |
+
+## Isolation rule
+
+`loop.sh` is for running the loop on **other** repos. It refuses to run when the
+target equals, contains, or is contained by `--plugin-dir` (the self-edit guard),
+so an unattended permission-bypassed run can never edit the plugin running it.
+
+Running the loop **on this plugin repo itself stays out of scope**: it remains
+direct-edits + gate (TDD + `bun test`/`plugin:validate`/`release:validate` + a
+human-reviewed PR) until a pinned stable Super Looper plugin exists, because the
+live `sl-*` skills load as `super-looper@inline` from the working copy — so the
+"SL builds SL" tool/target isolation isn't satisfiable when the target *is* this
+repo. See the 2026-06-16 execution-model decision.
+
+The driver also never runs this repo's gate scripts (`solutions:validate`,
+`plugin:validate`, `release:validate`) against the target — those validate *this*
+repo's structure and would fail spuriously on a throwaway.
+
+## Safety
+
+- **Environment allowlist.** The agent launches under `env -i` with only `HOME`,
+  `PATH`, and (when set) `GH_TOKEN` / `GITHUB_TOKEN`. Ambient operator secrets
+  are **not** inherited. Token values are redacted in `--dry-run` output.
+- **Use a target-scoped token.** Export a **fine-grained `gh` token scoped to the
+  throwaway repo only**, so a hallucinated or compromised seed cannot reach other
+  repos.
+- **`--verify-cmd` is yours to keep safe.** It is passed as an argv vector (never
+  `eval`'d), but the driver runs whatever you give it — keep it trustworthy.
+- **Audit trail.** The full run transcript is tee'd to a timestamped log under
+  `--log-dir` (`/tmp/super-looper/loop/loop-*.log` by default). Every failure
+  report points at it.
+- **Timeout portability.** The wall-clock cap needs a `timeout` (or `gtimeout`)
+  binary. If none is found the run proceeds **uncapped** with a warning — install
+  coreutils to enforce the cap.
+
+## Seed-authoring guidance
+
+Keep the seed **tight enough that `sl-plan` never reaches a clarifying-question
+branch** — an underspecified seed stalls the unattended run until the wall-clock
+cap instead of failing fast. Specify exact file paths, the interface, and named
+input/expected-output pairs; remove domain ambiguity and any unresolved product
+question. Size it to plan → implement → verify in one run. See
+`examples/loop-seed.md`.
+
+## Advanced / testing seams
+
+`LOOP_CLAUDE_BIN`, `LOOP_GH_BIN`, and `LOOP_TIMEOUT_BIN` override the `claude`,
+`gh`, and `timeout` binaries (used by `tests/loop-driver.test.ts` to exercise
+every path with stubs — no live Claude or GitHub call).
