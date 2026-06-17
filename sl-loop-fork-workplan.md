@@ -1,4 +1,4 @@
-# Work Plan: SL Loop-Engineering Setup with a TypeScript Schema
+# SL Loop-Engineering Setup with a TypeScript Schema
 
 _Scope discipline is the point. The loop engine already exists (`lfg`); verification already exists (`sl-code-review mode:agent`). We add exactly two things — a TS schema and a thin driver — and reuse everything else. If a step starts to grow a framework, stop._
 
@@ -6,7 +6,7 @@ _Scope discipline is the point. The loop engine already exists (`lfg`); verifica
 
 ## 1. Goal
 
-A forked SL that (a) defines its `docs/solutions/` learning schema in **one TypeScript file** with real validation, and (b) runs `lfg` **unattended on a seeded task until a verifiable condition is met**, opening a PR for human review.
+(a) Defines its `docs/solutions/` learning schema in **one TypeScript file** with real validation, and (b) runs `lfg` **unattended on a seeded task until a verifiable condition is met**, opening a PR for human review.
 
 **Definition of done (MVP):** I seed one task, walk away, and the loop plans → works → reviews → fixes → reaches CI-green → opens a PR. New learnings written during the run validate against the TS schema and are retrievable on the next run.
 
@@ -59,14 +59,6 @@ loop.sh                          # NEW — thin run-until-green driver
 `bun test` && `bun run plugin:validate` (`claude plugin validate`) && `bun validate-frontmatter.ts <changed docs>` && CI green.
 _(Note: `sl-dogfood-beta` exists but is a browser test-matrix for apps — not applicable to a CLI plugin. Our gate is the scripts above.)_
 
-**Phase 0 — Onboard & anchor (interactive, once).**
-
-- Install pinned stable SL into Claude Code; clone the fork separately.
-- `/sl-setup` in the fork — auto-detects the TS/Bun stack and configures reviewers.
-- `/sl-strategy` → write `STRATEGY.md` (none exists yet): target problem = "sl-as-loop-OS with a TS schema"; the two tracks = {schema, driver}; success metric = "seeded task → green → PR, learnings validate."
-- Confirm `AGENTS.md` (the substantive instruction file; `CLAUDE.md` is just an `@AGENTS.md` shim) and `CONCEPTS.md`; let the Discoverability Check keep them pointing at `docs/solutions/`.
-  _DoD:_ `STRATEGY.md` committed; stock `lfg` runs green once on a throwaway task.
-
 **Phase 1 — TS schema, via SL.**
 
 - `/sl-brainstorm "replace the Rails-flavored docs/solutions schema with a TS single source of truth + real enum validation"` → requirements doc.
@@ -78,7 +70,7 @@ _(Note: `sl-dogfood-beta` exists but is a browser test-matrix for apps — not a
 
 **Phase 2 — Loop driver, via SL (the MVP).**
 
-- Hand it to `lfg "<driver spec>"`, or run plan→work→review explicitly. Deliverable: thin `loop.sh` (cap + stop predicate) or `/goal`. `lfg` already loops to green, so this stays a cap+scheduler.
+- Hand it to `lfg "<driver spec>"`, or run plan→work→review explicitly. Deliverable: thin `loop.sh` (cap + stop predicate) or `/goal`. `lfg` already loops to green, so this stays a cap+scheduler. Use the Claude Code Fable or Opus model as the top level orchestrator model.
   _DoD:_ seed one task → unattended → CI-green → PR opened.
 
 **Phase 3 — Discovery heartbeat (DEFERRED; only after the MVP earns it).**
