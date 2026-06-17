@@ -567,3 +567,55 @@ describe("zero-checks is not green", () => {
     expect(stderr).toContain("DONE-but-red")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Flag-value + mutual-exclusion validation (consistent usage errors)
+// ---------------------------------------------------------------------------
+describe("flag input validation", () => {
+  test("a value-taking flag with no value gives a usage error, not a shift crash", async () => {
+    // --target is the last token, so the old `shift 2` would crash under set -e.
+    const { exitCode, stderr } = await runLoop(["--seed", "x", "--target"])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--target requires a value")
+  })
+
+  test("--seed and --seed-file together are rejected", async () => {
+    const target = mkdirInWork("target")
+    const seedFile = path.join(work, "seed.md")
+    fs.writeFileSync(seedFile, "task")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--seed", "x", "--seed-file", seedFile,
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("mutually exclusive")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Timeout is required for a real run (R3 — the cap must be enforceable)
+// ---------------------------------------------------------------------------
+describe("timeout required", () => {
+  test("a real run with no timeout binary fails fast with an install hint", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    // Explicitly-empty LOOP_TIMEOUT_BIN => "no timeout binary available".
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x"],
+      { env: { LOOP_GH_BIN: ghStub(), LOOP_TIMEOUT_BIN: "" } },
+    )
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("timeout")
+  })
+
+  test("--dry-run is exempt: it only warns when no timeout binary is present", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const { exitCode, stdout } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--dry-run"],
+      { env: { LOOP_TIMEOUT_BIN: "" } },
+    )
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain("not be wall-clock capped")
+  })
+})

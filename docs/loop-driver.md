@@ -63,7 +63,10 @@ independent verification above. `DONE` + red verification reports a
 ## Cap and retry reconciliation
 
 Each attempt is bounded by `--timeout` (a SIGTERM, escalating to SIGKILL after
-`--kill-after`). The driver never loops unbounded.
+`--kill-after`). The driver never loops unbounded: a `timeout` (or `gtimeout`)
+binary is **required** for a real run — without one, the per-attempt wall-clock
+cap cannot be enforced and the driver fails fast (see Safety) rather than
+risking a hung, uncapped run.
 
 `lfg` has no resume entry point — re-running it on a half-finished branch would
 re-plan and stack commits. So a crash-**without**-`DONE` reconciles before
@@ -116,9 +119,11 @@ repo's structure and would fail spuriously on a throwaway.
 - **Audit trail.** The full run transcript is tee'd to a timestamped log under
   `--log-dir` (`/tmp/super-looper/loop/loop-*.log` by default). Every failure
   report points at it.
-- **Timeout portability.** The wall-clock cap needs a `timeout` (or `gtimeout`)
-  binary. If none is found the run proceeds **uncapped** with a warning — install
-  coreutils to enforce the cap.
+- **Timeout is required.** The wall-clock cap needs a `timeout` (or `gtimeout`)
+  binary. If none is found, a real run **fails fast** (`exit 2`) with an install
+  hint rather than running uncapped — the "never unbounded" guarantee is real,
+  not best-effort. On macOS, `brew install coreutils` provides `gtimeout`.
+  (`--dry-run` is exempt and only warns.)
 
 ## Seed-authoring guidance
 

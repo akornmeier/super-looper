@@ -44,7 +44,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 # an `env -i` allowlist, so these are passed as argv paths, not environment.
 CLAUDE_BIN="${LOOP_CLAUDE_BIN:-claude}"
 GH_BIN="${LOOP_GH_BIN:-gh}"
-TIMEOUT_BIN="${LOOP_TIMEOUT_BIN:-}"
 
 # --- Headless invocation form -------------------------------------------------
 # SINGLE SOURCE of the prompt that routes the headless session into lfg. The
@@ -96,17 +95,24 @@ EOF
 }
 
 # --- Argument parsing ---------------------------------------------------------
+# Every value-taking flag confirms a value is present BEFORE `shift 2`, so a
+# value-less flag (e.g. `loop.sh --target`) yields a consistent usage error
+# rather than a `set -e` "shift count out of range" crash with exit 1.
+require_val() {
+  # require_val <flag> <remaining-arg-count>
+  if [ "$2" -lt 2 ]; then echo "loop.sh: $1 requires a value" >&2; usage; exit "$EX_USAGE"; fi
+}
 while [ $# -gt 0 ]; do
   case "$1" in
-    --target) TARGET="${2:-}"; shift 2 ;;
-    --seed) SEED="${2:-}"; shift 2 ;;
-    --seed-file) SEED_FILE="${2:-}"; shift 2 ;;
-    --plugin-dir) PLUGIN_DIR="${2:-}"; shift 2 ;;
-    --model) MODEL="${2:-}"; shift 2 ;;
-    --timeout) TIMEOUT_SECONDS="${2:-}"; shift 2 ;;
-    --kill-after) KILL_GRACE="${2:-}"; shift 2 ;;
-    --max-retries) MAX_RETRIES="${2:-}"; shift 2 ;;
-    --log-dir) LOG_DIR="${2:-}"; shift 2 ;;
+    --target) require_val --target "$#"; TARGET="$2"; shift 2 ;;
+    --seed) require_val --seed "$#"; SEED="$2"; shift 2 ;;
+    --seed-file) require_val --seed-file "$#"; SEED_FILE="$2"; shift 2 ;;
+    --plugin-dir) require_val --plugin-dir "$#"; PLUGIN_DIR="$2"; shift 2 ;;
+    --model) require_val --model "$#"; MODEL="$2"; shift 2 ;;
+    --timeout) require_val --timeout "$#"; TIMEOUT_SECONDS="$2"; shift 2 ;;
+    --kill-after) require_val --kill-after "$#"; KILL_GRACE="$2"; shift 2 ;;
+    --max-retries) require_val --max-retries "$#"; MAX_RETRIES="$2"; shift 2 ;;
+    --log-dir) require_val --log-dir "$#"; LOG_DIR="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --verify-cmd) shift; VERIFY_MODE="command"; VERIFY_CMD=( "$@" ); break ;;
     -h|--help) usage; exit "$EX_OK" ;;
@@ -137,6 +143,12 @@ if [ -n "$missing" ]; then
   echo "loop.sh: missing required input:$missing" >&2
   usage
   exit "$EX_USAGE"
+fi
+
+# --seed and --seed-file are mutually exclusive; accepting both and silently
+# preferring one would hide an operator mistake (running a different task).
+if [ -n "$SEED" ] && [ -n "$SEED_FILE" ]; then
+  fail "$EX_USAGE" "--seed and --seed-file are mutually exclusive; pass only one."
 fi
 
 # --- Numeric-cap validation ---------------------------------------------------
@@ -206,7 +218,9 @@ fi
 
 # --- Resolve timeout binary + build run wrapper -------------------------------
 resolve_timeout_bin() {
-  if [ -n "$TIMEOUT_BIN" ]; then echo "$TIMEOUT_BIN"; return 0; fi
+  # An explicitly-set LOOP_TIMEOUT_BIN (even empty) is authoritative: empty means
+  # "no timeout binary available". Unset => autodetect timeout/gtimeout on PATH.
+  if [ -n "${LOOP_TIMEOUT_BIN+x}" ]; then echo "${LOOP_TIMEOUT_BIN:-}"; return 0; fi
   if command -v timeout >/dev/null 2>&1; then echo "timeout"; return 0; fi
   if command -v gtimeout >/dev/null 2>&1; then echo "gtimeout"; return 0; fi
   echo ""
@@ -272,6 +286,14 @@ if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
   fail "$EX_NO_VERIFY" "no verification mode available: target has no git remote and no --verify-cmd was supplied."
 fi
 
+# --- Fail fast when the wall-clock cap cannot be enforced ---------------------
+# R3 requires a per-attempt wall-clock cap; without a timeout binary a hung
+# claude would run unbounded, breaking the "never loops unbounded" guarantee.
+# Refuse rather than silently degrade. (--dry-run exits above, so it is exempt.)
+if [ -z "$TIMEOUT_RESOLVED" ]; then
+  fail "$EX_USAGE" "no 'timeout' binary found — the wall-clock cap cannot be enforced. Install coreutils ('brew install coreutils' provides gtimeout) or put 'timeout' on PATH."
+fi
+
 # --- Target helpers (GitHub-scoped; never touch this repo's gates) ------------
 target_open_pr() {
   local state
@@ -324,9 +346,6 @@ mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR" 2>/dev/null || true
 : >"$LOG_FILE"
 log "run started: target=$CT model=$MODEL verify-mode=$VERIFY_MODE max-retries=$MAX_RETRIES"
-if [ -z "$TIMEOUT_RESOLVED" ]; then
-  log "warning: no 'timeout' binary found — this run is NOT wall-clock capped. Install coreutils to enforce --timeout."
-fi
 if [ -z "$BASE_REF" ] && [ "$MAX_RETRIES" -gt 0 ]; then
   log "warning: target has no base commit — a retry cannot fully reset it to a clean base."
 fi
@@ -347,13 +366,18 @@ while :; do
   timed_out=0
   log "attempt $attempt: launching headless claude"
 
-  # Run the agent in the background and forward INT/TERM to it, so aborting the
-  # driver also kills the permission-bypassed agent rather than orphaning it.
+  # Run the agent in its own process group (set -m) and forward INT/TERM to the
+  # WHOLE group, so aborting the driver kills the permission-bypassed agent and
+  # any children it spawned (e.g. a `gh pr checks --watch`) rather than orphaning
+  # them. Fall back to the single PID if the group signal fails. set +m right
+  # after launch keeps job-control completion notices off stderr.
   run_status=0
+  set -m
   ( cd "$CT" && exec "${full_cmd[@]}" ) >"$attempt_log" 2>&1 &
   run_pid=$!
-  trap 'kill -TERM "$run_pid" 2>/dev/null || true; exit 130' INT
-  trap 'kill -TERM "$run_pid" 2>/dev/null || true; exit 143' TERM
+  set +m
+  trap 'kill -TERM -"$run_pid" 2>/dev/null || kill -TERM "$run_pid" 2>/dev/null || true; exit 130' INT
+  trap 'kill -TERM -"$run_pid" 2>/dev/null || kill -TERM "$run_pid" 2>/dev/null || true; exit 143' TERM
   wait "$run_pid" || run_status=$?
   trap - INT TERM
   tee -a "$LOG_FILE" <"$attempt_log" >/dev/null
