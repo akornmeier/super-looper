@@ -23,6 +23,8 @@ Super looper inverts this. 80% is in planning and review, 20% is in execution:
 
 The point is not ceremony. The point is leverage. A good brainstorm makes the plan sharper. A good plan makes execution smaller. A good review catches the pattern, not just the bug. A good compound note means the next agent does not have to learn the same lesson from scratch.
 
+And the same loop runs hands-off. `/lfg` fires the whole pipeline -- plan, work, review, commit, open a PR, then watch CI and fix failures until it is green -- and iterates unattended. That is the looper in super looper: not just compounding leverage, but a loop you can let run to green on its own.
+
 **Learn more**
 
 - [Full component reference](plugins/super-looper/README.md) - all agents and skills
@@ -51,9 +53,19 @@ Use `/sl-ideate` before the loop when you want the agent to generate and critiqu
 
 Each cycle compounds: brainstorms sharpen plans, plans inform future plans, reviews catch more issues, patterns get documented.
 
+### Run it autonomously
+
+`/lfg "<feature description>"` runs the entire loop end-to-end without stopping. It plans, works through the plan, reviews and applies fixes, commits, pushes, opens a PR, then watches CI and repairs failures until the build is green. Reach for it when the task is clear and self-contained and you want hands-off execution; reach for the individual skills above when you want to steer each stage yourself.
+
 ## Quick Example
 
-A typical cycle starts by turning a rough idea into a requirements doc, then planning from that doc before handing execution to `/sl-work`:
+For hands-off execution, one command runs the whole loop to green:
+
+```text
+/lfg "make background job retries safer"
+```
+
+To steer each stage yourself, run the loop step by step -- turn a rough idea into a requirements doc, then plan from that doc before handing execution to `/sl-work`:
 
 ```text
 /sl-brainstorm "make background job retries safer"
