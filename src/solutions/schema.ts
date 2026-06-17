@@ -1,9 +1,9 @@
-// schema.ts
+// src/solutions/schema.ts
 // Single source of truth for docs/solutions/ frontmatter written by sl-compound.
 // Retargeted from the Rails-flavored upstream enums to a TS/React/Vue/a11y stack.
 //
-// Run the validator with Bun (SL already uses Bun): `bun validate-frontmatter.ts <doc.md>`
-// Deps: `bun add zod gray-matter`
+// Run the validator with Bun: `bun run scripts/solutions/validate-frontmatter.ts <doc.md>`
+// Deps: `bun add zod`
 //
 // Design rule: this file is the ONLY place enums live. The model-facing docs
 // (yaml-schema.md) are generated from here, so there is no 4-file drift to maintain.

@@ -11,15 +11,19 @@
     "plugin:validate": "claude plugin validate .claude-plugin/marketplace.json && claude plugin validate plugins/super-looper",
     "release:preview": "bun run scripts/release/preview.ts",
     "release:sync-metadata": "bun run scripts/release/sync-metadata.ts --write",
-    "release:validate": "bun run scripts/release/validate.ts"
+    "release:validate": "bun run scripts/release/validate.ts",
+    "solutions:validate": "bun run scripts/solutions/validate-frontmatter.ts docs/solutions",
+    "solutions:emit": "bun run scripts/solutions/emit-docs.ts --write"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.3",
     "bun-types": "^1.0.0",
     "semantic-release": "^25.0.3"
   }

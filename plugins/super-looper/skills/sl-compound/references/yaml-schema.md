@@ -1,5 +1,8 @@
 # YAML Frontmatter Schema
 
+<!-- GENERATED FILE — do not edit by hand. Run `bun run solutions:emit` to regenerate. -->
+<!-- Source of truth: src/solutions/schema.ts (enums) + src/solutions/doc-model.ts. -->
+
 `schema.yaml` in this directory is the canonical contract for `docs/solutions/` frontmatter written by `sl-compound`.
 
 Use this file as the quick reference for:
@@ -15,22 +18,22 @@ The `problem_type` determines which **track** applies. Each track has different 
 
 | Track | problem_types | Description |
 |-------|--------------|-------------|
-| **Bug** | `build_error`, `test_failure`, `runtime_error`, `performance_issue`, `database_issue`, `security_issue`, `ui_bug`, `integration_issue`, `logic_error` | Defects and failures that were diagnosed and fixed |
-| **Knowledge** | `best_practice`, `documentation_gap`, `workflow_issue`, `developer_experience`, `architecture_pattern`, `design_pattern`, `tooling_decision`, `convention` | Practices, patterns, conventions, decisions, workflow improvements, and documentation. Prefer the narrowest applicable value; `best_practice` is the fallback. |
+| **Bug** | `build_error`, `test_failure`, `runtime_error`, `performance_issue`, `database_issue`, `security_issue`, `ui_bug`, `integration_issue`, `logic_error` | Defects, failures, and errors that were diagnosed and fixed |
+| **Knowledge** | `best_practice`, `documentation_gap`, `workflow_issue`, `developer_experience`, `architecture_pattern`, `design_pattern`, `tooling_decision`, `convention` | Practices, patterns, conventions, decisions, workflow improvements, and documentation |
 
 ## Required Fields (both tracks)
 
 - **module**: Module or area affected
-- **date**: ISO date in `YYYY-MM-DD`
-- **problem_type**: One of the values listed in the Tracks table above
-- **component**: One of `rails_model`, `rails_controller`, `rails_view`, `service_object`, `background_job`, `database`, `frontend_stimulus`, `hotwire_turbo`, `email_processing`, `brief_system`, `assistant`, `authentication`, `payments`, `development_workflow`, `testing_framework`, `documentation`, `tooling`
+- **date**: Date documented (YYYY-MM-DD)
+- **problem_type**: Primary category — determines track (bug vs knowledge). Prefer the narrowest applicable value; best_practice is the fallback when no narrower knowledge-track value fits.
+- **component**: One of `react_component`, `vue_component`, `design_system`, `accessibility_rule`, `browser_extension`, `mcp_server`, `backend_function`, `api_client`, `state_management`, `routing`, `styling`, `types`, `database`, `authentication`, `build_tooling`, `e2e_test`, `storybook`, `testing_framework`, `development_workflow`, `documentation`, `tooling`
 - **severity**: One of `critical`, `high`, `medium`, `low`
 
 ## Bug Track Fields
 
 Required:
-- **symptoms**: YAML array with 1-5 observable symptoms (errors, broken behavior)
-- **root_cause**: One of `missing_association`, `missing_include`, `missing_index`, `wrong_api`, `scope_issue`, `thread_violation`, `async_timing`, `memory_leak`, `config_error`, `logic_error`, `test_isolation`, `missing_validation`, `missing_permission`, `missing_workflow_step`, `inadequate_documentation`, `missing_tooling`, `incomplete_setup`
+- **symptoms**: Observable symptoms such as errors or broken behavior (1-5 items)
+- **root_cause**: One of `wrong_api`, `type_error`, `logic_error`, `stale_closure`, `missing_dependency`, `reactivity_bug`, `hydration_mismatch`, `race_condition`, `async_timing`, `missing_aria`, `focus_management`, `memory_leak`, `config_error`, `bundler_config`, `dependency_conflict`, `missing_validation`, `missing_permission`, `test_isolation`, `missing_workflow_step`, `inadequate_documentation`, `missing_tooling`, `incomplete_setup`
 - **resolution_type**: One of `code_fix`, `migration`, `config_change`, `test_fix`, `dependency_update`, `environment_setup`, `workflow_improvement`, `documentation_update`, `tooling_addition`, `seed_data_update`
 
 ## Knowledge Track Fields
@@ -38,18 +41,18 @@ Required:
 No additional required fields beyond the shared ones. All fields below are optional:
 
 - **applies_when**: Conditions or situations where this guidance applies
-- **symptoms**: Observable gaps or friction that prompted this guidance
-- **root_cause**: Underlying cause, if there is a specific one
-- **resolution_type**: Type of change, if applicable
+- **symptoms**: Observable gaps or friction that prompted this guidance (optional for knowledge track)
+- **root_cause**: Underlying cause, if there is a specific one (optional for knowledge track)
+- **resolution_type**: Type of change, if applicable (optional for knowledge track)
 
 ## Optional Fields (both tracks)
 
 - **related_components**: Other components involved
-- **tags**: Search keywords, lowercase and hyphen-separated
+- **tags**: Search keywords, lowercase and hyphen-separated (max 8)
 
 ## Optional Fields (bug track only)
 
-- **rails_version**: Rails version in `X.Y.Z` format
+- **framework_version**: Framework and version, e.g. react@19.0.0 or vue@3.5.13. Only relevant for bug-track docs.
 
 ## Backward Compatibility
 
@@ -60,6 +63,9 @@ Docs created before the track system may have `symptoms`/`root_cause`/`resolutio
 
 ## Category Mapping
 
+> Generated from the schema's `problem_type` enum. Not authoritative for on-disk
+> layout until the taxonomy is reconciled — some directories below do not exist yet.
+
 - `build_error` -> `docs/solutions/build-errors/`
 - `test_failure` -> `docs/solutions/test-failures/`
 - `runtime_error` -> `docs/solutions/runtime-errors/`
@@ -69,10 +75,10 @@ Docs created before the track system may have `symptoms`/`root_cause`/`resolutio
 - `ui_bug` -> `docs/solutions/ui-bugs/`
 - `integration_issue` -> `docs/solutions/integration-issues/`
 - `logic_error` -> `docs/solutions/logic-errors/`
-- `developer_experience` -> `docs/solutions/developer-experience/`
-- `workflow_issue` -> `docs/solutions/workflow-issues/`
 - `best_practice` -> `docs/solutions/best-practices/`
 - `documentation_gap` -> `docs/solutions/documentation-gaps/`
+- `workflow_issue` -> `docs/solutions/workflow-issues/`
+- `developer_experience` -> `docs/solutions/developer-experience/`
 - `architecture_pattern` -> `docs/solutions/architecture-patterns/`
 - `design_pattern` -> `docs/solutions/design-patterns/`
 - `tooling_decision` -> `docs/solutions/tooling-decisions/`
@@ -88,7 +94,7 @@ Docs created before the track system may have `symptoms`/`root_cause`/`resolutio
 6. Enum fields must match the allowed values exactly.
 7. Array fields must respect min/max item counts.
 8. `date` must match `YYYY-MM-DD`.
-9. `rails_version`, if present, must match `X.Y.Z` and only applies to bug-track docs.
+9. `framework_version`, if present, only applies to bug-track docs.
 
 ## YAML Safety Rules
 
@@ -100,7 +106,7 @@ double quotes if it starts with any of:
 
 `` ` ``, `[`, `*`, `&`, `!`, `|`, `>`, `%`, `@`, `?`
 
-Also quote if the value contains the substring `": "` — that punctuation
+Also quote if the value contains the substring `: ` — that punctuation
 confuses flow-style parsers.
 
 Example — before (breaks strict YAML):
