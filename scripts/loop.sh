@@ -139,6 +139,35 @@ if [ -n "$missing" ]; then
   exit "$EX_USAGE"
 fi
 
+# --- Numeric-cap validation ---------------------------------------------------
+# An unattended, permission-bypassed driver must never loop unbounded. A
+# non-numeric cap makes `[ "$attempt" -gt "$MAX_RETRIES" ]` error, and since
+# `set -e` is exempt inside an `if` condition the error reads as false and the
+# retry loop never terminates. Reject non-integers before the loop.
+validate_int() {
+  case "$2" in
+    ''|*[!0-9]*) echo "loop.sh: $1 must be a non-negative integer (got: '$2')" >&2; usage; exit "$EX_USAGE" ;;
+  esac
+}
+validate_int --max-retries "$MAX_RETRIES"
+validate_int --timeout "$TIMEOUT_SECONDS"
+validate_int --kill-after "$KILL_GRACE"
+
+# --- Verify-command validation ------------------------------------------------
+# `--verify-cmd` consumes the rest of the args. Require a command, and reject one
+# starting with '-' so a misplaced loop.sh flag (e.g. `--verify-cmd --dry-run`)
+# is not silently swallowed into the verify vector while a real run launches.
+if [ "$VERIFY_MODE" = "command" ]; then
+  if [ "${#VERIFY_CMD[@]}" -eq 0 ]; then
+    echo "loop.sh: --verify-cmd requires a command (it must be the LAST flag, followed by the command to run)." >&2
+    usage
+    exit "$EX_USAGE"
+  fi
+  case "${VERIFY_CMD[0]}" in
+    -*) echo "loop.sh: the --verify-cmd command cannot start with '-' (got: '${VERIFY_CMD[0]}'); --verify-cmd must be last and loop.sh flags after it are not parsed." >&2; usage; exit "$EX_USAGE" ;;
+  esac
+fi
+
 # --- Resolve seed text --------------------------------------------------------
 if [ -n "$SEED_FILE" ]; then
   if [ ! -f "$SEED_FILE" ]; then fail "$EX_USAGE" "seed file not found: $SEED_FILE"; fi
@@ -253,7 +282,19 @@ target_pr_url() {
   ( cd "$CT" && "$GH_BIN" pr view --json url -q .url ) 2>/dev/null || true
 }
 target_ci_green() {
-  ( cd "$CT" && "$GH_BIN" pr checks ) >>"$LOG_FILE" 2>&1
+  # `gh pr checks` alone exits 0 when a PR has ZERO checks — that is
+  # "unverified", not green, and would defeat the no-unverified-success rule.
+  # Require at least one check with every check in a passing bucket
+  # (pass/skipping). Bound the call with timeout so a slow API can't hang the
+  # unattended run. Buckets: pass | fail | pending | skipping | cancel.
+  local buckets
+  if [ -n "$TIMEOUT_RESOLVED" ]; then
+    buckets="$( ( cd "$CT" && "$TIMEOUT_RESOLVED" --kill-after=10s 120s "$GH_BIN" pr checks --json bucket -q '.[].bucket' ) 2>>"$LOG_FILE" || true )"
+  else
+    buckets="$( ( cd "$CT" && "$GH_BIN" pr checks --json bucket -q '.[].bucket' ) 2>>"$LOG_FILE" || true )"
+  fi
+  [ -n "$buckets" ] || return 1
+  ! printf '%s\n' "$buckets" | grep -qvE '^(pass|skipping)$'
 }
 
 # Reset the target to its clean base before a retry (clean-base-per-retry).
@@ -280,8 +321,15 @@ detect_done() {
 
 # --- Run --------------------------------------------------------------------
 mkdir -p "$LOG_DIR"
+chmod 700 "$LOG_DIR" 2>/dev/null || true
 : >"$LOG_FILE"
 log "run started: target=$CT model=$MODEL verify-mode=$VERIFY_MODE max-retries=$MAX_RETRIES"
+if [ -z "$TIMEOUT_RESOLVED" ]; then
+  log "warning: no 'timeout' binary found — this run is NOT wall-clock capped. Install coreutils to enforce --timeout."
+fi
+if [ -z "$BASE_REF" ] && [ "$MAX_RETRIES" -gt 0 ]; then
+  log "warning: target has no base commit — a retry cannot fully reset it to a clean base."
+fi
 
 full_cmd=()
 if [ "${#run_wrapper[@]}" -gt 0 ]; then full_cmd+=( "${run_wrapper[@]}" ); fi
@@ -296,10 +344,18 @@ trap 'rm -f "$attempt_log"' EXIT
 
 while :; do
   attempt=$((attempt + 1))
+  timed_out=0
   log "attempt $attempt: launching headless claude"
 
+  # Run the agent in the background and forward INT/TERM to it, so aborting the
+  # driver also kills the permission-bypassed agent rather than orphaning it.
   run_status=0
-  ( cd "$CT" && "${full_cmd[@]}" ) >"$attempt_log" 2>&1 || run_status=$?
+  ( cd "$CT" && exec "${full_cmd[@]}" ) >"$attempt_log" 2>&1 &
+  run_pid=$!
+  trap 'kill -TERM "$run_pid" 2>/dev/null || true; exit 130' INT
+  trap 'kill -TERM "$run_pid" 2>/dev/null || true; exit 143' TERM
+  wait "$run_pid" || run_status=$?
+  trap - INT TERM
   tee -a "$LOG_FILE" <"$attempt_log" >/dev/null
 
   if detect_done "$attempt_log"; then
@@ -308,7 +364,10 @@ while :; do
     break
   fi
 
-  if [ "$run_status" -eq "$TIMEOUT_EXIT_STATUS" ]; then
+  # Only a real timeout wrapper firing means "timed out". An uncapped run that
+  # happens to exit 124 is a crash, not a driver timeout. timed_out is reset
+  # each attempt, so the final failure reflects the LAST attempt's outcome.
+  if [ "${#run_wrapper[@]}" -gt 0 ] && [ "$run_status" -eq "$TIMEOUT_EXIT_STATUS" ]; then
     timed_out=1
     log "attempt $attempt timed out (no DONE)"
   else
@@ -346,11 +405,9 @@ fi
 # --- Verification (TARGET-scoped, evaluated AFTER DONE) -----------------------
 verify_green=0
 if [ "$VERIFY_MODE" = "command" ]; then
-  if [ "${#VERIFY_CMD[@]}" -gt 0 ]; then
-    if "${VERIFY_CMD[@]}" >>"$LOG_FILE" 2>&1; then verify_green=1; else verify_green=0; fi
-  else
-    verify_green=0
-  fi
+  # Run in the target, not loop.sh's CWD — a proxy like `bun test` must verify
+  # the target repo. VERIFY_CMD is guaranteed non-empty by the parse-time guard.
+  if ( cd "$CT" && "${VERIFY_CMD[@]}" ) >>"$LOG_FILE" 2>&1; then verify_green=1; else verify_green=0; fi
 else
   if target_open_pr && target_ci_green; then verify_green=1; else verify_green=0; fi
 fi

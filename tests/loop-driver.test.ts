@@ -57,7 +57,12 @@ if [ "$sub" = "pr" ] && [ "$act" = "view" ]; then
   if [ "$want" = url ]; then echo "\${STUB_GH_PR_URL:-}"; else echo "\${STUB_GH_PR_STATE}"; fi
   exit 0
 fi
-if [ "$sub" = "pr" ] && [ "$act" = "checks" ]; then exit "\${STUB_GH_CHECKS_EXIT:-0}"; fi
+if [ "$sub" = "pr" ] && [ "$act" = "checks" ]; then
+  # Emit one bucket per line (STUB_GH_CHECK_BUCKETS, comma-separated); empty =>
+  # a PR with no checks at all, mirroring real \`gh pr checks --json bucket\`.
+  if [ -n "\${STUB_GH_CHECK_BUCKETS:-}" ]; then printf '%s\\n' \${STUB_GH_CHECK_BUCKETS//,/ }; fi
+  exit 0
+fi
 exit 0
 `,
   )
@@ -78,13 +83,18 @@ exec "$@"
   )
 }
 
-// A verify-cmd stub that records each received argv token on its own line, so a
-// test can prove the args were passed as a vector (metacharacters preserved),
-// not eval'd through a shell.
-function printargsStub(argsMarker: string): string {
+// Stub `timeout` that simulates a fired timeout: ignore everything, exit 124.
+function timeoutKillStub(): string {
+  return writeExec(path.join(work, "timeout-kill"), `#!/usr/bin/env bash\nexit 124\n`)
+}
+
+// A verify-cmd stub that records each received argv token on its own line (to
+// prove args pass as a vector, metacharacters preserved, not eval'd) and writes
+// its working directory to cwdMarker (to prove it runs inside the target).
+function printargsStub(argsMarker: string, cwdMarker: string): string {
   return writeExec(
     path.join(work, "verify"),
-    `#!/usr/bin/env bash\n: > '${argsMarker}'\nfor a in "$@"; do printf '%s\\n' "$a" >> '${argsMarker}'; done\nexit "\${VERIFY_EXIT:-0}"\n`,
+    `#!/usr/bin/env bash\npwd -P > '${cwdMarker}'\n: > '${argsMarker}'\nfor a in "$@"; do printf '%s\\n' "$a" >> '${argsMarker}'; done\nexit "\${VERIFY_EXIT:-0}"\n`,
   )
 }
 
@@ -305,7 +315,7 @@ describe("DONE routing vs success", () => {
           LOOP_CLAUDE_BIN: claude,
           STUB_GH_PR_STATE: "OPEN",
           STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/7",
-          STUB_GH_CHECKS_EXIT: "0",
+          STUB_GH_CHECK_BUCKETS: "pass",
         },
       },
     )
@@ -327,7 +337,7 @@ describe("DONE routing vs success", () => {
           ...env,
           LOOP_CLAUDE_BIN: claude,
           STUB_GH_PR_STATE: "OPEN",
-          STUB_GH_CHECKS_EXIT: "1",
+          STUB_GH_CHECK_BUCKETS: "fail",
         },
       },
     )
@@ -387,7 +397,7 @@ describe("retry reconciliation", () => {
           LOOP_CLAUDE_BIN: claude,
           STUB_GH_PR_STATE: "OPEN", // a PR already exists for the target branch
           STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/9",
-          STUB_GH_CHECKS_EXIT: "0",
+          STUB_GH_CHECK_BUCKETS: "pass",
         },
       },
     )
@@ -422,7 +432,8 @@ describe("--verify-cmd argv vector", () => {
     const target = mkdirInWork("target")
     const plugin = mkdirInWork("plugin")
     const argsMarker = path.join(work, "verify-args.log")
-    const verify = printargsStub(argsMarker)
+    const cwdMarker = path.join(work, "verify-cwd.log")
+    const verify = printargsStub(argsMarker, cwdMarker)
     const { marker, env } = stubs()
     const claude = claudeStub("claude", `done now\n${SENTINEL}`, 0, marker)
     const { exitCode, stdout } = await runLoop(
@@ -436,18 +447,121 @@ describe("--verify-cmd argv vector", () => {
     expect(stdout).toContain("SUCCESS")
     const argLines = fs.readFileSync(argsMarker, "utf8").split("\n").filter((l) => l.length > 0)
     expect(argLines).toEqual(["a;b", "c d"])
+    // verify ran inside the target, not loop.sh's CWD
+    expect(fs.readFileSync(cwdMarker, "utf8").trim()).toBe(fs.realpathSync(target))
   })
 
   test("command-mode verification red => DONE-but-red failure", async () => {
     const target = mkdirInWork("target")
     const plugin = mkdirInWork("plugin")
     const argsMarker = path.join(work, "verify-args.log")
-    const verify = printargsStub(argsMarker)
+    const cwdMarker = path.join(work, "verify-cwd.log")
+    const verify = printargsStub(argsMarker, cwdMarker)
     const { marker, env } = stubs()
     const claude = claudeStub("claude", `done now\n${SENTINEL}`, 0, marker)
     const { exitCode, stderr } = await runLoop(
       ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--verify-cmd", verify],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, VERIFY_EXIT: "1" } },
+    )
+    expect(exitCode).toBe(7)
+    expect(stderr).toContain("DONE-but-red")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Cap / numeric-input validation (R3 — never loop unbounded)
+// ---------------------------------------------------------------------------
+describe("numeric-cap validation", () => {
+  test("non-numeric --max-retries exits non-zero with a usage error (no unbounded loop)", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "abc"],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--max-retries")
+    expect(stderr.toLowerCase()).toContain("integer")
+  })
+
+  test("empty --max-retries is rejected", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", ""],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Timeout routing (R3 / KTD via exit codes) — EX_TIMEOUT vs EX_CAP
+// ---------------------------------------------------------------------------
+describe("timeout routing", () => {
+  test("a fired timeout (exit 124) with no DONE => EX_TIMEOUT (6), not cap-exhausted", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const { marker } = stubs()
+    // claude never runs (the kill-stub exits 124 before exec'ing it).
+    const claude = claudeStub("claude", `${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "0"],
+      { env: { LOOP_GH_BIN: ghStub(), LOOP_TIMEOUT_BIN: timeoutKillStub(), LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(6)
+    expect(stderr.toLowerCase()).toContain("timeout")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// --verify-cmd input validation (R10 — no silent footguns)
+// ---------------------------------------------------------------------------
+describe("--verify-cmd validation", () => {
+  test("--verify-cmd with no command exits non-zero with a usage error", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--verify-cmd"],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--verify-cmd")
+  })
+
+  test("a verify command starting with '-' (e.g. a swallowed --dry-run) is rejected", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--verify-cmd", "--dry-run"],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--dry-run")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Zero-checks false-green guard (KTD4 — no unverified success)
+// ---------------------------------------------------------------------------
+describe("zero-checks is not green", () => {
+  test("DONE + open PR but the PR has NO checks => DONE-but-red, not success", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x"],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_CHECK_BUCKETS: "", // a PR with zero checks
+        },
+      },
     )
     expect(exitCode).toBe(7)
     expect(stderr).toContain("DONE-but-red")

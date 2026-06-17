@@ -45,9 +45,11 @@ command (`--dry-run`) and then runs it. Always preview with `--dry-run` first.
 
 - **GitHub-CI mode (default).** When the target has a git remote and no
   `--verify-cmd` is given, success requires an **open PR** for the target branch
-  with **green `gh pr checks`**. This is the faithful "reach CI-green" bar.
-- **Command mode.** `--verify-cmd <cmd...>` runs a local command; success
-  requires it to exit `0`. Use for targets without Actions.
+  with **green `gh pr checks`**. A PR with **zero checks** is treated as *not*
+  green — there is no unverified success. This is the faithful "reach CI-green"
+  bar.
+- **Command mode.** `--verify-cmd <cmd...>` runs a local command **in the target
+  directory**; success requires it to exit `0`. Use for targets without Actions.
 - **No verification available** (no remote *and* no `--verify-cmd`) → the driver
   **fails fast** (`exit 4`). There is no unverified success path.
 
