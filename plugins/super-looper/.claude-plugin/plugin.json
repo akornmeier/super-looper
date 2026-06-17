@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "description": "AI-powered development tools for code review, research, design, and workflow automation.",
   "author": {
-    "name": "Kieran Klaassen",
-    "email": "kieran@every.to",
-    "url": "https://github.com/kieranklaassen"
+    "name": "Anthony Kornmeier",
+    "email": "tony@kornmeier.me",
+    "url": "https://github.com/akornmeier"
   },
-  "homepage": "https://every.to/source-code/my-ai-had-already-fixed-the-code-before-i-saw-it",
+  "homepage": "https://github.com/akornmeier/super-looper",
   "repository": "https://github.com/akornmeier/super-looper",
   "license": "MIT",
   "keywords": [
@@ -15,8 +15,6 @@
     "super-looper",
     "workflow-automation",
     "code-review",
-    "rails",
-    "ruby",
     "python",
     "typescript",
     "knowledge-management",
