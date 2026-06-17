@@ -1,0 +1,21 @@
+# Sample GitHub Actions workflow for a THROWAWAY acceptance target.
+#
+# This file lives under examples/ on purpose — it is NOT installed into this
+# repo's own .github/workflows/. Copy it into the throwaway repo as
+# .github/workflows/ci.yml so `loop.sh`'s GitHub-CI verification (`gh pr checks`)
+# has a real check to go green. See docs/loop-driver-acceptance.md.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun test
