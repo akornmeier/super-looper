@@ -26,14 +26,22 @@ async function validateOne(filePath: string): Promise<boolean> {
   }
   console.error(`INVALID: ${filePath}`)
   for (const error of result.errors) {
-    console.error(`  ${error.field}: ${error.message}`)
+    // error.message may span multiple lines (e.g. parseFrontmatter appends a
+    // "Tip:" line); indent continuation lines so they stay under the field.
+    const message = error.message.replace(/\n/g, "\n  ")
+    console.error(`  ${error.field}: ${message}`)
   }
   return false
 }
 
-const stat = await fs.stat(target).catch(() => null)
-if (!stat) {
-  console.error(`usage: cannot read "${target}" (no such file or directory)`)
+let stat: Awaited<ReturnType<typeof fs.stat>>
+try {
+  stat = await fs.stat(target)
+} catch (err) {
+  const detail =
+    (err as NodeJS.ErrnoException).code ??
+    (err instanceof Error ? err.message : String(err))
+  console.error(`usage: cannot read "${target}" (${detail})`)
   process.exit(2)
 }
 

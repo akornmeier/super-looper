@@ -157,7 +157,7 @@ double quotes if it starts with any of:
 
 ${reservedList}
 
-Also quote if the value contains the substring \`": "\` — that punctuation
+Also quote if the value contains the substring \`: \` — that punctuation
 confuses flow-style parsers.
 
 Example — before (breaks strict YAML):

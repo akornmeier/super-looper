@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { load } from "js-yaml"
-import { mkdtempSync, writeFileSync, existsSync } from "node:fs"
+import { mkdtempSync, writeFileSync, existsSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -26,7 +26,7 @@ const DOC_NAMES = ["yaml-schema.md", "schema.yaml"]
 const tempRoots: string[] = []
 afterEach(() => {
   for (const root of tempRoots.splice(0, tempRoots.length)) {
-    Bun.spawnSync(["rm", "-rf", root])
+    rmSync(root, { recursive: true, force: true })
   }
 })
 

@@ -364,7 +364,7 @@ describe("validate-frontmatter CLI", () => {
     expect(result.stderr).toContain("date")
   })
 
-  test("corpus mode over the (empty) docs/solutions exits 0", () => {
+  test("corpus mode over docs/solutions exits 0", () => {
     const result = runCli([CORPUS])
     expect(result.code).toBe(0)
   })

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { emitDocs } from "../src/solutions/emit"
@@ -80,6 +80,6 @@ describe("emit-docs CLI", () => {
     expect(drifted.code).toBe(1)
     expect(drifted.stderr).toContain(stalePath)
 
-    spawnSync("rm", ["-rf", root])
+    rmSync(root, { recursive: true, force: true })
   })
 })
