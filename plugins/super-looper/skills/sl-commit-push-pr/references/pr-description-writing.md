@@ -56,13 +56,13 @@ Note in the user-facing summary when the API fallback was used.
 
 Match weight to weight. When in doubt, shorter wins. Subtract fix-up commits (review fixes, lint, rebase resolutions) when sizing — they're invisible to the reader. Large PRs need more selectivity, not more content.
 
-| Change profile | Description approach |
-|---|---|
-| Small + simple (typo, config, dep bump) | 1-2 sentences, no headers. Under ~300 characters. |
-| Small + non-trivial (bugfix, behavioral change) | 3-5 sentences. No headers unless two distinct concerns. |
-| Medium feature or refactor | Narrative frame, then what changed and why. Call out design decisions. |
-| Large or architecturally significant | Narrative frame + 3-5 design-decision callouts + brief test summary. Target ~100 lines, cap ~150. For PRs with many mechanisms, use a Summary table; do not create an H3 per mechanism. |
-| Performance improvement | Include before/after measurements as a markdown table. |
+| Change profile                                  | Description approach                                                                                                                                                                    |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Small + simple (typo, config, dep bump)         | 1-2 sentences, no headers. Under ~300 characters.                                                                                                                                       |
+| Small + non-trivial (bugfix, behavioral change) | 3-5 sentences. No headers unless two distinct concerns.                                                                                                                                 |
+| Medium feature or refactor                      | Narrative frame, then what changed and why. Call out design decisions.                                                                                                                  |
+| Large or architecturally significant            | Narrative frame + 3-5 design-decision callouts + brief test summary. Target ~100 lines, cap ~150. For PRs with many mechanisms, use a Summary table; do not create an H3 per mechanism. |
+| Performance improvement                         | Include before/after measurements as a markdown table.                                                                                                                                  |
 
 For small + simple PRs, the value-led sentence is the entire description.
 For small + non-trivial bugfixes, the 3-5 sentence target still needs a user-visible before/after lead when the bug affected UI, CLI output, workflow output, or any other user-observable behavior. Concision is not a reason to skip the visible symptom.
@@ -100,12 +100,12 @@ The opening goes under `## Summary` if the body uses any `##` headings; bare par
 ```markdown
 ---
 
-[![Super Looper](https://img.shields.io/badge/Built_with-Compound_Engineering-6366f1)](https://github.com/akornmeier/super-looper)
+[![Super Looper](https://img.shields.io/badge/Built_with-Super_Looper-4D4730)](https://github.com/akornmeier/super-looper)
 ![HARNESS](https://img.shields.io/badge/MODEL_SLUG-COLOR?logo=LOGO&logoColor=white)
 ```
 
-| Harness | `LOGO` | `COLOR` |
-|---|---|---|
+| Harness     | `LOGO`   | `COLOR`  |
+| ----------- | -------- | -------- |
 | Claude Code | `claude` | `D97757` |
 
 **Model slug:** spaces become underscores; append context window and thinking level in parens if known. **URL-encode literal parens as `%28` / `%29`** — unencoded parens inside markdown image URLs break release-please's commit parser, which silently drops the commit from the changelog. Examples: `Opus_4.6_%281M,_Extended_Thinking%29`, `Sonnet_4.6_%28200K%29`.
