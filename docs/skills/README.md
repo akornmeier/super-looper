@@ -111,6 +111,7 @@ Invoked when a specific need arises — not part of any chain.
 | Skill | Description |
 |-------|-------------|
 | [`/sl-demo-reel`](./sl-demo-reel.md) | Capture visual evidence (GIF, terminal recording, screenshots) for PR descriptions — strict separation from test output |
+| [`/sl-handoff`](./sl-handoff.md) | Compact the current session into a clean handoff doc a fresh agent can pick up — delta-only, artifacts by reference; produced at the plan→work seam for unattended `loop.sh` runs |
 | [`/sl-promote`](./sl-promote.md) | Draft user-facing announcement copy for a shipped feature (X, changelog, LinkedIn, email) — voice-matched via the optional Spiral CLI, a lite layer of editorial & social expertise without it, drafts only |
 | [`/sl-resolve-pr-feedback`](./sl-resolve-pr-feedback.md) | Evaluate, fix, and reply to PR review feedback in parallel — including nitpicks |
 | [`/sl-test-browser`](./sl-test-browser.md) | End-to-end browser tests on PR / branch-affected pages using `agent-browser` exclusively |
