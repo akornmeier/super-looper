@@ -52,10 +52,20 @@ GH_BIN="${LOOP_GH_BIN:-gh}"
 # scripts/loop.example.env so the acceptance and the driver never diverge.
 readonly LOOP_PROMPT_PREFIX='Run the lfg workflow to completion on the task below, fully unattended. lfg plans, implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Task:'
 
+# Plan-input variant: the task is ALREADY planned, so lfg skips planning and
+# executes the supplied plan. The plan is NAMED (not inlined) using the literal
+# `plan:<path>` marker lfg's plan-input branch detects; the path resolves against
+# the target, which is the agent's CWD. Built in the same inline-instruction
+# style as LOOP_PROMPT_PREFIX (not a `/lfg` slash command) per the same
+# execution-time-unknown pinned by the acceptance smoke.
+readonly LOOP_PLAN_PROMPT_PREFIX='Run the lfg workflow to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. lfg implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'
+
 # --- Defaults -----------------------------------------------------------------
 TARGET=""
 SEED=""
 SEED_FILE=""
+PLAN_FILE=""
+HANDOFF_FILE=""
 PLUGIN_DIR="$REPO_ROOT"
 MODEL="opus"
 TIMEOUT_SECONDS=1800
@@ -68,14 +78,19 @@ VERIFY_CMD=()
 
 usage() {
   cat >&2 <<'EOF'
-Usage: loop.sh --target <dir> (--seed <text> | --seed-file <path>) [options]
+Usage: loop.sh --target <dir> (--seed <text> | --seed-file <path> | --plan-file <path>) [options]
 
-Required:
+Required (pick ONE task source):
   --target <dir>            Target directory the loop runs in and edits.
   --seed <text>             Seed task (inline), OR
-  --seed-file <path>        Seed task read from a file.
+  --seed-file <path>        Seed task read from a file, OR
+  --plan-file <path>        Plan doc IN THE TARGET to execute; skips planning and
+                            runs lfg's plan-input branch. Commit the plan in the
+                            target so a retry's reset does not delete it.
 
 Options:
+  --handoff-file <path>     Handoff doc carried as orienting context for the run
+                            (valid only with --plan-file).
   --plugin-dir <path>       Pinned Super Looper checkout (default: this repo root).
   --model <model>           Orchestrator model, e.g. opus or fable (default: opus).
   --timeout <seconds>       Per-attempt wall-clock cap (default: 1800).
@@ -107,6 +122,8 @@ while [ $# -gt 0 ]; do
     --target) require_val --target "$#"; TARGET="$2"; shift 2 ;;
     --seed) require_val --seed "$#"; SEED="$2"; shift 2 ;;
     --seed-file) require_val --seed-file "$#"; SEED_FILE="$2"; shift 2 ;;
+    --plan-file) require_val --plan-file "$#"; PLAN_FILE="$2"; shift 2 ;;
+    --handoff-file) require_val --handoff-file "$#"; HANDOFF_FILE="$2"; shift 2 ;;
     --plugin-dir) require_val --plugin-dir "$#"; PLUGIN_DIR="$2"; shift 2 ;;
     --model) require_val --model "$#"; MODEL="$2"; shift 2 ;;
     --timeout) require_val --timeout "$#"; TIMEOUT_SECONDS="$2"; shift 2 ;;
@@ -138,7 +155,7 @@ fail() {
 # --- Required-input validation ------------------------------------------------
 missing=""
 if [ -z "$TARGET" ]; then missing="$missing --target"; fi
-if [ -z "$SEED" ] && [ -z "$SEED_FILE" ]; then missing="$missing --seed|--seed-file"; fi
+if [ -z "$SEED" ] && [ -z "$SEED_FILE" ] && [ -z "$PLAN_FILE" ]; then missing="$missing --seed|--seed-file|--plan-file"; fi
 if [ -n "$missing" ]; then
   echo "loop.sh: missing required input:$missing" >&2
   usage
@@ -149,6 +166,20 @@ fi
 # preferring one would hide an operator mistake (running a different task).
 if [ -n "$SEED" ] && [ -n "$SEED_FILE" ]; then
   fail "$EX_USAGE" "--seed and --seed-file are mutually exclusive; pass only one."
+fi
+
+# --plan-file selects plan-input mode and is a distinct task source from a seed:
+# a run executes a supplied plan OR a seed task, never both.
+if [ -n "$PLAN_FILE" ] && [ -n "$SEED" ]; then
+  fail "$EX_USAGE" "--plan-file and --seed are mutually exclusive; pass only one task source."
+fi
+if [ -n "$PLAN_FILE" ] && [ -n "$SEED_FILE" ]; then
+  fail "$EX_USAGE" "--plan-file and --seed-file are mutually exclusive; pass only one task source."
+fi
+
+# --handoff-file rides along with a plan; it is meaningless without one.
+if [ -n "$HANDOFF_FILE" ] && [ -z "$PLAN_FILE" ]; then
+  fail "$EX_USAGE" "--handoff-file is only valid with --plan-file."
 fi
 
 # --- Numeric-cap validation ---------------------------------------------------
@@ -180,15 +211,39 @@ if [ "$VERIFY_MODE" = "command" ]; then
   esac
 fi
 
-# --- Resolve seed text --------------------------------------------------------
-if [ -n "$SEED_FILE" ]; then
-  if [ ! -f "$SEED_FILE" ]; then fail "$EX_USAGE" "seed file not found: $SEED_FILE"; fi
-  SEED_TEXT="$(cat "$SEED_FILE")"
-else
-  SEED_TEXT="$SEED"
+# --- Resolve the headless prompt ----------------------------------------------
+# Two task sources, never both (enforced above): a seed (inline task) or a plan
+# to execute. A handoff doc, when present (plan mode only), is read here and
+# appended as orienting context — it ferries planning-session context into the
+# fresh process, which has the plan but none of the planning conversation.
+if [ -n "$HANDOFF_FILE" ]; then
+  if [ ! -f "$HANDOFF_FILE" ]; then fail "$EX_USAGE" "handoff file not found: $HANDOFF_FILE"; fi
+  HANDOFF_TEXT="$(cat "$HANDOFF_FILE")"
 fi
-PROMPT="$LOOP_PROMPT_PREFIX
+
+if [ -n "$PLAN_FILE" ]; then
+  # Plan mode: NAME the plan for lfg's plan-input branch (literal `plan:<path>`),
+  # do not inline its content as a task. The path resolves against the target
+  # (the agent's CWD); existence is validated after canonicalization below.
+  PROMPT="$LOOP_PLAN_PROMPT_PREFIX
+plan:$PLAN_FILE"
+  if [ -n "$HANDOFF_FILE" ]; then
+    PROMPT="$PROMPT
+
+Orienting context from the planning session (handoff) — use it to understand intent and prior decisions; the plan above is authoritative:
+$HANDOFF_TEXT"
+  fi
+else
+  # Seed mode: inline the task after the routing prefix.
+  if [ -n "$SEED_FILE" ]; then
+    if [ ! -f "$SEED_FILE" ]; then fail "$EX_USAGE" "seed file not found: $SEED_FILE"; fi
+    SEED_TEXT="$(cat "$SEED_FILE")"
+  else
+    SEED_TEXT="$SEED"
+  fi
+  PROMPT="$LOOP_PROMPT_PREFIX
 $SEED_TEXT"
+fi
 
 # --- Canonicalize + isolation guard (self-edit hazard) ------------------------
 canon() { ( cd "$1" 2>/dev/null && pwd -P ); }
@@ -205,6 +260,20 @@ if [ "$CT" = "$CP" ] || [ "${CT#"$CP"/}" != "$CT" ] || [ "${CP#"$CT"/}" != "$CP"
   echo "         target=$CT" >&2
   echo "         plugin-dir=$CP" >&2
   exit "$EX_ISOLATION"
+fi
+
+# --- Plan-file must be a readable plan inside the target ----------------------
+# Unlike a seed file (read above), the plan is NAMED for the agent, which reads
+# it with the target as its CWD. Resolve a relative path against the target and
+# confirm it is readable there, so validation matches what the agent will see.
+if [ -n "$PLAN_FILE" ]; then
+  case "$PLAN_FILE" in
+    /*) plan_check="$PLAN_FILE" ;;
+    *)  plan_check="$CT/$PLAN_FILE" ;;
+  esac
+  if [ ! -r "$plan_check" ]; then
+    fail "$EX_USAGE" "plan file not found or unreadable in the target: $PLAN_FILE"
+  fi
 fi
 
 # --- Verification mode --------------------------------------------------------
@@ -252,6 +321,13 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "[dry-run] target: $CT"
   echo "[dry-run] plugin-dir: $CP"
   echo "[dry-run] model: $MODEL"
+  if [ -n "$PLAN_FILE" ]; then
+    echo "[dry-run] mode: plan-input (skips planning)"
+    echo "[dry-run] plan-file: $PLAN_FILE"
+    if [ -n "$HANDOFF_FILE" ]; then echo "[dry-run] handoff-file: $HANDOFF_FILE"; fi
+  else
+    echo "[dry-run] mode: seed"
+  fi
   echo "[dry-run] verify-mode: $VERIFY_MODE"
   if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
     echo "[dry-run] WARNING: github verify-mode but target has no git remote — a real run would fail fast (exit $EX_NO_VERIFY)."

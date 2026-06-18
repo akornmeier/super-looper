@@ -619,3 +619,101 @@ describe("timeout required", () => {
     expect(stdout).toContain("not be wall-clock capped")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Plan-input mode (--plan-file / --handoff-file) — names the plan for lfg's
+// plan-input branch (literal `plan:<path>` marker) instead of inlining a seed
+// task, and carries a handoff doc as orienting context.
+// ---------------------------------------------------------------------------
+describe("plan-input mode", () => {
+  function writePlan(targetDir: string, rel: string, body: string): string {
+    const p = path.join(targetDir, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, body)
+    return rel
+  }
+
+  test("--plan-file --dry-run names the plan via the plan: marker and never inlines its body", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const planRel = writePlan(
+      target,
+      "docs/plans/feat-x-plan.md",
+      "PLAN_BODY_SENTINEL_DO_NOT_INLINE\n## Implementation Units\n",
+    )
+    const { exitCode, stdout } = await runLoop([
+      "--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--dry-run",
+    ])
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain("mode: plan-input")
+    expect(stdout).toContain(`plan-file: ${planRel}`)
+    // the constructed prompt names the plan with the literal marker lfg detects
+    expect(stdout).toContain(`plan:${planRel}`)
+    // the plan body is NEVER read or inlined — only the path is named
+    expect(stdout).not.toContain("PLAN_BODY_SENTINEL_DO_NOT_INLINE")
+  })
+
+  test("--handoff-file content rides into the prompt as orienting context", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const planRel = writePlan(target, "docs/plans/p.md", "## Implementation Units\n")
+    const handoff = path.join(work, "handoff.md")
+    fs.writeFileSync(handoff, "HANDOFF_SENTINEL_XYZ rationale and rejected alternatives")
+    const { exitCode, stdout } = await runLoop([
+      "--target", target, "--plugin-dir", plugin,
+      "--plan-file", planRel, "--handoff-file", handoff, "--dry-run",
+    ])
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain(`handoff-file: ${handoff}`)
+    expect(stdout).toContain("HANDOFF_SENTINEL_XYZ")
+  })
+
+  test("--plan-file with no value is a usage error, not a crash", async () => {
+    const target = mkdirInWork("target")
+    const { exitCode, stderr } = await runLoop(["--target", target, "--plan-file"])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--plan-file requires a value")
+  })
+
+  test("--plan-file and --seed together are rejected as mutually exclusive", async () => {
+    const target = mkdirInWork("target")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--plan-file", "docs/plans/p.md", "--seed", "x",
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("mutually exclusive")
+  })
+
+  test("--plan-file and --seed-file together are rejected as mutually exclusive", async () => {
+    const target = mkdirInWork("target")
+    const seedFile = path.join(work, "seed.md")
+    fs.writeFileSync(seedFile, "task")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--plan-file", "docs/plans/p.md", "--seed-file", seedFile,
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("mutually exclusive")
+  })
+
+  test("--handoff-file without --plan-file is rejected", async () => {
+    const target = mkdirInWork("target")
+    const handoff = path.join(work, "handoff.md")
+    fs.writeFileSync(handoff, "ctx")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--seed", "x", "--handoff-file", handoff,
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("only valid with --plan-file")
+  })
+
+  test("--plan-file pointing at a missing path in the target fails fast (R10)", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--plugin-dir", plugin,
+      "--plan-file", "docs/plans/does-not-exist.md", "--dry-run",
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("plan file not found")
+  })
+})
