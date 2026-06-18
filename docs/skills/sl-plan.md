@@ -110,7 +110,7 @@ It dispatches research in parallel — repo analyst, learnings researcher — an
 
 The plan is written. The confidence check then runs automatically — it identifies that `Risks & Dependencies` is thin on the mute-leak risk and that one unit's test scenarios miss permission edge cases, dispatches a data-integrity reviewer and a correctness reviewer, and synthesizes their findings back into the plan. The plan is stamped with a `deepened:` date.
 
-Document review then runs in headless mode. The cheap minimum dispatches (coherence + feasibility) since the plan has origin set and touches no high-stakes domains; `safe_auto` fixes (a typo, a broken cross-reference) apply silently. Remaining findings surface as a one-line summary above the post-generation menu — e.g., `Doc review applied 2 fixes. 3 decisions, 1 FYI remain.` The menu surfaces: start `/sl-work`, run deeper doc review (when actionable findings remain), create a tracked issue, open in Proof for HITL review, or pause.
+Document review then runs in headless mode. The cheap minimum dispatches (coherence + feasibility) since the plan has origin set and touches no high-stakes domains; `safe_auto` fixes (a typo, a broken cross-reference) apply silently. Remaining findings surface as a one-line summary above the post-generation menu — e.g., `Doc review applied 2 fixes. 3 decisions, 1 FYI remain.` The menu surfaces: start `/sl-work`, start the work loop (`lfg`) — which produces a clean handoff and surfaces a ready-to-run `loop.sh` command for an unattended run — run deeper doc review (when actionable findings remain), create a tracked issue, open in Proof for HITL review, or pause.
 
 ---
 

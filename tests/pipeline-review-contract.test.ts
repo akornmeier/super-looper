@@ -265,16 +265,23 @@ describe("sl-plan review contract", () => {
     // sl-work remains the recommended next-stage action (planning is done; review already ran)
     expect(content).toContain("**Start `/sl-work`** (recommended) - Begin implementing this plan in the current session")
 
+    // The work loop (lfg) is a first-class peer option: it produces a clean handoff via
+    // sl-handoff and surfaces a ready-to-run loop.sh command, but never auto-spawns a run.
+    expect(content).toContain("**Start the work loop (`lfg`)**")
+    expect(content).toContain("`sl-handoff`")
+    expect(content).toContain("loop.sh --target")
+    expect(content).toContain("do not auto-spawn")
+
     // Deeper review is a first-class menu fixture so users can engage with surfaced findings
     // without relying on free-form prompting; routed through sl-doc-review without headless mode.
     expect(content).toContain("**Run deeper doc review**")
     expect(content).toContain("`sl-doc-review`")
     expect(content).toContain("without** `mode:headless`")
 
-    // Deeper-review menu fixture is hidden when no actionable findings remain so the menu
-    // collapses back to a 4-option AskUserQuestion-friendly shape on Claude Code. FYI-only
-    // state also hides the option since sl-doc-review's walkthrough is gated to actionable
-    // findings (anchor 75/100, gated_auto/manual) and FYIs (anchor 50) bypass it.
+    // Deeper-review menu fixture is hidden when no actionable findings remain; the menu then
+    // collapses from 6 to 5 options (still a numbered list — above the 4-option AskUserQuestion
+    // cap). FYI-only state also hides the option since sl-doc-review's walkthrough is gated to
+    // actionable findings (anchor 75/100, gated_auto/manual) and FYIs (anchor 50) bypass it.
     expect(content).toContain("Hide `Run deeper doc review` when no actionable findings remain")
     expect(content).toContain("proposed_fixes_count + decisions_count > 0")
 
