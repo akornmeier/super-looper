@@ -23,7 +23,7 @@ Super looper inverts this. 80% is in planning and review, 20% is in execution:
 
 The point is not ceremony. The point is leverage. A good brainstorm makes the plan sharper. A good plan makes execution smaller. A good review catches the pattern, not just the bug. A good compound note means the next agent does not have to learn the same lesson from scratch.
 
-And the same loop runs hands-off. `/lfg` fires the whole pipeline -- plan, work, review, commit, open a PR, then watch CI and fix failures until it is green -- and iterates unattended. That is the looper in super looper: not just compounding leverage, but a loop you can let run to green on its own.
+And the same loop runs hands-off. `/lfg` fires the whole pipeline -- plan, work, review, commit, open a PR, then watch CI and take a bounded number of passes at fixing failures, recording anything it cannot resolve -- and iterates unattended. That is the looper in super looper: not just compounding leverage, but a loop you can let drive toward green and surface whatever it cannot fix on its own.
 
 **Learn more**
 
@@ -55,11 +55,11 @@ Each cycle compounds: brainstorms sharpen plans, plans inform future plans, revi
 
 ### Run it autonomously
 
-`/lfg "<feature description>"` runs the entire loop end-to-end without stopping. It plans, works through the plan, reviews and applies fixes, commits, pushes, opens a PR, then watches CI and repairs failures until the build is green. Reach for it when the task is clear and self-contained and you want hands-off execution; reach for the individual skills above when you want to steer each stage yourself.
+`/lfg "<feature description>"` runs the entire loop end-to-end without stopping. It plans, works through the plan, reviews and applies fixes, commits, pushes, opens a PR, then -- when a PR exists and `gh` is available -- watches CI and takes a bounded number of passes at repairing failures, recording anything still red so you can pick it up. Reach for it when the task is clear and self-contained and you want hands-off execution; reach for the individual skills above when you want to steer each stage yourself.
 
 ## Quick Example
 
-For hands-off execution, one command runs the whole loop to green:
+For hands-off execution, one command runs the whole loop and drives toward green:
 
 ```text
 /lfg "make background job retries safer"
