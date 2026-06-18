@@ -1,6 +1,6 @@
 ---
 name: lfg
-description: Run the full autonomous engineering pipeline end-to-end (plan, work, code review, test, commit, push, open PR, watch CI, fix CI failures until green). Use only when the user explicitly requests hands-off execution of a software task and provides a feature description; do not auto-route casual conversation here.
+description: Run the full autonomous engineering pipeline end-to-end (plan, work, code review, test, commit, push, open PR, watch CI, fix CI failures until green, capture learnings). Use only when the user explicitly requests hands-off execution of a software task and provides a feature description; do not auto-route casual conversation here.
 argument-hint: "[feature description]"
 ---
 
@@ -127,6 +127,17 @@ When invoking any skill referenced below, resolve its name against the available
 
    - Do NOT continue looping. The autopilot contract is "make residuals durable, then exit." Proceed to step 10.
 
-10. Output `<promise>DONE</promise>` when complete
+10. **Learn seam** (only when an open PR exists for the current branch and step 9 reached green)
+
+    Load the `sl-learn` skill. It captures any ship-time learning from this run — invoking `sl-compound` headless against the still-hot session context, committing the resulting `docs/solutions/` learning (and any `CONCEPTS.md` / instruction-file edits) into the PR, then re-confirming CI green — and returns. All capture, commit, and re-green logic lives in the skill; this step only triggers it.
+
+    Skip the seam (do not load `sl-learn`) and proceed to step 11 when either gate fails:
+
+    - **No open PR** for the current branch (`gh pr view --json number,state` errors or reports none) — the same condition that skipped step 9.
+    - **Step 9 left CI unresolved** — the PR body carries a `## CI Failures Unresolved` section. Firing on a known-red PR would only commit a no-op.
+
+    The seam re-confirms CI green before returning, so step 11's `DONE` reflects a verified-green PR carrying the learning. Do NOT emit `DONE` until `sl-learn` returns.
+
+11. Output `<promise>DONE</promise>` when complete
 
 Start with step 1 now. Remember: a verified plan must exist before work — plan it (description mode) or accept and gate the supplied plan (plan-input mode). Never skip to work without a plan.
