@@ -716,4 +716,11 @@ describe("plan-input mode", () => {
     expect(exitCode).toBe(2)
     expect(stderr).toContain("plan file not found")
   })
+
+  test("--help documents the plan-input flags", async () => {
+    const { exitCode, stderr } = await runLoop(["--help"])
+    expect(exitCode).toBe(0)
+    expect(stderr).toContain("--plan-file")
+    expect(stderr).toContain("--handoff-file")
+  })
 })
