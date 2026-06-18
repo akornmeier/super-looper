@@ -19,6 +19,12 @@ bash scripts/loop.sh \
   --target /abs/path/to/throwaway \
   --seed-file "$PWD/examples/loop-seed.md" \
   --verify-cmd bun test
+
+# Execute an already-written plan (committed in the target), skipping planning:
+bash scripts/loop.sh \
+  --target /abs/path/to/throwaway \
+  --plan-file docs/plans/<date>-<slug>-plan.md \
+  --verify-cmd bun test
 ```
 
 `scripts/loop.example.env` is a copy-and-edit wrapper that prints the constructed
@@ -31,6 +37,8 @@ command (`--dry-run`) and then runs it. Always preview with `--dry-run` first.
 | `--target <dir>` | _(required)_ | Directory the loop runs in and edits. |
 | `--seed <text>` | _(one required)_ | Seed task, inline. |
 | `--seed-file <path>` | _(one required)_ | Seed task read from a file. |
+| `--plan-file <path>` | _(one required)_ | Plan doc **in the target** to execute; skips planning and runs `lfg`'s plan-input branch. Mutually exclusive with `--seed`/`--seed-file`. Commit the plan in the target so a retry's reset does not delete it. |
+| `--handoff-file <path>` | _(off)_ | Handoff doc carried as orienting context for the run. **Valid only with `--plan-file`.** |
 | `--plugin-dir <path>` | this repo root | Pinned Super Looper checkout loaded via `--plugin-dir`. |
 | `--model <model>` | `opus` | Top-level orchestrator model (`opus` or `fable`). |
 | `--timeout <seconds>` | `1800` | Per-attempt wall-clock cap. |
@@ -40,6 +48,25 @@ command (`--dry-run`) and then runs it. Always preview with `--dry-run` first.
 | `--verify-cmd <cmd...>` | _(off)_ | Local verification command. **Must be last** — consumes the rest of the args and runs them as an argv vector (never `eval`'d). When omitted, verification uses the target's GitHub CI. |
 | `--dry-run` | off | Print the constructed command + verification; do not run. |
 | `-h`, `--help` | | Usage. |
+
+## Task sources (pick one)
+
+A run executes exactly one task source:
+
+- **Seed** (`--seed` / `--seed-file`) — an inline task. `lfg` plans it first, then
+  implements: plan → work → review → … → green.
+- **Plan** (`--plan-file`) — a plan doc already written **in the target**. The
+  driver names it via the literal `plan:<path>` marker so `lfg` **skips planning**
+  and executes the supplied plan directly, then runs the rest of the pipeline
+  unchanged. `--handoff-file` (plan mode only) carries planning-session context —
+  rationale, rejected alternatives, resolved questions — into the fresh process as
+  orienting context; the plan stays authoritative.
+
+A missing or unreadable `--plan-file` fails fast (`exit 2`) before the agent
+launches; a readable-but-non-plan file is caught at launch by `lfg`'s hard
+plan-shape gate, which stops with a clear error — either way there is no silent
+fallback to planning. Commit the plan in the target before running: a retry resets
+the target with `git clean -fd`, which would delete an untracked plan.
 
 ## Verification modes (one is always required)
 

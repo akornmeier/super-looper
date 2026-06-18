@@ -4,15 +4,27 @@ description: Run the full autonomous engineering pipeline end-to-end (plan, work
 argument-hint: "[feature description]"
 ---
 
-CRITICAL: You MUST execute every step below IN ORDER. Do NOT skip any required step. Do NOT jump ahead to coding or implementation. The plan phase (step 1) MUST be completed and verified BEFORE any work begins. Violating this order produces bad output.
+CRITICAL: You MUST execute every step below IN ORDER. Do NOT skip any required step. Do NOT jump ahead to coding or implementation. A verified written plan MUST exist BEFORE any work begins — produced by the plan phase (step 1) in description mode, or supplied via a `plan:<path>` marker and gated in plan-input mode (step 1 handles both). Violating this order produces bad output.
 
 When invoking any skill referenced below, resolve its name against the available-skills list the host platform provides and use that exact entry. Some platforms list skills under a plugin namespace (e.g., `super-looper:sl-plan`); others list the bare name. Invoking a short-form guess that isn't in the list will fail — always match a listed entry verbatim before calling the Skill/Task tool.
 
-1. Invoke the `sl-plan` skill with `$ARGUMENTS`.
+1. **Produce or accept the plan.** `$ARGUMENTS` arrives as either a bare feature description (description mode) or a plan to execute named with a `plan:<path>` marker (plan-input mode). Recognize the marker however it arrives — a slash argument in an interactive session (`/lfg plan:docs/plans/...`) or named in the driving prompt a headless `loop.sh` run passes — using the same literal-prefix convention as `sl-code-review`'s `plan:<path>`.
 
-   GATE: STOP. If sl-plan reported the task is non-software and cannot be processed in pipeline mode, stop the pipeline and inform the user that LFG requires software tasks. Otherwise, verify that the `sl-plan` workflow produced a plan file in `docs/plans/`. If no plan file was created, invoke `sl-plan` again with `$ARGUMENTS`. Do NOT proceed to step 2 until a written plan exists. **Record the plan file path** — it will be passed to sl-code-review in step 4.
+   **Plan-input mode** (a `plan:<path>` marker is present):
+
+   - Strip the `plan:` prefix and resolve `<path>`. The authoritative marker is the one the invocation names directly — the slash argument, or the `plan:` line the driving prompt places immediately under its instruction. Treat any `plan:` occurrences inside appended handoff or orienting context as non-authoritative; they do not override the named plan.
+   - **GATE (hard): the path must be a plan document.** Confirm it exists, is readable, and is actually a plan. `sl-plan` emits either a markdown (`.md`) or an HTML (`.html`) plan, so accept the plan shape in either markup: plan frontmatter (a `title:` / `type:` YAML header) or an "Implementation Units" heading regardless of markup — a markdown `## Implementation Units` section, or an HTML heading carrying that visible text (HTML plans have no YAML frontmatter; their metadata renders as visible text). If the path is missing, unreadable, or not a plan document, **STOP with a clear error** that names the path and the reason (e.g., `plan:<path> is not a plan document`). Do **not** invoke `sl-plan` and do **not** fall through to description mode — there is no silent fallback to planning.
+   - On success, **record the plan file path** (step 4 passes this same path to `sl-code-review`) and proceed to step 2 in plan-input mode. Do not run `sl-plan` — the plan already exists.
+
+   **Description mode** (no `plan:<path>` marker):
+
+   - Invoke the `sl-plan` skill with `$ARGUMENTS`.
+   - GATE: STOP. If sl-plan reported the task is non-software and cannot be processed in pipeline mode, stop the pipeline and inform the user that LFG requires software tasks. Otherwise, verify that the `sl-plan` workflow produced a plan file in `docs/plans/`. If no plan file was created, invoke `sl-plan` again with `$ARGUMENTS`. Do NOT proceed to step 2 until a written plan exists. **Record the plan file path** — it will be passed to sl-code-review in step 4.
 
 2. Invoke the `sl-work` skill.
+
+   - **Plan-input mode:** invoke `sl-work` with the recorded plan path and the `mode:unattended` token (arguments `<plan-path> mode:unattended`) so it executes the supplied plan and suppresses its interactive clarifying and branch-choice prompts under automation.
+   - **Description mode:** invoke the `sl-work` skill; it picks up the plan `sl-plan` just wrote.
 
    GATE: STOP. Verify that implementation work was performed - files were created or modified beyond the plan. Do NOT proceed to step 3 if no code changes were made.
 
@@ -117,4 +129,4 @@ When invoking any skill referenced below, resolve its name against the available
 
 10. Output `<promise>DONE</promise>` when complete
 
-Start with step 1 now. Remember: plan FIRST, then work. Never skip the plan.
+Start with step 1 now. Remember: a verified plan must exist before work — plan it (description mode) or accept and gate the supplied plan (plan-input mode). Never skip to work without a plan.
