@@ -118,8 +118,10 @@ inlining the plan body.
   `mode:unattended` signal `lfg` passes suppresses them).
 - The pipeline then runs unchanged (simplify → review → commit → push → PR →
   CI/verify), ending with `<promise>DONE</promise>` and green verification.
-- A missing, unreadable, or non-plan `--plan-file` exits `2` **before** launching
-  the agent (no silent fallback to planning).
+- A missing or unreadable `--plan-file` exits `2` in `loop.sh` **before**
+  launching the agent. A readable-but-non-plan file is rejected at launch by
+  `lfg`'s hard plan-shape gate, which stops with a clear error — either way there
+  is no silent fallback to planning.
 
 ## Origin DoD — second clause (learning validity + retrievability)
 

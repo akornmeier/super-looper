@@ -11,7 +11,7 @@ After installing, run `/sl-setup` in any project. It diagnoses your environment,
 | Component | Count |
 |-----------|-------|
 | Agents | 50+ |
-| Skills | 37+ |
+| Skills | 39+ |
 
 ## Skills
 

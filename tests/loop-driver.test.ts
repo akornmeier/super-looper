@@ -717,6 +717,51 @@ describe("plan-input mode", () => {
     expect(stderr).toContain("plan file not found")
   })
 
+  test("--plan-file with an absolute path is accepted and named verbatim in the prompt", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    writePlan(target, "docs/plans/abs.md", "## Implementation Units\n")
+    const absPlan = path.join(target, "docs/plans/abs.md")
+    const { exitCode, stdout } = await runLoop([
+      "--target", target, "--plugin-dir", plugin, "--plan-file", absPlan, "--dry-run",
+    ])
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain("mode: plan-input")
+    expect(stdout).toContain(`plan:${absPlan}`)
+  })
+
+  test("plan mode uses the plan-routing prefix (do not re-plan), not the seed prefix", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const planRel = writePlan(target, "docs/plans/p.md", "## Implementation Units\n")
+    const { exitCode, stdout } = await runLoop([
+      "--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--dry-run",
+    ])
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain("do not re-plan")
+  })
+
+  test("--handoff-file pointing at a missing path fails fast", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const planRel = writePlan(target, "docs/plans/p.md", "## Implementation Units\n")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--plugin-dir", plugin,
+      "--plan-file", planRel, "--handoff-file", path.join(work, "nope.md"), "--dry-run",
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("handoff file not found")
+  })
+
+  test("--handoff-file with no value is a usage error", async () => {
+    const target = mkdirInWork("target")
+    const { exitCode, stderr } = await runLoop([
+      "--target", target, "--plan-file", "docs/plans/p.md", "--handoff-file",
+    ])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--handoff-file requires a value")
+  })
+
   test("--help documents the plan-input flags", async () => {
     const { exitCode, stderr } = await runLoop(["--help"])
     expect(exitCode).toBe(0)

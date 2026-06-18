@@ -62,10 +62,11 @@ A run executes exactly one task source:
   rationale, rejected alternatives, resolved questions — into the fresh process as
   orienting context; the plan stays authoritative.
 
-A missing, unreadable, or non-plan `--plan-file` fails fast (`exit 2`) before the
-agent launches — there is no silent fallback to planning. Commit the plan in the
-target before running: a retry resets the target with `git clean -fd`, which would
-delete an untracked plan.
+A missing or unreadable `--plan-file` fails fast (`exit 2`) before the agent
+launches; a readable-but-non-plan file is caught at launch by `lfg`'s hard
+plan-shape gate, which stops with a clear error — either way there is no silent
+fallback to planning. Commit the plan in the target before running: a retry resets
+the target with `git clean -fd`, which would delete an untracked plan.
 
 ## Verification modes (one is always required)
 
