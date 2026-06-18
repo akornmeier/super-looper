@@ -54,8 +54,9 @@ readonly LOOP_PROMPT_PREFIX='Run the lfg workflow to completion on the task belo
 
 # Plan-input variant: the task is ALREADY planned, so lfg skips planning and
 # executes the supplied plan. The plan is NAMED (not inlined) using the literal
-# `plan:<path>` marker lfg's plan-input branch detects; the path resolves against
-# the target, which is the agent's CWD. Built in the same inline-instruction
+# `plan:<path>` marker lfg's plan-input branch detects; a relative path resolves
+# against the target (the agent's CWD), an absolute path is used as-is. Built in
+# the same inline-instruction
 # style as LOOP_PROMPT_PREFIX (not a `/lfg` slash command) per the same
 # execution-time-unknown pinned by the acceptance smoke.
 readonly LOOP_PLAN_PROMPT_PREFIX='Run the lfg workflow to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. lfg implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'

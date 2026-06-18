@@ -57,7 +57,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | Skill | Description |
 |-------|-------------|
 | [`/sl-demo-reel`](../../docs/skills/sl-demo-reel.md) | Capture a visual demo reel (GIF demos, terminal recordings, screenshots) for PRs with project-type-aware tier selection |
-| `sl-handoff` | Compact the current session into a clean handoff doc a fresh agent can pick up — references artifacts by path, used at the plan→work seam to carry planning context into a clean run (e.g. `loop.sh --handoff-file`) |
+| [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact the current session into a clean handoff doc a fresh agent can pick up — references artifacts by path, used at the plan→work seam to carry planning context into a clean run (e.g. `loop.sh --handoff-file`) |
 | [`/sl-promote`](../../docs/skills/sl-promote.md) | Draft user-facing announcement copy for a shipped feature (X post, changelog blurb, LinkedIn, email); voice-matched via the Spiral CLI when installed, a lite layer of editorial & social expertise without it |
 | [`/sl-report-bug`](../../docs/skills/sl-report-bug.md) | Report a bug in the super-looper plugin |
 | [`/sl-resolve-pr-feedback`](../../docs/skills/sl-resolve-pr-feedback.md) | Resolve PR review feedback in parallel |
