@@ -125,12 +125,70 @@ inlining the plan body.
 
 ## Origin DoD — second clause (learning validity + retrievability)
 
-If the seeded run writes a `docs/solutions/` learning **in the target**, confirm
-it validates against the schema and is retrievable by the next run's
-grep-over-frontmatter. The Phase 1 validator already enforces schema-validity;
-this is a confirmation that the *unattended* path produces a valid, retrievable
-learning — not new machinery. (The `isPalindrome` seed does not write a learning;
-use a learning-producing seed when exercising this clause.)
+The ship-time learn seam (`sl-learn`, triggered by `lfg` step 10) is what makes
+an unattended run *produce* a learning: after CI reaches green, it invokes
+`sl-compound` headless against the still-hot run context and commits the
+resulting `docs/solutions/` learning into the run's PR. This clause confirms the
+unattended path produces a valid, retrievable learning — not new machinery.
+
+The `isPalindrome` seed solves nothing noteworthy, so its run captures nothing
+(the expected stage-1 skip). Exercise this clause with a **learning-producing**
+run instead.
+
+### Learning-producing exercise
+
+Use the **faithful GitHub-CI setup** (above): capture commits *into* the PR, so
+an open PR must exist. (Whether a PR exists turns on the target having a GitHub
+remote, not on the verification mode — a `--verify-cmd` run against a
+remote-having target still pushes and opens a PR, so the seam still fires. The
+no-PR skip is reached only by a target with **no GitHub remote**; see the
+disposition table below.) Drive work that involves a non-trivial problem so the
+seam has something to capture. The
+`--plan-file` route avoids shipping a new fixture (a dedicated `examples/`
+learning seed is deferred — see the plan's Scope Boundaries): commit a one-unit
+plan in the throwaway whose task requires diagnosing a non-obvious failure — e.g.
+a first implementation that fails the committed test, so `lfg` step 9's autofix
+loop repairs it and writes a `fix(ci):` commit (the seam's stage-1 signal).
+
+```bash
+# Remote present, no --verify-cmd → loop.sh uses GitHub-CI verification and lfg opens a PR:
+bash scripts/loop.sh \
+  --target /abs/path/to/loop-throwaway \
+  --plan-file docs/plans/<date>-<slug>-plan.md
+```
+
+### Expected outcome
+
+- The open PR carries a `docs/solutions/` learning **as its own commit**
+  (`docs(<scope>): …`) alongside the feature work. Covers AE1, R4.
+- `loop.sh` exits `0` with green verification: the learn commit re-triggered CI,
+  and the seam's re-confirm-green wait kept the post-`DONE` `target_ci_green`
+  check satisfiable rather than leaving the PR pending on the learn commit.
+  Covers R8, AE4.
+- The committed learning is **retrievable by a later run** — a subsequent
+  `sl-learnings-researcher` grep-over-frontmatter finds it. Covers the
+  retrievability criterion.
+- **Schema validity:** the throwaway has no `docs/solutions/` schema validator
+  (the isolation invariant keeps this repo's gate scripts off the target), so the
+  seam's step-4 validation falls back to `sl-compound`'s parser-safety self-check
+  there. Confirm schema-validity by running a validator against the produced file
+  by hand, or exercise the gating end-to-end against a **validator-adopting
+  target** (this repo or a fork — the AE7 dogfood case), where the target's own
+  CI enforces the schema and the seam repairs an invalid learning before commit.
+
+### Capture disposition (end-states to confirm)
+
+The seam must leave the loop's verifiable-green stop honest across every
+end-state. Confirm each routes as expected:
+
+| Run end-state | Expected seam behavior |
+| --- | --- |
+| Non-trivial solved, PR open, CI green | Captures: learning committed into the PR; re-confirms green before `DONE` |
+| `sl-compound` self-gates (no solved problem) | Reads `Documentation skipped`; commits nothing; PR unchanged |
+| Plain feature ship, no qualifying signal | Stage-1 skip before invoking `sl-compound`; PR unchanged (the `isPalindrome` seed's outcome) |
+| No open PR (target has no GitHub remote, so no PR is opened) | Skips capture entirely; existing verification path unchanged. Covers AE5 |
+| Step 9 ended red (`## CI Failures Unresolved` in PR body) | Does not fire; run exits on red as before. Covers AE6 |
+| Learn commit re-triggers CI | Re-confirms green before `DONE`, so `loop.sh`'s post-`DONE` `target_ci_green` sees green (not pending on the learn commit). Covers R8, AE4 |
 
 ## Run record
 
@@ -148,5 +206,6 @@ use a learning-producing seed when exercising this clause.)
 | Resulting PR | _PR URL_ |
 | `gh pr checks` / verify result | _green / red_ |
 | Run-log excerpt (last lines incl. DONE) | _paste_ |
-| Learning written? validates + retrievable? | _n/a for isPalindrome seed_ |
+| Learning committed into PR? validates + retrievable? | _n/a for isPalindrome seed; expected for the learning-producing run_ |
+| Capture disposition observed | _captured / self-gated skip / stage-1 skip / no-PR skip / step-9-red skip_ |
 | Confirmed no gate script ran against target | _yes / no_ |
