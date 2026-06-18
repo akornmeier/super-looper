@@ -27,6 +27,8 @@ This command takes a work document (plan or specification) or a bare prompt desc
 
 Determine how to proceed based on what was provided in `<input_document>`.
 
+First, strip any `mode:unattended` argument token from `<input_document>` if present: it is a pipeline signal (it activates the Phase 1 Pipeline mode block), not part of the work input. Triage only the remaining text as a plan path or a bare prompt — so `mode:unattended <plan-path>` triages as the plan path, and a bare `mode:unattended` with no remaining text falls through to blank-invocation plan auto-detection.
+
 **Plan document** (input is a file path to an existing plan or specification): read the plan's metadata first — YAML frontmatter for a markdown plan, or the visible header text for an HTML plan (both formats carry the same fields). If it carries `execution: knowledge-work`, this is a **non-code plan** — read `references/non-code-execution.md` and follow that carve-out instead of the rest of this workflow. Otherwise (the field is absent or `execution: code`) → skip to Phase 1 and run the normal code lifecycle. (The marker check lives here, inside plan-document handling, because detecting the marker requires already having a file; "Bare prompt" below is unaffected.)
 
 **Bare prompt** (input is a description of work, not a file path):
@@ -49,6 +51,8 @@ Determine how to proceed based on what was provided in `<input_document>`.
 
 ### Phase 1: Quick Start
 
+**Pipeline mode (unattended):** When invoked from an automated workflow such as LFG or any `disable-model-invocation` context — or when a caller passes the explicit `mode:unattended` argument token — run unattended: skip every interactive prompt in this phase and make the needed choices automatically. Skip the clarifying-question step (step 1) and resolve any ambiguity from the plan's stated scope. Skip the branch-choice prompt and the on-default-branch menu (step 2) and continue on the current branch without prompting — including when that is the default branch. Do not create a branch: downstream `sl-commit-push-pr` (e.g., LFG's commit step) owns branch creation and moves work off the default branch before any push, so local commits never reach a protected branch. This changes nothing for interactive runs — with no automated context and no `mode:unattended` token, every prompt below fires as written.
+
 1. **Read Plan and Clarify** _(skip if arriving from Phase 0 with a bare prompt)_
 
    - Read the work document completely
@@ -59,9 +63,9 @@ Determine how to proceed based on what was provided in `<input_document>`.
    - Check for a `Scope Boundaries` section — these are explicit non-goals. Refer back to them if implementation starts pulling you toward adjacent work
    - Review any references or links provided in the plan
    - If the user explicitly asks for TDD, test-first, or characterization-first execution in this session, honor that request even if the plan has no `Execution note`
-   - If anything is unclear or ambiguous, ask clarifying questions now
+   - If anything is unclear or ambiguous, ask clarifying questions now _(pipeline mode: skip — resolve from the plan's scope per the Pipeline mode block above)_
    - If clarifying questions were needed above, get user approval on the resolved answers. If no clarifications were needed, proceed without a separate approval step — plan scope is the plan's authority, not something to renegotiate
-   - **Do not skip this** - better to ask questions now than build the wrong thing
+   - **Do not skip this** in interactive runs - better to ask questions now than build the wrong thing (in pipeline mode the clarifying step is skipped per the Pipeline mode block above)
    - **Do not edit the plan body during execution.** The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan. `sl-work` does not mutate the plan — whether it shipped is derived from git, not recorded in the doc. Legacy plans may contain `- [ ]` / `- [x]` marks on unit headings or a `status:` field — ignore them as state; per-unit completion is determined during execution by reading the current file state.
 
 2. **Setup Environment**
@@ -88,11 +92,15 @@ Determine how to proceed based on what was provided in `<input_document>`.
    ```
    Derive the new name from the plan title or work description (e.g., `feat/crowd-sniff`). Present the rename as a recommended option alongside continuing as-is.
 
+   _Pipeline mode: skip this prompt and continue on `[current_branch]` (see the Pipeline mode block above)._
+
    Then ask: "Continue working on `[current_branch]`, or create a new branch?"
    - If continuing (with or without rename), proceed to step 3
    - If creating new, follow Option A or B below
 
    **If on the default branch**, choose how to proceed:
+
+   _Pipeline mode: skip this choice; continue on the default branch without creating one — downstream `sl-commit-push-pr` moves the work onto a feature branch before pushing (see the Pipeline mode block above)._
 
    **Option A: Create a new branch**
    ```bash
@@ -108,7 +116,7 @@ Determine how to proceed based on what was provided in `<input_document>`.
    # native worktree tool, else creates one from the default branch
    ```
 
-   **Option C: Continue on the default branch**
+   **Option C: Continue on the default branch** _(interactive only — in pipeline mode the on-default-branch choice was already resolved above by continuing on the current branch without confirmation)_
    - Requires explicit user confirmation
    - Only proceed after user explicitly says "yes, commit to [default_branch]"
    - Never commit directly to the default branch without explicit permission
