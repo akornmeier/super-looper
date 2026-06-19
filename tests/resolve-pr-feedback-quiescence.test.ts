@@ -196,4 +196,16 @@ describe("script surfacing and targeted-mode exclusion (U3)", () => {
     ).toMatch(/Full[- ]mode/i)
     expect(targeted).toMatch(/does not apply|does not wait|not apply/i)
   })
+
+  test("every bundled-script invocation uses ${CLAUDE_SKILL_DIR}, never a bare relative path", () => {
+    // The Bash tool runs from the project root, not the skill dir, so a bare
+    // `bash scripts/...` resolves to <project>/scripts and misses the bundled
+    // script (#764/#811/#898). Every executable invocation must be prefixed.
+    for (const ref of ["references/full-mode.md", "references/targeted-mode.md"]) {
+      expect(
+        read(ref),
+        `${ref} must invoke bundled scripts via \${CLAUDE_SKILL_DIR}, not a bare \`bash scripts/...\` path`,
+      ).not.toMatch(/bash scripts\//)
+    }
+  })
 })

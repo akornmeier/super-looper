@@ -12,7 +12,7 @@ gh pr view --json number -q .number
 Then fetch all feedback using the GraphQL script at [scripts/get-pr-comments](../scripts/get-pr-comments):
 
 ```bash
-bash scripts/get-pr-comments PR_NUMBER
+bash "${CLAUDE_SKILL_DIR}/scripts/get-pr-comments" PR_NUMBER
 ```
 
 Returns a JSON object with three keys:
@@ -165,19 +165,19 @@ For `needs-human` verdicts, post the reply but do NOT resolve the thread. Leave 
 ```bash
 # Extract numeric comment ID from the comment URL (e.g. discussion_r2589700 → 2589700)
 GH_REPO=OWNER/REPO gh api repos/{owner}/{repo}/pulls/comments/COMMENT_ID --jq .node_id
-bash scripts/get-thread-for-comment PR_NUMBER COMMENT_NODE_ID OWNER/REPO
+bash "${CLAUDE_SKILL_DIR}/scripts/get-thread-for-comment" PR_NUMBER COMMENT_NODE_ID OWNER/REPO
 ```
 The returned `id` is the authoritative thread ID to use for reply and resolve. If it differs from what `get-pr-comments` returned, use the one from this script.
 
 1. **Reply** using [scripts/reply-to-pr-thread](../scripts/reply-to-pr-thread):
 ```bash
-echo "REPLY_TEXT" | bash scripts/reply-to-pr-thread THREAD_ID
+echo "REPLY_TEXT" | bash "${CLAUDE_SKILL_DIR}/scripts/reply-to-pr-thread" THREAD_ID
 ```
 Check that the returned comment URL contains the correct `OWNER/REPO` and PR number before proceeding.
 
 2. **Resolve** using [scripts/resolve-pr-thread](../scripts/resolve-pr-thread):
 ```bash
-bash scripts/resolve-pr-thread THREAD_ID
+bash "${CLAUDE_SKILL_DIR}/scripts/resolve-pr-thread" THREAD_ID
 ```
 
 ### PR comments and review bodies
@@ -220,7 +220,7 @@ Keep this a single pinned command, not an `if [ -f … ]` guard -- a compound gu
 Once the gate returns (quiescent or timed out), re-fetch feedback to confirm resolution:
 
 ```bash
-bash scripts/get-pr-comments PR_NUMBER
+bash "${CLAUDE_SKILL_DIR}/scripts/get-pr-comments" PR_NUMBER
 ```
 
 The `review_threads` array should be empty (except `needs-human` items).
