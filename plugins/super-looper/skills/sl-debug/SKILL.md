@@ -10,6 +10,25 @@ Find root causes, then fix them. This skill investigates bugs systematically —
 
 <bug_description> #$ARGUMENTS </bug_description>
 
+## Non-Interactive Mode (`mode:unattended`)
+
+`mode:unattended` is an argument token (parsed from `$ARGUMENTS`, mirroring other skills' mode tokens) for callers that run this skill with no human present — e.g., `lfg`'s CI-fix escalation. Strip it from `<bug_description>` before triage; the remaining text is the bug input.
+
+When `mode:unattended` is present, suppress **every** `AskUserQuestion` gate and run reproduce -> root-cause -> fix-in-working-tree to completion without prompting:
+
+- **Phase 0 trivial-bug fast-path:** skip the Fix it now / Diagnosis only gate — proceed straight to the fix.
+- **Phase 2 present-findings gate:** skip the fix-vs-diagnose gate — auto-select "Fix it now" and proceed to Phase 3. Do not emit `AskUserQuestion`.
+- **Phase 3 workspace check — both prompts:** skip the uncommitted-work confirmation *and* the default-branch branch-creation prompt. Stay on the current branch; do not create one.
+- **Phase 4 handoff:** skip the commit / PR / learning-capture prompts.
+
+**Suppressing the prompts does not relax the method.** The unattended path keeps the investigate-before-fix discipline, the causal-chain gate, one-change-at-a-time, and — load-bearing — the **no-weaken rule: never weaken, skip, or mock an assertion to make a check pass; repair the actual issue.** A masked failure returned as a green fix is worse than an honest no-fix return.
+
+**Return contract — return without committing.** After the fix attempt, write the Phase 4 structured summary as the return value and stop **without committing or pushing** — the caller owns commit/push. On every no-fix path (cannot reproduce, cannot reproduce in this environment, or no safe fix), return that disposition with **no working-tree change** rather than blocking — **revert or discard any reproduction test or other edit written while investigating** (Phase 1/Phase 3 test-first writes a failing test *before* the fix) so the tree is genuinely untouched (`git status --porcelain` empty). The caller reads "did the working tree change?" as its only signal, so any leftover edit on a no-fix path is a false "fix applied" signal.
+
+**Mode precondition.** Because the uncommitted-work confirmation is suppressed, the mode assumes the caller guarantees a clean, intended working tree on a branch. Unattended callers must not invoke it over unsaved work.
+
+The interactive path is the default and is unchanged; this mode is purely additive.
+
 ## Core Principles
 
 1. **Investigate before fixing.** Do not propose a fix until you can explain the full causal chain from trigger to symptom with no gaps. "Somehow X leads to Y" is a gap.
@@ -43,7 +62,7 @@ Read the full conversation — the original description AND every comment, with 
 
 **Everything else** (stack traces, test paths, error messages, descriptions of broken behavior): the problem statement is the input itself.
 
-**Trivial-bug fast-path:** Once the problem is clear, decide whether the framework is needed at all. If the cause is immediately readable from the input (single-file typo, missing import, obvious null deref or off-by-one with a one-line fix) and verification doesn't require deep tracing, present the cause and the proposed one-line fix and run Phase 2's **Fix it now / Diagnosis only** user-choice gate before editing — the fast-path saves investigation ceremony, not the user's choice over whether to apply a fix. If the user picks fix, run Phase 3's **Workspace and branch check** (uncommitted-work confirmation and default-branch branch-creation prompt), apply the fix, leave a one-line note explaining the cause, and skip to Phase 4's structured summary. If diagnosis only, write the summary and stop. When in doubt, run the full framework; getting the wrong root cause costs more than the few minutes of ceremony.
+**Trivial-bug fast-path:** Once the problem is clear, decide whether the framework is needed at all. If the cause is immediately readable from the input (single-file typo, missing import, obvious null deref or off-by-one with a one-line fix) and verification doesn't require deep tracing, present the cause and the proposed one-line fix and run Phase 2's **Fix it now / Diagnosis only** user-choice gate before editing — the fast-path saves investigation ceremony, not the user's choice over whether to apply a fix. _(In `mode:unattended`, skip this gate — proceed straight to the fix; see Non-Interactive Mode.)_ If the user picks fix, run Phase 3's **Workspace and branch check** (uncommitted-work confirmation and default-branch branch-creation prompt), apply the fix, leave a one-line note explaining the cause, and skip to Phase 4's structured summary. If diagnosis only, write the summary and stop. When in doubt, run the full framework; getting the wrong root cause costs more than the few minutes of ceremony.
 
 **Otherwise**, proceed to Phase 1.
 
@@ -142,6 +161,8 @@ Once the root cause is confirmed, present:
 
 Then offer next steps.
 
+**In `mode:unattended`, skip this present-findings / fix-vs-diagnose gate** — auto-select "Fix it now" and proceed to Phase 3 without emitting `AskUserQuestion` (see Non-Interactive Mode). The test recommendations still belong in the summary.
+
 Use `AskUserQuestion` (call `ToolSearch` with `select:AskUserQuestion` first if its schema isn't loaded — a pending schema load is not a reason to fall back). Fall back to numbered options in chat only if it is unavailable or the call errors. Never silently skip the question.
 
 Options to offer:
@@ -185,13 +206,15 @@ If the user chose "Diagnosis only" at the end of Phase 2, skip this phase and go
 
 **Workspace and branch check:** Before editing files:
 
+_In `mode:unattended`, skip both checks below_ — the caller guarantees a clean, intended working tree on a branch, so the uncommitted-work confirmation **and** the default-branch branch-creation prompt are both suppressed; stay on the current branch and do not create one (see Non-Interactive Mode).
+
 - Check for uncommitted changes (`git status`). If the user has unstaged work in files that need modification, confirm before editing — do not overwrite in-progress changes.
 - If the current branch is the default branch, ask whether to create a feature branch first using `AskUserQuestion` (see Phase 2). To detect the default branch, compare against `main`, `master`, or the value of `git rev-parse --abbrev-ref origin/HEAD` with its `origin/` prefix stripped (the raw output is `origin/<name>`, so an unstripped comparison will never match the local branch name). Default to creating one; derive a name from the bug and run `git checkout -b <name>`. On any other branch, proceed.
 
 **Test-first:**
 1. Write a failing test that captures the bug (or use the existing failing test)
 2. Verify it fails for the right reason — the root cause, not unrelated setup
-3. Implement the minimal fix — address the root cause and nothing else. Do not bundle drive-by refactors, formatting, or unrelated cleanup into a bug-fix change; those belong in separate commits.
+3. Implement the minimal fix — address the root cause and nothing else. Never weaken, skip, or mock an assertion to make a check pass — repair the actual issue. Do not bundle drive-by refactors, formatting, or unrelated cleanup into a bug-fix change; those belong in separate commits.
 4. Verify the test passes
 5. Run the broader test suite for regressions
 6. Self-review the diff before declaring the fix done: read every changed line and check for style violations, missed edge cases, regressions in adjacent behavior, and missing test coverage for the fix. For non-trivial fixes (multiple files, risky surface area), also run the harness's lightweight review tool (e.g., `/review` in Claude Code; the equivalent in other harnesses) — not the full `sl-code-review` multi-agent flow, which is PR-tier and over-sized for a single bug fix.
@@ -220,6 +243,8 @@ Analyze how this was introduced and what allowed it to survive. Note any systemi
 **Prevention**: [Test coverage added; defense-in-depth if applicable]
 **Confidence**: [High/Medium/Low]
 ```
+
+**In `mode:unattended`, the structured summary above is the return value — return it without committing.** Skip every prompt and handoff step below: do not run `/sl-commit-push-pr`, do not commit or push, do not offer learning capture — the caller owns commit/push. On a no-fix outcome (cannot reproduce, cannot reproduce in this environment, or no safe fix), the summary records that disposition and the working tree is left unchanged — revert any reproduction test or investigation edit first (see Non-Interactive Mode).
 
 **If Phase 3 was skipped** (user chose "Diagnosis only" in Phase 2), stop after the summary — the user already told you they were taking it from here. Do not prompt.
 

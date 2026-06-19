@@ -104,7 +104,7 @@ When invoking any skill referenced below, resolve its name against the available
 
       where `<run-id>` is parsed from the check's details URL or workflow run.
 
-   3. Read the failure logs, identify the root cause, and apply a fix in the working tree. Do NOT weaken, skip, or mock the failing assertion to make it pass — repair the actual issue. If the failure is a flaky test that has no fix path, document that as the residual outcome below rather than retrying without a code change.
+   3. Read the failure logs, identify the root cause, and apply a fix in the working tree. Do NOT weaken, skip, or mock the failing assertion to make it pass — repair the actual issue. If the failure is a flaky test that has no fix path, **record a flaky-no-fix-path disposition for this run** — carry it in your run context through the remaining iterations and the give-up GATE; there is nothing to commit, so skip step (4) for this iteration — and document it as the residual outcome below rather than retrying without a code change. The give-up GATE reads this disposition to decide whether to escalate (see the debug-escalation rung).
 
    4. Stage only the files you changed, commit, and push:
 
@@ -116,9 +116,44 @@ When invoking any skill referenced below, resolve its name against the available
 
    5. Return to iteration (1) with the next attempt counter.
 
-   GATE: STOP iterating after 3 failed attempts. If CI is still red after 3 fix cycles:
+   GATE: STOP iterating after 3 failed attempts. If CI is still red after 3 fix cycles, do not loop again — branch on the failure disposition recorded during the iterations:
 
-   - Compose a `## CI Failures Unresolved` markdown section listing each remaining failing check, the failure summary, and the run/check URL.
+   - **Flaky-no-fix-path disposition recorded** (an iteration took the flaky branch in (3)): skip the escalation and go straight to the floor below. Escalation fires only for failures lfg attempted to fix and could not — not for failures already classified as flaky with no fix path.
+   - **Genuine exhaustion** (3 real fix attempts, no flaky disposition recorded): run the debug-escalation rung once before the floor.
+
+   **Debug-escalation rung** (runs once; not a loop — no attempt counter, no return-to-iteration edge):
+
+   1. The tree is clean here — the 3 iterations committed their fixes — so any working-tree change after the pass is attributable to the debug pass. Load the `sl-debug` skill with `mode:unattended`, passing the live failing state already in hand: the `gh run view --log-failed` output (this log content is the problem statement) plus the failing check's link as context — the link is a CI run URL, not an issue reference, so `sl-debug` must root-cause from the log content and not fetch the URL as an issue. (There is no pre-extracted test path — it is derivable from the logs.) Restate for the pass: **do NOT weaken, skip, or mock the failing assertion to make it pass — repair the actual issue** — a masked failure shipped as green is strictly worse than the honest floor.
+
+   2. On return, detect whether the working tree changed:
+
+      ```bash
+      git status --porcelain
+      ```
+
+      - **No change** (the pass found nothing, could not reproduce, or found no safe fix): fall through to the floor, enriched with the pass's findings or its no-finding disposition (e.g., "could not reproduce in the CI environment").
+      - **Changed:** commit and push the fix, then re-check CI **exactly once**:
+
+        ```bash
+        git add <changed-files>
+        git commit -m "fix(ci): <one-line summary of the debug-pass fix>"
+        git push
+        gh pr checks --watch
+        ```
+
+        - **Green:** break out of the loop and proceed to step 10 via the existing green path. Do NOT compose the `## CI Failures Unresolved` floor marker, so step 10's learn seam fires on verified green.
+        - **Red:** revert the escalation commit so the DONE-but-red PR reflects lfg's pre-escalation failing state rather than an unproven `fix(ci)` commit, then fall through to the floor:
+
+          ```bash
+          git revert --no-edit HEAD
+          git push
+          ```
+
+   The rung re-checks CI at most once and never returns to the fix-iteration loop.
+
+   **Floor — compose `## CI Failures Unresolved`** (preserved, not replaced by the rung):
+
+   - Compose a `## CI Failures Unresolved` markdown section listing each remaining failing check, the failure summary, and the run/check URL. When the escalation rung ran, **enrich it with the debug pass's findings** — the root cause when one was found, or why it couldn't (e.g., "could not reproduce in the CI environment", "reproduced but no safe fix") — so the human picking up the DONE-but-red PR gets a one-layer-direct account, not a bare give-up.
    - Append or replace this section in the PR body, write the new body to an OS temp file, then run:
 
      ```bash

@@ -153,6 +153,9 @@ When you only want the diagnosis (you'll handle the fix yourself), pick "Diagnos
 | `<test path>` | Reproduces the failing test, traces from there |
 | `<issue reference>` (`#123`, URL, Linear ID, Jira key) | Fetches the full thread, reads all comments |
 | `<description>` | e.g., "why is the cart total wrong on checkout" |
+| `mode:unattended` | Runs the full investigation and fix-in-working-tree with no prompts, then returns without committing — for pipeline callers |
+
+`mode:unattended` exists for callers that run `sl-debug` with no human present — most notably `lfg`'s CI-fix escalation rung. It suppresses every interactive gate, runs reproduce -> root-cause -> fix to completion, and hands the result back **without committing**, leaving commit/push to the caller. It assumes a clean working tree on a branch and preserves the investigate-before-fix and no-weaken discipline; on a no-fix outcome it returns the disposition with the tree left untouched.
 
 ---
 
