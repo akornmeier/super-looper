@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+# Blocks until every *active* known automated reviewer has a review tied to a
+# given HEAD SHA, or a timeout elapses, then exits 0. "Active" means a known bot
+# that has at least one prior review on this PR; a known bot that has never
+# reviewed this PR is intersected away and never waited on. Used by
+# sl-resolve-pr-feedback Full-mode step 8 to wait for asynchronous bot
+# re-review of a pushed fix before concluding the verify loop.
+
+set -e
+
+if [ $# -lt 2 ]; then
+    echo "Usage: wait-for-bot-review PR_NUMBER HEAD_SHA [OWNER/REPO]"
+    echo "Example: wait-for-bot-review 123 a1b2c3d"
+    echo "Example: wait-for-bot-review 123 a1b2c3d EveryInc/cora"
+    exit 1
+fi
+
+PR_NUMBER=$1
+HEAD_SHA=$2
+
+# Known automated reviewer logins. EXTENSION POINT: add a reviewer bot's login
+# on its own line to make the quiescence gate wait on it. A login that never
+# appears on a given PR is intersected away by the active-bot logic below, so a
+# wrong, renamed, or unused entry degrades to "not waited on" -- never a hang.
+KNOWN_BOTS=(
+    "copilot-pull-request-reviewer"
+    "coderabbitai[bot]"
+    "greptile-apps[bot]"
+)
+
+# Per-wait timeout (seconds). The gate stops waiting and proceeds after this
+# elapses even if an active bot has not reached HEAD -- hanging is the worst
+# failure. Tuned to the observed ~3-min Copilot re-review latency; this is the
+# single tunable if real-world latency runs higher.
+TIMEOUT_SECONDS=300
+POLL_INTERVAL=10
+MAX_POLL_INTERVAL=30
+
+if [ -n "$3" ]; then
+    OWNER=$(echo "$3" | cut -d/ -f1)
+    REPO=$(echo "$3" | cut -d/ -f2)
+else
+    # `|| true` is load-bearing: under `set -e`, a failed command substitution
+    # in an assignment aborts the script immediately. Run outside a git repo,
+    # `gh repo view` exits 1, its stderr is swallowed by `2>/dev/null`, and the
+    # script would die here with rc=1 and no output -- making the friendly error
+    # below unreachable. Keep `|| true` so detection failure falls through to it.
+    OWNER=$(gh repo view --json owner -q .owner.login 2>/dev/null || true)
+    REPO=$(gh repo view --json name -q .name 2>/dev/null || true)
+fi
+
+if [ -z "$OWNER" ] || [ -z "$REPO" ]; then
+    echo "Error: could not resolve owner/repo. Run wait-for-bot-review from inside the target git repository, or pass OWNER/REPO as the third argument (e.g., wait-for-bot-review $PR_NUMBER $HEAD_SHA EveryInc/cora)." >&2
+    exit 1
+fi
+
+known_bots_nl=$(printf '%s\n' "${KNOWN_BOTS[@]}")
+
+# Prints the active bots (known list intersected with reviewers present on the
+# PR) that do NOT yet have a review tied to HEAD_SHA, one login per line. Empty
+# output means quiescent: either no known bot is active, or all active bots have
+# reached HEAD. A failed fetch is treated as "nothing pending" rather than a
+# hang -- the caller's timeout still bounds the overall wait.
+pending_bots() {
+    local reviews
+    reviews=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json reviews 2>/dev/null || true)
+    if [ -z "$reviews" ]; then
+        return 0
+    fi
+    printf '%s' "$reviews" | jq -r \
+        --arg head "$HEAD_SHA" \
+        --arg known "$known_bots_nl" '
+        ($known | split("\n") | map(select(length > 0))) as $known_bots |
+        ([.reviews[] | {login: (.author.login // ""), oid: (.commit.oid // "")}]) as $rows |
+        ([$rows[].login] | unique) as $present |
+        ($known_bots - ($known_bots - $present)) as $active_bots |
+        [ $active_bots[]
+          | . as $bot
+          | select(([$rows[] | select(.login == $bot and .oid == $head)] | length) == 0)
+        ] | .[]
+    '
+}
+
+# Bounded poll: the loop condition itself carries the timeout guard (elapsed
+# wall-clock vs TIMEOUT_SECONDS), so the wait always terminates even if a bot
+# never reaches HEAD -- never an open-ended loop.
+start=$SECONDS
+interval=$POLL_INTERVAL
+pending=$(pending_bots)
+while [ -n "$pending" ] && [ "$((SECONDS - start))" -lt "$TIMEOUT_SECONDS" ]; do
+    sleep "$interval"
+    if [ "$interval" -lt "$MAX_POLL_INTERVAL" ]; then
+        interval=$((interval + POLL_INTERVAL))
+    fi
+    pending=$(pending_bots)
+done
+
+if [ -z "$pending" ]; then
+    echo "quiescent: all active bots have reviewed $HEAD_SHA"
+else
+    echo "timed-out waiting for: $(echo "$pending" | paste -sd, -)"
+fi
+exit 0
