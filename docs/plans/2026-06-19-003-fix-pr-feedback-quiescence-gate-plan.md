@@ -46,9 +46,9 @@ This serves the skill's core promise — resolve a PR's review feedback in one p
 
 - **Reviewer-quiescence only; no CI wait (resolved call-out).** `sl-resolve-pr-feedback` already runs the project's validation in step 5; CI-watch is `lfg`'s responsibility. Adding a CI-green wait would couple this skill to CI timing and overlap `lfg`. The gate waits for *reviewers*, not checks.
 
-- **Timeout is "stop waiting and proceed," not a hard failure.** If an active bot doesn't reach HEAD within the per-wait timeout (~5 min, matched to the observed ~3-min latency, polled with mild backoff), the gate re-fetches anyway and the step-9 summary notes that a late bot round may still arrive. Hanging is the worse failure.
+- **Timeout is "stop waiting and proceed," not a hard failure.** If an active bot doesn't reach HEAD within the per-wait timeout (~5 min, matched to the observed ~3-min latency, polled with mild backoff), the gate re-fetches anyway and the step-9 summary notes that a late bot round may still arrive. Hanging is the worst failure.
 
-- **Hardcoded, extensible bot list (resolved call-out).** A default login set (`copilot-pull-request-reviewer`, and the Greptile / CodeRabbit bot logins) lives in the script; adding a reviewer is a one-line edit. No `.super-looper/config.local.yaml` plumbing for v1 (YAGNI) — revisit only if per-repo tuning is requested.
+- **Hardcoded, extensible bot list (resolved call-out).** A default login set (`copilot-pull-request-reviewer`, `coderabbitai[bot]`, and `greptile-apps[bot]`) lives in the script; adding a reviewer is a one-line edit. (Exact suffix/casing can vary per install — see the bot-login-drift risk; the active-bot intersection makes a wrong login a no-op, not a hang.) No `.super-looper/config.local.yaml` plumbing for v1 (YAGNI) — revisit only if per-repo tuning is requested.
 
 - **Fallback C (settle-window) stays a documented secondary path, not the primary.** Option A (poll-for-review-on-HEAD) is primary because it is deterministic. C covers bots that post top-level comments without a SHA-tied review; A covers the common case.
 
@@ -98,7 +98,7 @@ The gate adds no new external tooling beyond `gh pr view --json reviews` (alread
 **Approach:**
 - Mirror the existing script conventions in `scripts/get-pr-comments`: `#!/usr/bin/env bash`, `set -e`, positional args with a usage block, and the same OWNER/REPO resolution (arg `$N` or `gh repo view ... || true` fallback with a friendly error).
 - Signature (directional): `wait-for-bot-review PR_NUMBER HEAD_SHA [OWNER/REPO]`. The caller passes `HEAD_SHA` from `git rev-parse HEAD` after the push.
-- Hold the default bot-login list as a shell array near the top of the script (e.g., `copilot-pull-request-reviewer` plus the Greptile and CodeRabbit bot logins). Comment it as the extension point.
+- Hold the default bot-login list as a shell array near the top of the script (`copilot-pull-request-reviewer`, `coderabbitai[bot]`, `greptile-apps[bot]`). Comment it as the extension point.
 - Each poll: `gh pr view "$PR_NUMBER" --json reviews` → reduce to `{login, commit}` rows. `active_bots = known_bots ∩ {logins present in reviews}`. A bot is "at HEAD" when it has any review row with `commit == HEAD_SHA`. Loop while some active bot is not yet at HEAD, sleeping with mild backoff, until all are at HEAD (exit 0, "quiescent") or the total wait exceeds the timeout (exit 0, print a `timed-out waiting for: <logins>` line so the caller can note the late-round caveat).
 - No active bots → exit 0 immediately (nothing to wait for). This is the human-only-PR path (R3).
 - Bound the loop by elapsed wall-clock against a timeout constant (~5 min) — never an unbounded `while true` without the timeout check.
@@ -109,7 +109,7 @@ The gate adds no new external tooling beyond `gh pr view --json reviews` (alread
 
 **Test scenarios** (script-shape contract assertions reading the script body, mirroring `tests/resolve-pr-feedback-pagination.test.ts`'s read-and-regex idiom):
 - The script file exists and is executable-shaped (`#!/usr/bin/env bash`, `set -e`).
-- It declares a default bot-login list containing `copilot-pull-request-reviewer` (and the Greptile / CodeRabbit logins) — assert the list is present and commented as the extension point.
+- It declares a default bot-login list containing `copilot-pull-request-reviewer`, `coderabbitai[bot]`, and `greptile-apps[bot]` — assert the list is present and commented as the extension point.
 - It compares a review's commit against the passed HEAD SHA (assert it reads `reviews` with `commit`/`oid` and references the HEAD-SHA argument).
 - It bounds the wait by a timeout (assert a timeout constant + an elapsed-time check exist — negative-assert there is no unbounded `while true` without a timeout guard).
 - It filters to bots active on the PR (assert it intersects the known list against reviewers present in the payload, rather than waiting on the full known list unconditionally).
