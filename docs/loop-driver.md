@@ -116,6 +116,39 @@ retrying:
 | `6` | Timeout — last attempt timed out without `DONE`. |
 | `7` | DONE-but-red — finished, but target verification is red. |
 
+## Run record
+
+Alongside the transcript log, every run that reaches a terminal outcome writes one
+structured, machine-readable JSON record — the loop's queryable black box. It is a
+sibling of the transcript under `--log-dir`, sharing the run's stem:
+`loop-<ts>-<pid>.json` next to `loop-<ts>-<pid>.log`. That stem is also the
+record's `run_id`, a stable join key for later tooling.
+
+The record captures what the driver directly observes — `outcome`, `exit_code`,
+`typed_failure`, `route`, `verification` (mode + result), the per-attempt
+`attempts`, and `timing` — plus `pointers` to the transcript, the PR, and
+(best-effort) the residual-review findings. It carries a `schema_version` and a
+self-describing `coverage_boundary` that names what it indexes by pointer versus
+what it does not contain, so a partial record is never mistaken for a complete one.
+It is an **index, not a copy**: deeper detail lives behind the pointers, and the
+seed/task text is never inlined.
+
+`typed_failure` is the exit-code class:
+
+| Exit | `typed_failure` | `outcome` |
+| --- | --- | --- |
+| `0` | `null` | `success` |
+| `3` | `isolation-refusal` | `failure` |
+| `4` | `no-verify` | `failure` |
+| `5` | `cap-exhausted` | `failure` |
+| `6` | `timeout` | `failure` |
+| `7` | `done-but-red` | `failure` |
+
+A record is written on every **operational** terminal path (the six exits above),
+including failures. It is **not** written for pre-flight usage errors (`exit 2`),
+`--help`, or `--dry-run` — those validate input or inspect the command rather than
+running, so recording them would pollute the substrate with non-runs.
+
 ## Isolation rule
 
 `loop.sh` is for running the loop on **other** repos. It refuses to run when the
@@ -145,7 +178,8 @@ repo's structure and would fail spuriously on a throwaway.
   `eval`'d), but the driver runs whatever you give it — keep it trustworthy.
 - **Audit trail.** The full run transcript is tee'd to a timestamped log under
   `--log-dir` (`/tmp/super-looper/loop/loop-*.log` by default). Every failure
-  report points at it.
+  report points at it. A structured JSON record (`loop-*.json`) sits beside each
+  transcript — see [Run record](#run-record).
 - **Timeout is required.** The wall-clock cap needs a `timeout` (or `gtimeout`)
   binary. If none is found, a real run **fails fast** (`exit 2`) with an install
   hint rather than running uncapped — the "never unbounded" guarantee is real,
