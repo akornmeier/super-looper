@@ -246,6 +246,136 @@ else
 $SEED_TEXT"
 fi
 
+# --- Run-record setup (paths + emit helper; one structured record per run) ----
+# Constructed BEFORE the isolation guard so a refused run (isolation, no-verify)
+# can still write its record. This block is pure variable assignment + function
+# definitions with NO side effects — it creates no directory and no file, so a
+# --dry-run (which exits below without ever calling emit_record) writes nothing.
+# emit_record is the single writer, invoked at every OPERATIONAL terminal path
+# (exit 0/3/4/5/6/7) and never for the pre-flight usage family (exit 2), --help,
+# or --dry-run. See docs/loop-driver.md.
+RUN_ID="loop-$(date +%Y%m%d-%H%M%S)-$$"
+LOG_FILE="$LOG_DIR/$RUN_ID.log"
+RECORD_FILE="$LOG_DIR/$RUN_ID.json"
+RUN_STARTED_EPOCH="$(date +%s)"
+RUN_STARTED_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+readonly RECORD_SCHEMA_VERSION=1
+pr_url=""
+attempt_results=()
+
+json_escape() {
+  # Escape a string for embedding inside a JSON double-quoted value.
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+json_str_or_null() {
+  # Emit a JSON quoted string, or null when the value is empty.
+  if [ -z "${1:-}" ]; then printf 'null'; else printf '"%s"' "$(json_escape "$1")"; fi
+}
+
+emit_record() {
+  # emit_record <exit-code> — write the structured run-record to RECORD_FILE.
+  # Invoked best-effort ("emit_record ... || true") at each terminal site, so a
+  # write failure (e.g. an unwritable --log-dir) can never perturb the stable
+  # exit-code contract — the record is observability; the exit code is the API.
+  # Reads driver state from globals and stays safe to call from the pre-launch
+  # refusal sites: every optional global is defaulted, and target_pr_url (defined
+  # later in the script) is never called here — the PR pointer is read from the
+  # pr_url global that the post-launch verification paths populate.
+  local exit_code="$1"
+  local outcome typed_failure verification_result
+  case "$exit_code" in
+    0) outcome="success"; typed_failure="";                  verification_result="green" ;;
+    3) outcome="failure"; typed_failure="isolation-refusal"; verification_result="not-run" ;;
+    4) outcome="failure"; typed_failure="no-verify";         verification_result="not-run" ;;
+    5) outcome="failure"; typed_failure="cap-exhausted";     verification_result="not-run" ;;
+    6) outcome="failure"; typed_failure="timeout";           verification_result="not-run" ;;
+    7) outcome="failure"; typed_failure="done-but-red";      verification_result="red" ;;
+    *) outcome="failure"; typed_failure="unknown";           verification_result="not-run" ;;
+  esac
+
+  local route=""
+  if [ "${done_reached:-0}" -eq 1 ]; then
+    if [ "${routed_via_pr:-0}" -eq 1 ]; then route="open-PR (crash-reconciled)"; else route="DONE"; fi
+  fi
+
+  local done_b timed_b routed_b
+  [ "${done_reached:-0}" -eq 1 ] && done_b=true || done_b=false
+  [ "${timed_out:-0}" -eq 1 ] && timed_b=true || timed_b=false
+  [ "${routed_via_pr:-0}" -eq 1 ] && routed_b=true || routed_b=false
+
+  # Per-attempt outcomes accumulated by the run loop (empty for pre-launch exits).
+  local results_json="[]" first=1 r
+  if [ "${#attempt_results[@]}" -gt 0 ]; then
+    results_json="["
+    for r in "${attempt_results[@]}"; do
+      if [ "$first" -eq 1 ]; then first=0; else results_json+=", "; fi
+      results_json+="$(json_str_or_null "$r")"
+    done
+    results_json+="]"
+  fi
+
+  # Best-effort residual pointer: lfg's no-PR fallback commits a findings file in
+  # the target, but the common open-PR path keeps residual in the PR body (so the
+  # pointer collapses into pr_url). Often null; coverage_boundary documents this.
+  local residual=""
+  if [ -n "${CT:-}" ] && [ -d "$CT/docs/residual-review-findings" ]; then
+    residual="$( ls -1t "$CT/docs/residual-review-findings/"*.md 2>/dev/null | head -n1 || true )"
+  fi
+
+  local ended_iso duration
+  ended_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  duration=$(( $(date +%s) - RUN_STARTED_EPOCH ))
+
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
+  chmod 700 "$LOG_DIR" 2>/dev/null || true
+  # Ensure the transcript pointer resolves: create it empty when absent (the
+  # pre-launch refusal paths never open it). >> never truncates an existing log.
+  : >>"$LOG_FILE" 2>/dev/null || true
+  cat >"$RECORD_FILE" <<EOF
+{
+  "schema_version": $RECORD_SCHEMA_VERSION,
+  "run_id": "$(json_escape "$RUN_ID")",
+  "outcome": "$outcome",
+  "exit_code": $exit_code,
+  "typed_failure": $(json_str_or_null "$typed_failure"),
+  "route": $(json_str_or_null "$route"),
+  "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
+  "attempts": {
+    "count": ${attempt:-0},
+    "done_reached": $done_b,
+    "timed_out": $timed_b,
+    "routed_via_pr": $routed_b,
+    "results": $results_json
+  },
+  "timing": {
+    "started_at": "$RUN_STARTED_ISO",
+    "ended_at": "$ended_iso",
+    "duration_seconds": $duration
+  },
+  "pointers": {
+    "transcript_log": $(json_str_or_null "$LOG_FILE"),
+    "pr_url": $(json_str_or_null "${pr_url:-}"),
+    "residual_findings": $(json_str_or_null "$residual")
+  },
+  "coverage_boundary": {
+    "indexed_by_pointer": ["transcript_log", "pr_url", "residual_findings"],
+    "not_contained": [
+      "per-phase agent trace (reserved for the run_id join key)",
+      "fine-grained failure classification (read from the pointed-to verify output)",
+      "in-target file detail (git-clean'd on retry-reset)"
+    ]
+  }
+}
+EOF
+}
+
 # --- Canonicalize + isolation guard (self-edit hazard) ------------------------
 canon() { ( cd "$1" 2>/dev/null && pwd -P ); }
 
@@ -260,6 +390,7 @@ if [ "$CT" = "$CP" ] || [ "${CT#"$CP"/}" != "$CT" ] || [ "${CP#"$CT"/}" != "$CP"
   echo "loop.sh: refusing to run — target and plugin-dir overlap (self-edit hazard)." >&2
   echo "         target=$CT" >&2
   echo "         plugin-dir=$CP" >&2
+  emit_record "$EX_ISOLATION" || true
   exit "$EX_ISOLATION"
 fi
 
@@ -310,8 +441,6 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then claude_env+=( "GITHUB_TOKEN=$GITHUB_TOKEN" )
 
 claude_cmd=( "$CLAUDE_BIN" -p "$PROMPT" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
 
-LOG_FILE="$LOG_DIR/loop-$(date +%Y%m%d-%H%M%S)-$$.log"
-
 # --- Dry run ------------------------------------------------------------------
 if [ "$DRY_RUN" -eq 1 ]; then
   # Redacted env for display (never print token values).
@@ -360,6 +489,7 @@ fi
 
 # --- Fail fast when there is no verification path -----------------------------
 if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
+  emit_record "$EX_NO_VERIFY" || true
   fail "$EX_NO_VERIFY" "no verification mode available: target has no git remote and no --verify-cmd was supplied."
 fi
 
@@ -462,6 +592,7 @@ while :; do
   if detect_done "$attempt_log"; then
     log "attempt $attempt reached DONE"
     done_reached=1
+    attempt_results+=("done")
     break
   fi
 
@@ -482,8 +613,12 @@ while :; do
     log "attempt $attempt: an open PR already exists for the target — routing to verification (no re-launch)"
     routed_via_pr=1
     done_reached=1
+    attempt_results+=("open-PR-reconciled")
     break
   fi
+
+  # This attempt neither reached DONE nor reconciled to an open PR.
+  if [ "$timed_out" -eq 1 ]; then attempt_results+=("timeout"); else attempt_results+=("crash"); fi
 
   if [ "$attempt" -gt "$MAX_RETRIES" ]; then
     break
@@ -497,9 +632,11 @@ done
 if [ "$done_reached" -ne 1 ]; then
   if [ "$timed_out" -eq 1 ]; then
     echo "loop.sh: FAILED (timeout) — last attempt timed out without DONE after $attempt attempt(s). Log: $LOG_FILE" >&2
+    emit_record "$EX_TIMEOUT" || true
     exit "$EX_TIMEOUT"
   fi
   echo "loop.sh: FAILED (cap-exhausted) — crashed without DONE after $attempt attempt(s) and no open PR. Log: $LOG_FILE" >&2
+  emit_record "$EX_CAP" || true
   exit "$EX_CAP"
 fi
 
@@ -514,17 +651,22 @@ else
 fi
 
 # --- Report -------------------------------------------------------------------
+# Populate the record's PR pointer for the post-launch verification paths: both
+# success and DONE-but-red have an open PR in github mode; command mode has none.
+if [ "$VERIFY_MODE" = "github" ]; then pr_url="$(target_pr_url)"; fi
+
 if [ "$verify_green" -eq 1 ]; then
   route="DONE"
   if [ "$routed_via_pr" -eq 1 ]; then route="open-PR (crash-reconciled)"; fi
   if [ "$VERIFY_MODE" = "github" ]; then
-    url="$(target_pr_url)"
-    echo "loop.sh: SUCCESS — $route + target CI green. PR: $url  Log: $LOG_FILE"
+    echo "loop.sh: SUCCESS — $route + target CI green. PR: $pr_url  Log: $LOG_FILE"
   else
     echo "loop.sh: SUCCESS — $route + --verify-cmd green. Log: $LOG_FILE"
   fi
+  emit_record "$EX_OK" || true
   exit "$EX_OK"
 fi
 
 echo "loop.sh: FAILED (DONE-but-red) — finished but target verification is red. Log: $LOG_FILE" >&2
+emit_record "$EX_DONE_RED" || true
 exit "$EX_DONE_RED"

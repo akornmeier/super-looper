@@ -769,3 +769,243 @@ describe("plan-input mode", () => {
     expect(stderr).toContain("--handoff-file")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Structured run-record (R9) — loop.sh writes one machine-readable JSON record
+// per run, paired with the transcript log under --log-dir, on every operational
+// terminal path (exit 0/3/4/5/6/7) and never for pre-flight usage errors,
+// --help, or --dry-run. Every assertion here JSON.parse's the record, so a
+// malformed record fails the test on any path (the "valid JSON on every path"
+// scenario is covered implicitly by readRecord).
+// ---------------------------------------------------------------------------
+describe("run-record (R9)", () => {
+  function recordsDir(): string {
+    return path.join(work, "records")
+  }
+  function readRecord(dir: string): any {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
+    expect(files.length).toBe(1)
+    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
+  }
+  function expectNoRecord(dir: string) {
+    if (!fs.existsSync(dir)) return // dir never created => no record written
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith(".json"))).toEqual([])
+  }
+
+  test("Covers AE1: success + green CI records route DONE, green, and the PR url", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", `working...\n${SENTINEL}`, 0, marker)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/7",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(0)
+    const rec = readRecord(dir)
+    expect(rec.outcome).toBe("success")
+    expect(rec.exit_code).toBe(0)
+    expect(rec.typed_failure).toBeNull()
+    expect(rec.route).toBe("DONE")
+    expect(rec.verification.result).toBe("green")
+    expect(rec.pointers.pr_url).toBe("https://github.com/x/throwaway/pull/7")
+    expect(rec.pointers.transcript_log).toContain("loop-")
+  })
+
+  test("Covers AE2: DONE but red CI records done-but-red and red verification", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", `working...\n${SENTINEL}`, 0, marker)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/8",
+          STUB_GH_CHECK_BUCKETS: "fail",
+        },
+      },
+    )
+    expect(exitCode).toBe(7)
+    const rec = readRecord(dir)
+    expect(rec.outcome).toBe("failure")
+    expect(rec.exit_code).toBe(7)
+    expect(rec.typed_failure).toBe("done-but-red")
+    expect(rec.verification.result).toBe("red")
+    expect(rec.pointers.pr_url).toBe("https://github.com/x/throwaway/pull/8")
+    expect(rec.pointers.transcript_log).toContain("loop-")
+  })
+
+  test("Covers AE3: cap-exhausted records each attempt outcome", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", "crash, no DONE", 1, marker)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "2", "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } }, // never an open PR
+    )
+    expect(exitCode).toBe(5)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("cap-exhausted")
+    expect(rec.attempts.count).toBe(3)
+    expect(rec.attempts.results).toEqual(["crash", "crash", "crash"])
+  })
+
+  test("Covers AE4: every record declares schema_version and coverage_boundary", async () => {
+    // isolation-refusal is the simplest terminal path — pre-launch, no stubs.
+    const same = mkdirInWork("same")
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(
+      ["--target", same, "--plugin-dir", same, "--seed", "x", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(3)
+    const rec = readRecord(dir)
+    expect(rec.schema_version).toBe(1)
+    expect(rec.typed_failure).toBe("isolation-refusal")
+    expect(rec.coverage_boundary.indexed_by_pointer).toContain("transcript_log")
+    expect(Array.isArray(rec.coverage_boundary.not_contained)).toBe(true)
+    expect(rec.coverage_boundary.not_contained.length).toBeGreaterThan(0)
+  })
+
+  test("timeout records typed_failure timeout, timed_out true, not-run verification", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { marker } = stubs()
+    const claude = claudeStub("claude", `${SENTINEL}`, 0, marker) // never runs (kill stub exits 124)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "0", "--log-dir", dir],
+      { env: { LOOP_GH_BIN: ghStub(), LOOP_TIMEOUT_BIN: timeoutKillStub(), LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(6)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("timeout")
+    expect(rec.attempts.timed_out).toBe(true)
+    expect(rec.verification.result).toBe("not-run")
+    expect(rec.attempts.results).toEqual(["timeout"])
+  })
+
+  test("no-verify records typed_failure no-verify and not-run verification", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false) // repo, but no remote
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(4)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("no-verify")
+    expect(rec.verification.result).toBe("not-run")
+  })
+
+  test("command-mode success records verification.mode command and null pr_url", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(0)
+    const rec = readRecord(dir)
+    expect(rec.verification.mode).toBe("command")
+    expect(rec.verification.result).toBe("green")
+    expect(rec.pointers.pr_url).toBeNull()
+  })
+
+  test("crash-reconciled open-PR success records routed_via_pr and the open-PR route", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", "crashed before DONE", 1, marker)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "3", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/9",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(0)
+    const rec = readRecord(dir)
+    expect(rec.route).toBe("open-PR (crash-reconciled)")
+    expect(rec.attempts.routed_via_pr).toBe(true)
+    expect(rec.attempts.results).toEqual(["open-PR-reconciled"])
+  })
+
+  test("a pre-launch record's transcript_log pointer resolves to a real file", async () => {
+    // isolation-refusal never opens the transcript; emit_record creates it empty
+    // so the pointer is not dangling.
+    const same = mkdirInWork("same")
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(
+      ["--target", same, "--plugin-dir", same, "--seed", "x", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(3)
+    const rec = readRecord(dir)
+    expect(fs.existsSync(rec.pointers.transcript_log)).toBe(true)
+  })
+
+  test("a usage error (exit 2) writes no record", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "abc", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+    expectNoRecord(dir)
+  })
+
+  test("--dry-run writes no record", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--dry-run", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(0)
+    expectNoRecord(dir)
+  })
+
+  test("--help writes no record", async () => {
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(["--log-dir", dir, "--help"])
+    expect(exitCode).toBe(0)
+    expectNoRecord(dir)
+  })
+})
