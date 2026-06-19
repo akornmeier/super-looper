@@ -192,7 +192,34 @@ Include enough quoted context in the reply so the reader can follow which commen
 
 ## 8. Verify
 
-Re-fetch feedback to confirm resolution:
+Automated reviewers (Copilot, CodeRabbit, Greptile) re-review **asynchronously**: a fix push triggers a re-review that lands seconds-to-minutes later. Re-fetching immediately after the push sees "0 unresolved," concludes, and the bot's next round arrives afterward -- forcing the user to re-run. So when this round pushed a fix, **wait for the active bots to re-review the pushed commit before re-fetching.**
+
+### Reviewer-quiescence gate
+
+**Engage the gate only when this round pushed a fix** -- i.e., step 5's aggregated `files_changed` was non-empty and step 6 ran. A reply-only round (all verdicts `replied` / `not-addressing` / `declined` / `needs-human`, nothing pushed) **skips the wait** and proceeds straight to the re-fetch: there is no new commit for a bot to re-review.
+
+When a fix was pushed, wait for the active automated reviewers to re-review the pushed HEAD:
+
+```bash
+if [ -f "${CLAUDE_SKILL_DIR}/scripts/wait-for-bot-review" ]; then
+  bash "${CLAUDE_SKILL_DIR}/scripts/wait-for-bot-review" PR_NUMBER "$(git rev-parse HEAD)"
+fi
+```
+
+If `${CLAUDE_SKILL_DIR}` does not resolve to the bundled script (e.g. running off Claude Code), the guard skips the wait and the re-fetch below runs immediately -- degrading to the pre-gate "re-fetch now" behavior, never worse.
+
+**Bots only -- never humans.** The wait targets known automated reviewer logins that are *active* on this PR (have at least one prior review). It **never waits on human reviewers** -- human threads are handled in the round they are present, not waited on. The script intersects its known-bot list with the PR's actual reviewers, so a configured bot that never reviews this PR is a no-op, not a wait.
+
+**Two bounds keep the gate from hanging:**
+
+- **Per-wait timeout.** The script stops waiting and exits after ~5 minutes even if an active bot never reaches HEAD (hanging is the worst failure). On timeout it prints `timed-out waiting for: <logins>` -- **proceed anyway** (re-fetch), and note in the step 9 summary that a late bot round may still arrive, so the result does not imply full quiescence.
+- **Max fix-round cap of 3** (below): after the third fix-verify cycle the recurring-pattern escalation fires instead of looping again.
+
+**Settle-window fallback (C).** Some reviewers post feedback that is *not* detectable as a re-review on HEAD -- a top-level comment with no SHA-tied review. For those the `commit.oid == HEAD` signal never trips, so do not wait on it forever: fall back to a **settle-window** -- conclude after a short quiet period with no new threads rather than blocking on a signal that will not come. Option A (poll-for-review-on-HEAD, above) is the primary, deterministic path; C is the documented secondary path for the non-SHA case.
+
+### Re-fetch and loop
+
+Once the gate returns (quiescent or timed out), re-fetch feedback to confirm resolution:
 
 ```bash
 bash scripts/get-pr-comments PR_NUMBER
@@ -200,11 +227,11 @@ bash scripts/get-pr-comments PR_NUMBER
 
 The `review_threads` array should be empty (except `needs-human` items).
 
-**If new threads remain**, check the iteration count for this run:
+**If new threads remain**, check the fix-round count for this run:
 
-- **First or second fix-verify cycle**: Repeat from step 2 for the remaining threads.
+- **First, second, or third fix-verify cycle**: Repeat from step 2 for the remaining threads.
 
-- **After the second fix-verify cycle** (3rd pass would begin): Stop looping. Surface remaining issues to the user with context about the recurring pattern: "Multiple rounds of feedback on [area/theme] suggest a deeper issue. Here's what we've fixed so far and what keeps appearing." Use the same `needs-human` escalation pattern -- leave threads open and present the pattern for the user to decide.
+- **After the third fix-verify cycle** (4th pass would begin): Stop looping. Surface remaining issues to the user with context about the recurring pattern: "Multiple rounds of feedback on [area/theme] suggest a deeper issue. Here's what we've fixed so far and what keeps appearing." Use the same `needs-human` escalation pattern -- leave threads open and present the pattern for the user to decide.
 
 PR comments and review bodies have no resolve mechanism, so they will still appear in the output. Verify they were replied to by checking the PR conversation.
 
