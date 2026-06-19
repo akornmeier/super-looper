@@ -62,3 +62,9 @@ An explicit opt-in mode that runs a Skill unattended, with no user prompts — i
 
 ### Beta skill
 A parallel copy of a stable Skill, suffixed `-beta`, used to trial a new version alongside the stable one without disrupting users. Invoked manually (model auto-invocation is disabled); promoting it to stable is an orchestration change, not just a rename — every caller must move in the same change so none silently inherits stale defaults.
+
+### Give-up floor
+The honest terminal state an autopilot loop falls back to when it cannot resolve a failure: a recorded "unresolved" account plus a completed-but-failing exit. The floor is preserved, never replaced, by any deeper retry layered on top — a layer may add a chance to succeed, but the loop must still be able to stop and report the failure truthfully.
+
+### Escalation rung
+A bounded, one-shot deeper step inserted before a loop's give-up floor. It fires only on genuine exhaustion (reading a disposition the loop already recorded, not re-judging at the gate), runs the deeper tool once, re-checks the success signal exactly once, and has only two exits: it converges with the normal success path or it falls through to the floor. It never loops and never manufactures a false pass — because a re-check certifies only the existing checks, the no-weaken discipline, not the re-check, is what guards against a masked failure shipping as success.
