@@ -39,6 +39,7 @@ After determining mode, read the matching reference and follow it. Each referenc
 - [scripts/get-thread-for-comment](scripts/get-thread-for-comment) -- Map a comment node ID to its parent thread (for targeted mode)
 - [scripts/reply-to-pr-thread](scripts/reply-to-pr-thread) -- GraphQL mutation to reply within a review thread
 - [scripts/resolve-pr-thread](scripts/resolve-pr-thread) -- GraphQL mutation to resolve a thread by ID
+- [scripts/wait-for-bot-review](scripts/wait-for-bot-review) -- Poll until active review bots re-review the pushed HEAD, or timeout (Full-mode verify gate)
 
 ## Success Criteria
 

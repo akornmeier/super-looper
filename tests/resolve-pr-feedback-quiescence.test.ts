@@ -143,3 +143,24 @@ describe("full-mode.md step 8 quiescence gate (U2)", () => {
     expect(step8).toMatch(/skips? the wait/i)
   })
 })
+
+describe("script surfacing and targeted-mode exclusion (U3)", () => {
+  test("SKILL.md ## Scripts list includes wait-for-bot-review", () => {
+    const scripts = section(read("SKILL.md"), "## Scripts")
+    expect(scripts.length).toBeGreaterThan(0)
+    expect(
+      scripts,
+      "the new script must be discoverable in the SKILL.md Scripts list",
+    ).toContain("wait-for-bot-review")
+  })
+
+  test("targeted-mode.md scopes the quiescence gate out of targeted resolution (R8)", () => {
+    const targeted = read("references/targeted-mode.md")
+    expect(targeted).toMatch(/quiescence/i)
+    expect(
+      targeted,
+      "targeted mode must state the gate is Full-mode-only and does not wait for a full re-review",
+    ).toMatch(/Full[- ]mode/i)
+    expect(targeted).toMatch(/does not apply|does not wait|not apply/i)
+  })
+})
