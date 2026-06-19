@@ -41,3 +41,20 @@ The reframe's genuine wins belong here: decoupling reflection from the ship loop
 - Sibling (the capture half, already specified): `docs/brainstorms/2026-06-18-autopilot-learning-capture-requirements.md`
 - `STRATEGY.md` — the `… → learn → ship` loop and the "Learning reuse" metric this would serve on the consume side.
 - `plugins/super-looper/skills/sl-compound-refresh/SKILL.md`, `plugins/super-looper/skills/sl-ideate/SKILL.md`, `plugins/super-looper/skills/sl-strategy/SKILL.md` — the adjacent skills to reconcile against.
+
+## Disposition (2026-06-18): parked, not pursued now
+
+Ran through `/sl-brainstorm`. Decision: **do not build the reflect/refresh/route workflow yet.** Getting clear on the existing infrastructure partly answered the seed's own open questions, and the answer is "premature":
+
+1. **Consume side is already thick.** `sl-learnings-researcher` runs at three stages — `sl-ideate`, `sl-plan` (always), and `sl-code-review` (always). The net-new value isn't "read learnings"; it narrows to two gaps: cadence-based staleness refresh, and routing/priming continuity into the next cycle. Smaller prize than the seed implied.
+2. **No corpus to reflect on yet.** The producer (autopilot learning capture, `docs/plans/2026-06-18-003-feat-autopilot-learning-capture-plan.md`) isn't shipped. Building a synthesizer before learnings accumulate is consumer-before-producer. Ship capture, let `docs/solutions/` grow under real runs, then reassess.
+3. **No observed pain surfaced.** The premise question — what the absence of proactive reflection actually costs — went unanswered, consistent with the cost being low while the corpus is small and reactive lookup is wired at three stages.
+
+The two real gaps are **enhancement-sized, not a new skill**:
+
+- *Staleness refresh on a cadence* → a `/loop` schedule of `/sl-compound-refresh`, or a nudge — not new infrastructure.
+- *Cross-corpus synthesis + routing* → teach `sl-ideate` to optionally read the **whole** `docs/solutions/` corpus for cross-cutting patterns, not only topic-relevant ones.
+
+Neither needs the three-part workflow this seed sketched.
+
+**Revisit trigger.** After capture ships and ~15–20 learnings have accumulated, if you catch yourself repeating work across cycles or stalling at "what now" between loops, that's the signal to pick this back up — likely as the two enhancements above rather than a new workflow.
