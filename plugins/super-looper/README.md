@@ -6,12 +6,40 @@ AI-powered development tools that get smarter with every use. Make each unit of 
 
 After installing, run `/sl-setup` in any project. It diagnoses your environment, installs missing tools, and bootstraps project config in one interactive flow.
 
+## Using the loop
+
+Super looper is a loop, not a toolbox: set direction once, then run the loop per iteration and let each pass compound into the next. The skills below are the catalog; this is the order to run them in and why. (See the [root README](../../README.md) for the philosophy and a loop diagram.)
+
+**Once per project**
+
+| Command | Why |
+|---------|-----|
+| `/sl-setup` | Diagnose environment, install tools, bootstrap config. |
+| `/sl-strategy` | Anchor `STRATEGY.md` — target problem, persona, metrics, tracks. Every downstream skill reads it as grounding. |
+
+**Each iteration**
+
+| # | Command | Why it's here |
+|---|---------|---------------|
+| 1 | `/sl-ideate` | Pick the highest-leverage next slice — ranks grounded ideas against strategy and past learnings. Optional once direction is clear. |
+| 2 | `/sl-brainstorm` | Explore the chosen idea into a requirements doc (the *what*: scope, success criteria, boundaries). |
+| 3 | `/sl-plan` | Turn requirements into an implementation plan (the *how*: dependency-ordered units, test scenarios). |
+| 4 | _execute_ | Ship the plan — interactively or on autopilot (below). |
+| 5 | `/sl-compound` | Capture the learning from anything non-trivial you solved. Read back automatically by ideate, plan, and review on later passes. |
+
+**Step 4 has two modes**
+
+- **Steer each stage:** `/sl-work` → `/sl-code-review` → `/sl-commit-push-pr`. Stay in the driver's seat.
+- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them.
+
+**Right-size it.** Skip brainstorm for small, obvious changes — go straight to `/sl-plan` or `/sl-work`. Use `/sl-debug` for bugs, not the build loop. Save the full chain for ambiguous or cross-cutting features.
+
 ## Components
 
 | Component | Count |
 |-----------|-------|
-| Agents | 50+ |
-| Skills | 39+ |
+| Agents | 43 |
+| Skills | 40 |
 
 ## Skills
 
@@ -34,6 +62,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-compound-refresh`](../../docs/skills/sl-compound-refresh.md) | Refresh stale or drifting learnings and decide whether to keep, update, replace, or archive them |
 | [`/sl-optimize`](../../docs/skills/sl-optimize.md) | Run iterative optimization loops with parallel experiments, measurement gates, and LLM-as-judge quality scoring |
 | [`/sl-product-pulse`](../../docs/skills/sl-product-pulse.md) | Generate a single-page, time-windowed report on usage, performance, errors, and followups. Saves reports to `docs/pulse-reports/` as a browseable timeline of what users experienced |
+| `/lfg` | Autopilot: run the entire loop end-to-end — plan, work, review, commit, open a PR, then watch CI and take bounded passes at fixing failures, recording anything it can't resolve. The hands-off path; `scripts/loop.sh` wraps it for unattended runs |
 
 ### Research & Context
 
@@ -95,7 +124,6 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | Skill | Description |
 |-------|-------------|
 | `sl-dogfood-beta` | Diff-scoped browser QA of the active branch: builds an exhaustive test matrix of every change, drives the app with agent-browser, then auto-fixes issues, adds regression tests, and commits each fix until green |
-| `/lfg` | Full autonomous engineering workflow |
 
 ## Agents
 
