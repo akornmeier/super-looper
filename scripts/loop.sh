@@ -261,6 +261,7 @@ RUN_STARTED_EPOCH="$(date +%s)"
 RUN_STARTED_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 readonly RECORD_SCHEMA_VERSION=1
 pr_url=""
+attempt_results=()
 
 json_escape() {
   # Escape a string for embedding inside a JSON double-quoted value.
@@ -306,6 +307,17 @@ emit_record() {
   [ "${timed_out:-0}" -eq 1 ] && timed_b=true || timed_b=false
   [ "${routed_via_pr:-0}" -eq 1 ] && routed_b=true || routed_b=false
 
+  # Per-attempt outcomes accumulated by the run loop (empty for pre-launch exits).
+  local results_json="[]" first=1 r
+  if [ "${#attempt_results[@]}" -gt 0 ]; then
+    results_json="["
+    for r in "${attempt_results[@]}"; do
+      if [ "$first" -eq 1 ]; then first=0; else results_json+=", "; fi
+      results_json+="$(json_str_or_null "$r")"
+    done
+    results_json+="]"
+  fi
+
   # Best-effort residual pointer: lfg's no-PR fallback commits a findings file in
   # the target, but the common open-PR path keeps residual in the PR body (so the
   # pointer collapses into pr_url). Often null; coverage_boundary documents this.
@@ -333,7 +345,8 @@ emit_record() {
     "count": ${attempt:-0},
     "done_reached": $done_b,
     "timed_out": $timed_b,
-    "routed_via_pr": $routed_b
+    "routed_via_pr": $routed_b,
+    "results": $results_json
   },
   "timing": {
     "started_at": "$RUN_STARTED_ISO",
@@ -573,6 +586,7 @@ while :; do
   if detect_done "$attempt_log"; then
     log "attempt $attempt reached DONE"
     done_reached=1
+    attempt_results+=("done")
     break
   fi
 
@@ -593,8 +607,12 @@ while :; do
     log "attempt $attempt: an open PR already exists for the target — routing to verification (no re-launch)"
     routed_via_pr=1
     done_reached=1
+    attempt_results+=("open-PR-reconciled")
     break
   fi
+
+  # This attempt neither reached DONE nor reconciled to an open PR.
+  if [ "$timed_out" -eq 1 ]; then attempt_results+=("timeout"); else attempt_results+=("crash"); fi
 
   if [ "$attempt" -gt "$MAX_RETRIES" ]; then
     break
