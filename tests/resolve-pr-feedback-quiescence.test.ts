@@ -110,6 +110,13 @@ describe("wait-for-bot-review poll script (U1)", () => {
       body,
       "if every poll's gh fetch failed, the gate must say so -- not claim the bots reviewed HEAD when it never reached GitHub",
     ).toMatch(/could not confirm quiescence/i)
+    // A non-empty but non-review payload (gh error object / HTML page) must read
+    // as a failed fetch, not a successful one -- otherwise `fetch_ok` is set on
+    // junk and the gate falsely reports "quiescent". Validate the payload shape.
+    expect(
+      body,
+      "the fetch must validate the payload is a reviews object (has a `reviews` key), so a non-empty junk payload is treated as a failed fetch rather than trusted",
+    ).toContain('has("reviews")')
   })
 })
 

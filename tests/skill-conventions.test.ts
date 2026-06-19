@@ -585,6 +585,10 @@ const PLATFORM_VAR_ACKNOWLEDGED = new Map<string, string>([
     "plugins/super-looper/skills/sl-update/SKILL.md#CLAUDE_SKILL_DIR",
     "SKILL.md routes unset/unresolved CLAUDE_SKILL_DIR (scripts failing) to its __CE_UPDATE_NOT_MARKETPLACE__ handling.",
   ],
+  [
+    "plugins/super-looper/skills/sl-resolve-pr-feedback/references/full-mode.md#CLAUDE_SKILL_DIR",
+    "Core-script skill pinned via allowed-tools (Bash(bash *wait-for-bot-review)): step 8 invokes the bundled quiescence-gate script as a single pinned command rather than an `if [ -f ]` guard (AGENTS.md permission caveat -- a compound guard defeats the narrow allow-rule). The prose under the call states the unresolved-CLAUDE_SKILL_DIR fallback: the bash call fails loudly and the agent skips the wait, proceeding to the re-fetch.",
+  ],
 ])
 
 /** Rule 4 scanner for one markdown file: every non-graceful occurrence. */

@@ -201,12 +201,10 @@ Automated reviewers (Copilot, CodeRabbit, Greptile) re-review **asynchronously**
 When a fix was pushed, wait for the active automated reviewers to re-review the pushed HEAD:
 
 ```bash
-if [ -f "${CLAUDE_SKILL_DIR}/scripts/wait-for-bot-review" ]; then
-  bash "${CLAUDE_SKILL_DIR}/scripts/wait-for-bot-review" PR_NUMBER "$(git rev-parse HEAD)"
-fi
+bash "${CLAUDE_SKILL_DIR}/scripts/wait-for-bot-review" PR_NUMBER "$(git rev-parse HEAD)"
 ```
 
-If `${CLAUDE_SKILL_DIR}` does not resolve to the bundled script (e.g. running off Claude Code), the guard skips the wait and the re-fetch below runs immediately -- degrading to the pre-gate "re-fetch now" behavior, never worse.
+Keep this a single pinned command, not an `if [ -f … ]` guard -- a compound guard defeats the narrow `Bash(bash *wait-for-bot-review)` allow-rule (the permission checker evaluates the `[` subcommand separately) and prompts on every run. `${CLAUDE_SKILL_DIR}` resolves to this skill's directory on Claude Code; if it is unresolved (e.g. running off Claude Code), the call fails loudly with "No such file or directory" -- treat that as "skip the wait" and proceed straight to the re-fetch below, degrading to the pre-gate "re-fetch now" behavior, never worse.
 
 **Bots only -- never humans.** The wait targets known automated reviewer logins that are *active* on this PR (have at least one prior review). It **never waits on human reviewers** -- human threads are handled in the round they are present, not waited on. The script intersects its known-bot list with the PR's actual reviewers, so a configured bot that never reviews this PR is a no-op, not a wait.
 

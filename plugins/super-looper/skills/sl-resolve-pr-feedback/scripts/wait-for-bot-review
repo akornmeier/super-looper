@@ -57,12 +57,22 @@ fi
 
 known_bots_nl=$(printf '%s\n' "${KNOWN_BOTS[@]}")
 
-# Fetch the PR's reviews as raw JSON, or an empty string on any gh failure. The
-# `|| true` is load-bearing: under set -e a failed command substitution in an
-# assignment aborts the script, so without it a transient gh error would defeat
-# the timeout guarantee.
+# Fetch the PR's reviews, emitting the payload ONLY when it is actually a
+# reviews object; otherwise emit nothing so the caller reads it as a failed
+# fetch. gh can exit 0 with a non-review payload -- an error object that has no
+# `reviews` key (e.g. {"message":"Not Found"}) or a non-JSON error page -- and
+# such a payload is non-empty, so a bare emptiness test would set `fetch_ok` on
+# junk and let the script claim "quiescent" without ever confirming a re-review.
+# `jq -e 'has("reviews")'` exits non-zero on a parse error or a missing key, so
+# only a genuine reviews object reaches the caller. The `|| true` on the gh call
+# is load-bearing: under set -e a failed command substitution in an assignment
+# aborts the script, which would defeat the timeout guarantee.
 fetch_reviews() {
-    gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json reviews 2>/dev/null || true
+    local raw
+    raw=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json reviews 2>/dev/null || true)
+    if printf '%s' "$raw" | jq -e 'has("reviews")' >/dev/null 2>&1; then
+        printf '%s' "$raw"
+    fi
 }
 
 # Given a reviews JSON payload, print the active bots (known list intersected
