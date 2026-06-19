@@ -81,11 +81,12 @@ Every stage above is a skill you can run yourself -- or you can hand the whole l
 **Unattended (`scripts/loop.sh`).** For a fully hands-off run in a clean context -- no accumulated session state -- the loop driver wraps `/lfg` headlessly and drives a committed plan in a target repo to a green PR. It runs against **another** project, not this one:
 
 ```bash
-# Drive a committed plan to a green PR, unattended:
+# --plan-file is resolved in the target (commit it there); --handoff-file is
+# the absolute OS-temp path /sl-handoff prints (it never writes into the repo).
 bash scripts/loop.sh \
   --target /path/to/your-project \
   --plan-file docs/plans/<plan>.md \
-  --handoff-file docs/handoffs/<handoff>.md
+  --handoff-file /tmp/handoff-XXXXXX/handoff.md
 
 # No GitHub remote? Verify with the target's own command (--verify-cmd must be last):
 bash scripts/loop.sh \
