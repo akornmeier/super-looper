@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideation: What's Next for Super Looper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#fcfcfa; --panel:#ffffff; --ink:#1b1b18; --muted:#6c6b64;
+    --line:#e7e6e0; --line-strong:#d8d7d0;
+    --accent:#4f46e5; --accent-soft:#eef0fe; --accent-ink:#3730a3;
+    --good:#15803d; --good-soft:#e9f6ee; --good-ink:#166534;
+    --warn:#b45309; --warn-soft:#fbf1e3; --warn-ink:#92400e;
+    --bad:#b91c1c; --bad-soft:#fbecec; --bad-ink:#991b1b;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.62;font-feature-settings:"cv05","ss01";
+  }
+  .wrap{max-width:920px;margin-inline:auto;padding:48px 24px 96px}
+  p,li{max-width:72ch}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+  a:hover{border-bottom-color:var(--accent)}
+  code{font-family:var(--mono);font-size:.86em;background:#f3f3ef;border:1px solid var(--line);border-radius:5px;padding:.05em .35em}
+  h1{font-size:2.05rem;line-height:1.16;font-weight:700;letter-spacing:-.018em;margin:.1em 0 .35em}
+  h2{font-size:1.4rem;font-weight:650;letter-spacing:-.01em;margin:2.6em 0 .6em;padding-bottom:.3em;border-bottom:2px solid var(--line-strong)}
+  h3{font-size:1.18rem;font-weight:650;margin:0}
+  .eyebrow{font-size:.72rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-ink)}
+  .lede{font-size:1.08rem;color:#3a3a35;max-width:74ch}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}
+  .chip{display:inline-flex;align-items:center;gap:.4em;font-size:.78rem;font-weight:550;
+    border:1px solid var(--line-strong);border-radius:999px;padding:.2em .7em;background:var(--panel);color:#45443e}
+  .chip.k{background:var(--accent-soft);border-color:#d8dafb;color:var(--accent-ink)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:26px 0 8px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .stat .n{font-size:1.55rem;font-weight:700;letter-spacing:-.02em}
+  .stat .l{font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  section{margin-top:4px}
+  .ground{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 22px 18px}
+  .ground h4{font-size:.95rem;font-weight:650;margin:18px 0 .3em;color:#2a2a26}
+  .ground p{margin:.35em 0;font-size:.96rem;color:#37372f}
+  .axes-note{display:flex;gap:.6em;align-items:center;background:var(--accent-soft);border:1px solid #dcdefb;
+    border-radius:10px;padding:12px 16px;color:var(--accent-ink);font-size:.94rem;font-weight:500}
+  .jump{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:8px 0 24px}
+  .jump ol{margin:.2em 0;padding-left:1.3em;columns:1}
+  .jump li{margin:.18em 0;font-size:.95rem}
+  .jump a{color:#3a3a35;border:0}
+  .jump a:hover{color:var(--accent)}
+  .jump .rk{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin:18px 0;scroll-margin-top:18px}
+  .card-head{display:flex;align-items:baseline;gap:.7em;flex-wrap:wrap;margin-bottom:.5em}
+  .rank{font-size:.78rem;font-weight:700;color:#fff;background:var(--accent);border-radius:7px;padding:.15em .55em;letter-spacing:.02em}
+  .cid{font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin:.2em 0 .9em}
+  .pill{font-size:.74rem;font-weight:600;border-radius:999px;padding:.18em .66em;border:1px solid transparent}
+  .pill.conf-h{background:var(--good-soft);color:var(--good-ink);border-color:#cfe9d8}
+  .pill.conf-m{background:var(--warn-soft);color:var(--warn-ink);border-color:#f0ddc1}
+  .pill.cx{background:#f1f1ee;color:#54534c;border-color:var(--line-strong)}
+  .pill.dim{background:#f1f1ee;color:#54534c;border-color:var(--line-strong)}
+  .card dl{display:grid;grid-template-columns:max-content 1fr;gap:.35em 1.1em;margin:.7em 0 0}
+  .card dt{font-size:.74rem;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:.18em}
+  .card dd{margin:0;font-size:.97rem}
+  .basis{font-size:.93rem}
+  .tag{font-family:var(--mono);font-size:.74rem;font-weight:500;border-radius:5px;padding:.08em .42em;margin-right:.15em}
+  .tag.direct{background:var(--good-soft);color:var(--good-ink)}
+  .tag.external{background:var(--accent-soft);color:var(--accent-ink)}
+  .tag.reasoned{background:var(--warn-soft);color:var(--warn-ink)}
+  .down{color:#5a463a}
+  figure{margin:1.1em 0 .2em;background:#fbfbf8;border:1px solid var(--line);border-radius:12px;padding:14px}
+  figure svg{display:block;width:100%;height:auto}
+  figcaption{font-size:.8rem;color:var(--muted);margin-top:.5em;text-align:center}
+  table{border-collapse:collapse;width:100%;font-size:.92rem;margin:.4em 0}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650}
+  td.rj{color:#5b5b53}
+  td .nm{font-weight:600;color:var(--ink)}
+  .composition-signal{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:.8rem;color:var(--muted)}
+  .composition-signal code{font-size:.92em}
+  @media (max-width:560px){
+    .wrap{padding:32px 16px 72px}
+    .card dl{grid-template-columns:1fr}
+    .card dt{padding-top:.5em}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Super Looper &middot; Ideation</div>
+    <h1>What&rsquo;s Next for Super Looper</h1>
+    <p class="lede">A surprise-me ideation pass over the whole product &mdash; six independent lenses asked &ldquo;what should we build next?&rdquo; and converged hard on one theme: <strong>turn the loop&rsquo;s own enforcement from prose the agent is trusted to follow into artifacts the driver can check.</strong></p>
+    <div class="meta">
+      <span class="chip">Date: <time datetime="2026-06-18">2026-06-18</time></span>
+      <span class="chip">Mode: repo-grounded</span>
+      <span class="chip">Focus: open-ended (surprise-me)</span>
+      <span class="chip k">Loop track alignment: autonomy &middot; learning &middot; plan-integrity</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">7</div><div class="l">Ranked ideas</div></div>
+      <div class="stat"><div class="n">14</div><div class="l">Considered</div></div>
+      <div class="stat"><div class="n">~48</div><div class="l">Raw candidates</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">Lenses</div></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Grounding Context</h2>
+    <div class="ground">
+      <h4>Codebase Context</h4>
+      <p><strong>Super Looper</strong> is a Claude Code plugin (TypeScript/Bun, ~40 skills + ~43 agents) that enforces a full <code>ideate &rarr; plan &rarr; work &rarr; review &rarr; learn &rarr; ship</code> loop so the plan&rsquo;s goal and the run&rsquo;s learnings can&rsquo;t be silently dropped. Three strategy tracks: <strong>loop autonomy</strong> (the unattended <code>loop.sh</code> driver around the <code>lfg</code> pipeline, seed &rarr; reviewable PR hands-off), <strong>learning system</strong> (TS-validated <code>docs/solutions/</code> capture + reuse), and <strong>plan integrity</strong> (keep the goal sharp through multi-phase work). Four key metrics: goal fidelity, learning reuse, unattended completion rate, code-review rework.</p>
+      <h4>State corrections established during this run</h4>
+      <p>&bull; The <strong>learning producer is already shipped</strong> &mdash; <code>sl-learn</code> exists and is wired into <code>lfg</code> step 10 (fires after CI green, before <code>DONE</code>). The corpus is still near-empty (2 learnings) because runs haven&rsquo;t produced at volume yet, not because the seam is missing.<br>
+      &bull; The <strong>TS learning schema is shipped</strong> (<code>src/solutions/schema.ts</code>, <code>validate.ts</code>, <code>emit.ts</code>, <code>doc-model.ts</code>).<br>
+      &bull; The <strong>loop driver has tests</strong> (<code>tests/loop-driver.test.ts</code>, 771 lines).<br>
+      &bull; The <strong>&ldquo;reflect / refresh / route&rdquo; workflow is parked</strong> (decided 2026-06-18; revisit after ~15&ndash;20 learnings accumulate). The <strong>SL-builds-SL self-edit guard</strong> holds (direct-edits + gate, per the 2026-06-16 decision) until a pinned stable plugin exists.</p>
+      <h4>The shape of the opportunity</h4>
+      <p>The corpus&rsquo;s only repeated lesson is &ldquo;<em>partial / local green hides real gaps &mdash; a validator covering some invariants is more dangerous than none</em>.&rdquo; The external frontier (Cursor, OpenHands, Devin) is saturating on raw coding ability; reviewers now name <em>human review bandwidth</em> as the binding constraint, and goal-drift is a formal research area (<code>GD_inaction</code> &mdash; an agent &ldquo;completes&rdquo; work while quietly skipping a required step). Super Looper&rsquo;s differentiator &mdash; structured phase enforcement &mdash; is real but currently lives in <em>prose the agent is trusted to follow</em>, not machine-checked artifacts. That gap is where nearly every lens landed.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Topic Axes</h2>
+    <div class="axes-note"><span>&#9737;</span><span>Decomposition skipped &mdash; surprise-me mode (no fixed subject; the cross-frame synthesis below carries coverage instead).</span></div>
+  </section>
+
+  <section>
+    <h2>Ranked Ideas</h2>
+    <nav class="jump" aria-label="Ranked ideas">
+      <ol>
+        <li><span class="rk">1.</span> <a href="#c1">Structured run-record &mdash; the loop&rsquo;s black box</a></li>
+        <li><span class="rk">2.</span> <a href="#c2">Machine-checkable phase enforcement</a></li>
+        <li><span class="rk">3.</span> <a href="#c7">Auto-route on failure type</a></li>
+        <li><span class="rk">4.</span> <a href="#c5">Learning-as-enforcement (<code>enforces:</code>)</a></li>
+        <li><span class="rk">5.</span> <a href="#c6">Andon cord &mdash; halt-and-escalate</a></li>
+        <li><span class="rk">6.</span> <a href="#c10">Plugin-author dev-loop harness</a></li>
+        <li><span class="rk">7.</span> <a href="#c14">Dry-learn mode</a></li>
+      </ol>
+    </nav>
+
+    <!-- C1 -->
+    <article class="card" id="c1">
+      <div class="card-head"><span class="rank">1</span><h3>Structured run-record &mdash; the loop&rsquo;s black box</h3><span class="cid">C1</span></div>
+      <div class="pillrow"><span class="pill conf-h">Confidence 80%</span><span class="pill cx">Complexity: Medium</span><span class="pill dim">Foundational</span></div>
+      <p>Today an unattended <code>loop.sh</code> run leaves behind only an exit code (0&ndash;7) and a free-text transcript log. All the structured state the driver already tracks &mdash; attempt count, timed-out vs crashed, routed-via-PR, verify mode, final green, PR URL, deferral dispositions &mdash; evaporates at <code>DONE</code>. Emit a machine-readable <strong>run-record</strong> (one JSON/structured artifact per run, plus per-phase entry/exit) to a stable path. This single artifact is the substrate every measurement and downstream feature needs.</p>
+      <figure>
+        <svg viewBox="0 0 720 250" role="img" aria-label="One run-record artifact fanning out to four metrics and two features">
+          <rect x="18" y="96" width="168" height="58" rx="10" fill="#eef0fe" stroke="#c7cbfb"/>
+          <text x="102" y="120" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600" fill="#3730a3">run-record</text>
+          <text x="102" y="138" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#5b5fb5">per run, structured</text>
+          <!-- connectors -->
+          <g stroke="#b9bbe6" stroke-width="1.6" fill="none">
+            <path d="M186 110 C 250 110, 250 30, 318 30"/>
+            <path d="M186 118 C 250 118, 250 76, 318 76"/>
+            <path d="M186 126 C 250 126, 250 122, 318 122"/>
+            <path d="M186 134 C 250 134, 250 168, 318 168"/>
+            <path d="M186 142 C 250 142, 250 214, 318 214"/>
+          </g>
+          <g font-family="Inter, sans-serif" font-size="12.5" fill="#2a2a26">
+            <rect x="318" y="12" width="388" height="36" rx="8" fill="#fff" stroke="#e1e0d9"/>
+            <text x="332" y="35">Goal-fidelity &amp; learning-reuse metrics (today: unmeasured)</text>
+            <rect x="318" y="58" width="388" height="36" rx="8" fill="#fff" stroke="#e1e0d9"/>
+            <text x="332" y="81">Unattended-completion &amp; review-rework metrics</text>
+            <rect x="318" y="104" width="388" height="36" rx="8" fill="#fff" stroke="#e1e0d9"/>
+            <text x="332" y="127">Learning capture reads the trace, not hot context</text>
+            <rect x="318" y="150" width="388" height="36" rx="8" fill="#e9f6ee" stroke="#cfe9d8"/>
+            <text x="332" y="173">Failure classification &rarr; auto-routing (C3 below)</text>
+            <rect x="318" y="196" width="388" height="36" rx="8" fill="#fff" stroke="#e1e0d9"/>
+            <text x="332" y="219">Regression detection on completion rate over time</text>
+          </g>
+        </svg>
+        <figcaption>One cheap structured artifact unblocks four unmeasured metrics and two downstream features.</figcaption>
+      </figure>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag direct">direct</span> <code>loop.sh</code> computes <code>timed_out</code>, <code>routed_via_pr</code>, <code>verify_green</code>, and attempt count but renders them only to a free-text Report block and exit codes. All four strategy metrics in <code>STRATEGY.md</code> are marked &ldquo;to define&rdquo; / measured-from-logs.</dd>
+        <dt>Rationale</dt><dd>Super Looper&rsquo;s strategy names four metrics it cannot currently compute, because runs leave no structured residue. This is the lowest-effort, highest-fan-out move available: the artifact &mdash; not any single consumer &mdash; is the asset, and every other reliability/learning idea here reads from it.</dd>
+        <dt>Downsides</dt><dd class="down">Adds a schema surface to keep stable as the loop evolves; a partial record is its own &ldquo;green &ne; correct&rdquo; trap, so the schema must declare what it does <em>not</em> capture.</dd>
+      </dl>
+    </article>
+
+    <!-- C2 -->
+    <article class="card" id="c2">
+      <div class="card-head"><span class="rank">2</span><h3>Machine-checkable phase enforcement</h3><span class="cid">C2</span></div>
+      <div class="pillrow"><span class="pill conf-m">Confidence 60%</span><span class="pill cx">Complexity: Medium&ndash;High</span><span class="pill dim">Convergence headline</span></div>
+      <p>The whole pitch is &ldquo;the goal and the learnings can&rsquo;t be dropped,&rdquo; yet <code>lfg</code> enforces its own order through prose the agent must remember (&ldquo;You MUST execute every step IN ORDER&rdquo;; &ldquo;GATE: STOP. Verify&hellip; Do NOT proceed if no code changes were made&rdquo;). Have each phase write a structured <strong>receipt</strong> (plan-exists, diff-non-empty, review-ran, learn-seam-fired) that the driver asserts before accepting <code>DONE</code> &mdash; exactly how <code>loop.sh</code> already refuses an unverified green. A skipped phase becomes a non-zero exit, not a silent omission. <em>Scoped start:</em> extract the opaque <code>lfg</code> step-6 residual-handoff into a tested script and emit phase receipts from there.</p>
+      <figure>
+        <svg viewBox="0 0 720 210" role="img" aria-label="Phases drop receipts that the driver checks before DONE">
+          <text x="14" y="26" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#92400e">Today &mdash; prose, trusted</text>
+          <rect x="14" y="36" width="692" height="34" rx="8" fill="#fbf1e3" stroke="#f0ddc1"/>
+          <text x="28" y="58" font-family="Inter, sans-serif" font-size="12.5" fill="#7a4a12">&ldquo;MUST execute every step in order&rdquo; &rarr; agent self-reports compliance &rarr; <tspan font-weight="600">DONE</tspan></text>
+          <text x="14" y="104" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#166534">Proposed &mdash; receipts, checked</text>
+          <g font-family="Inter, sans-serif" font-size="11.5">
+            <g>
+              <rect x="14" y="116" width="86" height="30" rx="7" fill="#fff" stroke="#e1e0d9"/><text x="57" y="135" text-anchor="middle" fill="#2a2a26">plan</text>
+              <rect x="112" y="116" width="86" height="30" rx="7" fill="#fff" stroke="#e1e0d9"/><text x="155" y="135" text-anchor="middle" fill="#2a2a26">work</text>
+              <rect x="210" y="116" width="86" height="30" rx="7" fill="#fff" stroke="#e1e0d9"/><text x="253" y="135" text-anchor="middle" fill="#2a2a26">review</text>
+              <rect x="308" y="116" width="86" height="30" rx="7" fill="#fff" stroke="#e1e0d9"/><text x="351" y="135" text-anchor="middle" fill="#2a2a26">learn</text>
+            </g>
+            <g stroke="#9aa0e0" stroke-width="1.5" fill="none">
+              <path d="M57 146 L57 168"/><path d="M155 146 L155 168"/><path d="M253 146 L253 168"/><path d="M351 146 L351 168"/>
+            </g>
+            <rect x="14" y="168" width="380" height="30" rx="7" fill="#eef0fe" stroke="#c7cbfb"/>
+            <text x="204" y="187" text-anchor="middle" fill="#3730a3" font-weight="600">driver asserts all receipts present</text>
+            <g stroke="#9aa0e0" stroke-width="1.5" fill="none"><path d="M394 183 L470 183"/></g>
+            <polygon points="466,178 478,183 466,188" fill="#9aa0e0"/>
+            <rect x="480" y="116" width="106" height="30" rx="7" fill="#e9f6ee" stroke="#cfe9d8"/><text x="533" y="135" text-anchor="middle" fill="#166534" font-weight="600">DONE</text>
+            <rect x="600" y="116" width="106" height="30" rx="7" fill="#fbecec" stroke="#f1cccc"/><text x="653" y="135" text-anchor="middle" fill="#991b1b" font-weight="600">FAIL: phase skipped</text>
+            <g stroke="#9aa0e0" stroke-width="1.5" fill="none"><path d="M586 183 C 640 183, 653 150, 653 148"/><path d="M586 178 C 560 160, 540 146, 533 146"/></g>
+          </g>
+        </svg>
+        <figcaption>The driver already gates success on independent verification; this extends the same discipline to phase order &mdash; the <code>GD_inaction</code> failure becomes a hard exit.</figcaption>
+      </figure>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag direct">direct</span> <code>lfg/SKILL.md</code> line 7 + the step-2 GATE prose; <code>loop.sh</code>&rsquo;s <code>target_ci_green</code> already proves &ldquo;no unverified success.&rdquo; <span class="tag external">external</span> goal-drift research: <code>GD_inaction</code> (skipping a required action after an intermediate phase) is named as Super Looper&rsquo;s highest-risk drift mode.</dd>
+        <dt>Rationale</dt><dd>This was the single strongest cross-frame convergence &mdash; pain, inversion, assumption-breaking, leverage, cross-domain (aviation checklists), and constraint-flipping all independently landed here. It is what turns the product&rsquo;s differentiation from a <em>claim</em> (&ldquo;we enforce the loop&rdquo;) into a <em>demonstrable property</em>.</dd>
+        <dt>Downsides</dt><dd class="down">Larger design surface than the others; receipts the agent itself writes can be gamed unless their content is independently checkable. Worth scoping tightly (start with step-6 + one or two receipts) rather than rewriting the pipeline at once.</dd>
+      </dl>
+    </article>
+
+    <!-- C7 -->
+    <article class="card" id="c7">
+      <div class="card-head"><span class="rank">3</span><h3>Auto-route on failure type</h3><span class="cid">C7</span></div>
+      <div class="pillrow"><span class="pill conf-h">Confidence 70%</span><span class="pill cx">Complexity: Medium</span><span class="pill dim">Builds on C1</span></div>
+      <p>When a run fails, <code>loop.sh</code> does the same dumb thing every time: reset the target to a clean base and re-launch the same <code>lfg</code> on the same seed, up to the cap. A deterministic failure therefore recurs deterministically until the budget is exhausted. Classify the failure instead and dispatch the matching skill &mdash; a test failure routes to <code>sl-debug</code>, a spec-vs-implementation mismatch routes back to re-plan, a flake gets quarantined. <code>docs/solutions/</code> becomes the routing table over time.</p>
+      <figure>
+        <svg viewBox="0 0 720 230" role="img" aria-label="Blind retry versus classify-then-route">
+          <text x="14" y="24" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#92400e">Today</text>
+          <rect x="14" y="34" width="120" height="32" rx="7" fill="#fbecec" stroke="#f1cccc"/><text x="74" y="55" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#991b1b">run fails</text>
+          <g stroke="#caa37a" stroke-width="1.5" fill="none"><path d="M134 50 L196 50"/></g><polygon points="192,45 204,50 192,55" fill="#caa37a"/>
+          <rect x="206" y="34" width="190" height="32" rx="7" fill="#fbf1e3" stroke="#f0ddc1"/><text x="301" y="55" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#7a4a12">reset &amp; retry same seed</text>
+          <g stroke="#caa37a" stroke-width="1.5" fill="none"><path d="M396 50 C 440 50, 440 50, 470 50"/></g><polygon points="466,45 478,50 466,55" fill="#caa37a"/>
+          <text x="486" y="54" font-family="Inter, sans-serif" font-size="12" fill="#7a4a12">same failure &rarr; cap exhausted</text>
+
+          <text x="14" y="108" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#166534">Proposed</text>
+          <rect x="14" y="118" width="120" height="34" rx="7" fill="#fbecec" stroke="#f1cccc"/><text x="74" y="140" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#991b1b">run fails</text>
+          <polygon points="200,118 250,135 200,152 150,135" fill="#eef0fe" stroke="#c7cbfb"/>
+          <text x="200" y="139" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" fill="#3730a3" font-weight="600">classify</text>
+          <g stroke="#9aa0e0" stroke-width="1.5" fill="none"><path d="M134 135 L150 135"/></g>
+          <g font-family="Inter, sans-serif" font-size="11.5">
+            <g stroke="#9aa0e0" stroke-width="1.5" fill="none">
+              <path d="M250 130 C 300 130, 300 92, 348 92"/>
+              <path d="M250 135 C 300 135, 300 135, 348 135"/>
+              <path d="M250 140 C 300 140, 300 178, 348 178"/>
+            </g>
+            <rect x="348" y="76" width="180" height="32" rx="7" fill="#e9f6ee" stroke="#cfe9d8"/><text x="362" y="96" fill="#166534">test failure &rarr; <tspan font-family="JetBrains Mono, monospace" font-weight="500">sl-debug</tspan></text>
+            <rect x="348" y="119" width="180" height="32" rx="7" fill="#e9f6ee" stroke="#cfe9d8"/><text x="362" y="139" fill="#166534">spec mismatch &rarr; re-plan</text>
+            <rect x="348" y="162" width="180" height="32" rx="7" fill="#e9f6ee" stroke="#cfe9d8"/><text x="362" y="182" fill="#166534">flake &rarr; quarantine</text>
+          </g>
+        </svg>
+        <figcaption>Self-healing CI&rsquo;s core insight: a failure is a trigger, not a stop. Classification needs the structured residue from C1.</figcaption>
+      </figure>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag direct">direct</span> <code>loop.sh</code>&rsquo;s reconcile-and-retry resets to clean base and re-launches the same seed; the grounding leverage list explicitly names &ldquo;conditional skill auto-routing (test failure &rarr; debug).&rdquo; <span class="tag external">external</span> self-healing-CI &ldquo;Pipeline Doctor&rdquo; pattern.</dd>
+        <dt>Rationale</dt><dd>Retries are currently sequential gambling on a deterministic outcome. Routing by failure class is the difference between three identical doomed attempts and three <em>escalating</em> ones &mdash; and it closes the loop the grounding calls &ldquo;structurally identical&rdquo; to <code>docs/solutions/</code> by making the solutions corpus the routing table.</dd>
+        <dt>Downsides</dt><dd class="down">Depends on C1 for reliable failure classification; misclassification could route a real bug to &ldquo;quarantine.&rdquo; Sequence it after the run-record exists.</dd>
+      </dl>
+    </article>
+
+    <!-- C5 -->
+    <article class="card" id="c5">
+      <div class="card-head"><span class="rank">4</span><h3>Learning-as-enforcement (<code>enforces:</code>)</h3><span class="cid">C5</span></div>
+      <div class="pillrow"><span class="pill conf-h">Confidence 80%</span><span class="pill cx">Complexity: Low</span><span class="pill dim">Learning system</span></div>
+      <p>A learning today is passive prose that <code>sl-learnings-researcher</code> reads at ideate/plan/review and <em>hopes</em> gets applied &mdash; re-running the unreliable skill-activation lottery every time. When a learning&rsquo;s lesson is mechanically checkable, let it optionally emit a <strong>guard</strong> (a test, a validate-rule, a grep assertion) that fires automatically. Add an <code>enforces:</code> capability to the existing TS schema. Both learnings currently in the corpus qualify as ready test cases.</p>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag direct">direct</span> both corpus learnings are mechanically-checkable invariants (the <code>plugin.json</code> version gap; git not tracking empty dirs), and <code>src/solutions/schema.ts</code> is the substrate to hang an <code>enforces:</code> field on. <span class="tag external">external</span> Kaizen: &ldquo;if it doesn&rsquo;t result in a concrete change it&rsquo;s not a lesson, it&rsquo;s a story&rdquo;; Mem0&rsquo;s <em>procedural</em> memory maps onto <code>docs/solutions/</code>.</dd>
+        <dt>Rationale</dt><dd>&ldquo;Learning reuse&rdquo; is a named key metric, and reuse-via-&ldquo;researcher reads it&rdquo; is the weakest possible mechanism. Converting the highest-value learnings into guards makes reuse <em>deterministic</em> &mdash; institutional memory that&rsquo;s wired in, not remembered.</dd>
+        <dt>Downsides</dt><dd class="down">Only a subset of learnings are mechanically checkable, so it needs a graduation criterion; an emitted guard is code that must itself be maintained.</dd>
+      </dl>
+    </article>
+
+    <!-- C6 -->
+    <article class="card" id="c6">
+      <div class="card-head"><span class="rank">5</span><h3>Andon cord &mdash; halt-and-escalate</h3><span class="cid">C6</span></div>
+      <div class="pillrow"><span class="pill conf-h">Confidence 82%</span><span class="pill cx">Complexity: Low</span><span class="pill dim">Safety</span></div>
+      <p>The autopilot has exactly two responses to a problem: <em>fix it</em>, or <em>durably defer and proceed</em> (write it to a residual-findings file / PR note and keep going to <code>DONE</code>). There is no <em>stop the line</em>. Borrowing Toyota&rsquo;s andon cord, add a configurable threshold &mdash; a class of finding (e.g. a security-reviewer hit) or a deferral count &mdash; that halts the run with a distinct exit code instead of shipping past a known defect with a sticky note.</p>
+      <figure>
+        <svg viewBox="0 0 720 132" role="img" aria-label="A finding has three dispositions: fix, defer, or halt">
+          <rect x="14" y="50" width="150" height="34" rx="8" fill="#fff" stroke="#e1e0d9"/>
+          <text x="89" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-size="12.5" fill="#2a2a26">a finding appears</text>
+          <g stroke="#b8b7af" stroke-width="1.5" fill="none">
+            <path d="M164 60 C 220 60, 220 28, 276 28"/>
+            <path d="M164 67 C 220 67, 220 67, 276 67"/>
+            <path d="M164 74 C 220 74, 220 106, 276 106"/>
+          </g>
+          <rect x="276" y="12" width="200" height="32" rx="8" fill="#e9f6ee" stroke="#cfe9d8"/><text x="290" y="32" font-family="Inter, sans-serif" font-size="12.5" fill="#166534">fix it (exists)</text>
+          <rect x="276" y="51" width="200" height="32" rx="8" fill="#fbf1e3" stroke="#f0ddc1"/><text x="290" y="71" font-family="Inter, sans-serif" font-size="12.5" fill="#7a4a12">defer &amp; proceed (exists)</text>
+          <rect x="276" y="90" width="200" height="32" rx="8" fill="#fbecec" stroke="#f1cccc"/><text x="290" y="110" font-family="Inter, sans-serif" font-size="12.5" fill="#991b1b" font-weight="600">halt &amp; escalate (new)</text>
+        </svg>
+        <figcaption>The missing third disposition for the class of findings where proceeding is the wrong default.</figcaption>
+      </figure>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag direct">direct</span> <code>lfg/SKILL.md</code> step-6 writes residuals to a fallback file then continues; step-9 caps flaky-test loops and proceeds &mdash; both are defer-and-proceed, with no halt path. <span class="tag external">external</span> Toyota Production System andon cord (defect halts the line at the source).</dd>
+        <dt>Rationale</dt><dd>A pushed deferral file is the autopilot&rsquo;s version of shipping a known defect with a note no one reads &mdash; the literal &ldquo;green &ne; correct&rdquo; failure mode. Andon gives the loop a principled stop for high-severity findings, serving goal-fidelity and review-rework directly.</dd>
+        <dt>Downsides</dt><dd class="down">A too-aggressive threshold defeats the point of unattended runs (halts become babysitting); the threshold needs to be conservative and configurable.</dd>
+      </dl>
+    </article>
+
+    <!-- C10 -->
+    <article class="card" id="c10">
+      <div class="card-head"><span class="rank">6</span><h3>Plugin-author dev-loop harness</h3><span class="cid">C10</span></div>
+      <div class="pillrow"><span class="pill conf-h">Confidence 80%</span><span class="pill cx">Complexity: Low&ndash;Medium</span><span class="pill dim">Developer experience</span></div>
+      <p>The plugin&rsquo;s own <code>AGENTS.md</code> spends ~30 lines warning that SKILL.md and agent definitions cache at session start &mdash; so editing a skill and re-dispatching it in the same session tests <em>pre-edit</em> content. The documented workarounds (the <code>skill-creator</code> eval, or restarting the session) are heavyweight, and the tax is paid on every behavioral edit across ~40 skills. Ship a thin harness (<code>bun run dev:skill &lt;name&gt;</code>) that spawns a fresh <code>claude --plugin-dir</code> against the working copy so authors edit-and-test in seconds.</p>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag direct">direct</span> <code>plugins/super-looper/AGENTS.md</code> &ldquo;Validating Agent and Skill Changes&rdquo;: &ldquo;File edits to either layer after session start do not propagate within the same session.&rdquo; The fresh-process pattern already exists in <code>loop.sh</code> (&ldquo;each run reads the current source from disk&rdquo;); <code>dev:skill</code> does not yet exist in <code>package.json</code>.</dd>
+        <dt>Rationale</dt><dd>This is the binding constraint on building Super Looper itself &mdash; the most-trafficked uninstrumented workflow in the repo. Shrinking the edit&rarr;observe cycle compounds across every future skill change.</dd>
+        <dt>Downsides</dt><dd class="down">A spawned-subprocess harness is fiddly to make ergonomic (arg passing, output capture); it eases authoring but doesn&rsquo;t replace the <code>skill-creator</code> eval for behavioral correctness.</dd>
+      </dl>
+    </article>
+
+    <!-- C14 -->
+    <article class="card" id="c14">
+      <div class="card-head"><span class="rank">7</span><h3>Dry-learn mode</h3><span class="cid">C14</span></div>
+      <div class="pillrow"><span class="pill conf-m">Confidence 62%</span><span class="pill cx">Complexity: Low</span><span class="pill dim">Learning system</span></div>
+      <p>Capture today only happens for work that <em>succeeded enough to ship</em> &mdash; but the highest-value learnings often come from work you&rsquo;d never merge. Add a mode that produces <em>only</em> a learning, no code: seed a risky or exploratory task, let the loop plan + spike + review without merging, and the sole committed artifact is a <code>docs/solutions/</code> entry capturing what the spike discovered. The loop becomes a knowledge-acquisition engine for questions too risky to actually ship.</p>
+      <dl>
+        <dt>Basis</dt><dd class="basis"><span class="tag reasoned">reasoned</span> constraint flip &mdash; &ldquo;the loop&rsquo;s output is a PR of working code&rdquo; inverted reveals the loop&rsquo;s scarcest output is learnings (2 vs 40 skills), and a spike-and-discard mode harvests exactly the ones shipping can&rsquo;t. <span class="tag direct">direct</span> the autopilot-capture plan calls the CI-autofix loop &ldquo;a textbook learning source that currently evaporates at <code>DONE</code>.&rdquo;</dd>
+        <dt>Rationale</dt><dd>It directly attacks the produce/consume imbalance and populates the corpus with knowledge no shipping run can produce &mdash; complementary to the (already shipped) ship-time capture seam, not a duplicate.</dd>
+        <dt>Downsides</dt><dd class="down">Risk of low-signal learnings padding the corpus; needs a quality bar so dry-learn output earns its place. Lower urgency than C1&ndash;C6 until the corpus is actually growing.</dd>
+      </dl>
+    </article>
+  </section>
+
+  <section>
+    <h2>Rejection Summary</h2>
+    <table>
+      <thead><tr><th>Idea</th><th>Reason cut</th></tr></thead>
+      <tbody>
+        <tr><td class="rj"><span class="nm">Goal-fidelity gate</span> (&ldquo;earned green&rdquo;)</td><td class="rj">Strategically central (the #1 metric) but no ground-truth mechanism &mdash; the plan itself may have drifted. Downgraded; revisit once C1 + C2 exist. Partly served by C2 and the review phase.</td></tr>
+        <tr><td class="rj"><span class="nm">Learning index / reuse-attribution / invalidation</span></td><td class="rj">Index + reuse-attribution are a strong, cheap follow-on to C1 (kept for later, just below the top 7); the dependency-invalidation sub-angle re-proposes parked reflect/refresh work (revisit after ~15&ndash;20 learnings).</td></tr>
+        <tr><td class="rj"><span class="nm">Skill surface as a contract graph</span></td><td class="rj">Bundles three problems; the headline motivation (~20% naive activation) is external data of unknown applicability to Super Looper. Only the static skill-reference validator sliver is cleanly grounded.</td></tr>
+        <tr><td class="rj"><span class="nm">SL-builds-SL via pinned release</span></td><td class="rj">Refuted &mdash; restates the self-edit guard&rsquo;s already-documented escape condition without supplying the missing ingredient (a released stable plugin). It&rsquo;s a release milestone that collides with the 2026-06-16 direct-edits decision, not a buildable next step.</td></tr>
+        <tr><td class="rj"><span class="nm">Export review personas as a standalone surface</span></td><td class="rj">Weak &mdash; the 43 personas are already directly dispatchable typed agents; the real gap is discoverability/docs, a far smaller change than &ldquo;unlock.&rdquo;</td></tr>
+        <tr><td class="rj"><span class="nm">Best-of-N parallel attempts</span></td><td class="rj">Weak &mdash; Super Looper&rsquo;s retry case is deterministic plan/implementation choice (N identical seeds &rarr; N identical outputs), unlike Cursor&rsquo;s non-deterministic test failures.</td></tr>
+        <tr><td class="rj"><span class="nm">Procedural &ldquo;golden route&rdquo; replay</span></td><td class="rj">Weak &mdash; no mechanism for task-shape matching or divergence detection; the docs-only-skip basis is about skipping planning, not memoizing a route.</td></tr>
+        <tr><td class="rj"><span class="nm">Loop-driver self-test harness</span></td><td class="rj">Refuted &mdash; <code>tests/loop-driver.test.ts</code> (771 lines) already exercises the exit-code paths with stubs. Only a pre-flight live-gate self-check sliver survives, folded into C2.</td></tr>
+        <tr><td class="rj"><span class="nm">Generate the ce-* family from sl-*</span></td><td class="rj">Out of scope &mdash; <code>ce-*</code> (compound-engineering) is a different plugin, not maintained in this repo.</td></tr>
+        <tr><td class="rj"><span class="nm">Ship the learning producer</span></td><td class="rj">Already done &mdash; <code>sl-learn</code> is shipped and wired into <code>lfg</code> step 10.</td></tr>
+        <tr><td class="rj"><span class="nm">Finish the TS learning schema</span></td><td class="rj">Already done &mdash; <code>src/solutions/{schema,validate,emit,doc-model}.ts</code> exist.</td></tr>
+        <tr><td class="rj"><span class="nm">Cadence (time-based) staleness refresh</span></td><td class="rj">Duplicate of the stronger event-driven invalidation angle; also inside parked-work territory.</td></tr>
+        <tr><td class="rj"><span class="nm">Persona reframe: &ldquo;SL is the team&rsquo;s CI bot&rdquo;</span></td><td class="rj">A strategy/positioning question better taken into <code>sl-strategy</code> / <code>sl-brainstorm</code> than treated as a buildable next step.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Sources &amp; References</h2>
+    <ul>
+      <li><a href="https://github.com/akornmeier/super-looper/blob/main/STRATEGY.md"><code>STRATEGY.md</code></a> &mdash; tracks &amp; the four key metrics</li>
+      <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/loop-driver.md"><code>docs/loop-driver.md</code></a> &mdash; <code>loop.sh</code> operator guide (exit codes, verification gate, isolation rule)</li>
+      <li><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/lfg/SKILL.md"><code>lfg/SKILL.md</code></a> &mdash; the prose phase pipeline &amp; the learn seam (step 10)</li>
+      <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/workflow/release-please-version-drift-recovery.md"><code>docs/solutions/&hellip;/release-please-version-drift-recovery.md</code></a> &mdash; the &ldquo;green &ne; correct&rdquo; learning</li>
+      <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/developer-experience/git-untracked-empty-dirs-break-ci.md"><code>docs/solutions/&hellip;/git-untracked-empty-dirs-break-ci.md</code></a> &mdash; &ldquo;passes locally &ne; correct&rdquo;</li>
+      <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/brainstorms/2026-06-18-whats-next-reflect-route-seed.md"><code>docs/brainstorms/2026-06-18-whats-next-reflect-route-seed.md</code></a> &mdash; the parked reflect/route decision &amp; revisit trigger</li>
+      <li>External: goal-drift taxonomy (<code>GD_inaction</code>, arXiv 2505.02709); Mem0 &ldquo;State of AI Agent Memory 2026&rdquo;; self-healing CI (Dagger / Semaphore &ldquo;Pipeline Doctor&rdquo;); Kaizen / PDCA continuous improvement</li>
+    </ul>
+  </section>
+
+  <footer class="composition-signal">Composed 2026-06-18 by sl-ideate (surprise-me, repo-grounded) from the super-looper working tree &mdash; run <code>758f1088</code>. Scratch &amp; checkpoints: <code>/tmp/super-looper/sl-ideate/758f1088/</code>.</footer>
+
+</div>
+</body>
+</html>
