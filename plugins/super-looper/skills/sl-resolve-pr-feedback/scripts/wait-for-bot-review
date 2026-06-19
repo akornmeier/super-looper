@@ -57,14 +57,24 @@ fi
 
 known_bots_nl=$(printf '%s\n' "${KNOWN_BOTS[@]}")
 
-# Prints the active bots (known list intersected with reviewers present on the
-# PR) that do NOT yet have a review tied to HEAD_SHA, one login per line. Empty
-# output means quiescent: either no known bot is active, or all active bots have
-# reached HEAD. A failed fetch is treated as "nothing pending" rather than a
-# hang -- the caller's timeout still bounds the overall wait.
+# Fetch the PR's reviews as raw JSON, or an empty string on any gh failure. The
+# `|| true` is load-bearing: under set -e a failed command substitution in an
+# assignment aborts the script, so without it a transient gh error would defeat
+# the timeout guarantee.
+fetch_reviews() {
+    gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json reviews 2>/dev/null || true
+}
+
+# Given a reviews JSON payload, print the active bots (known list intersected
+# with reviewers present on the PR) that do NOT yet have a review tied to
+# HEAD_SHA, one login per line. Empty output means quiescent: no known bot is
+# active, or all active bots have reached HEAD. An empty or malformed payload
+# yields empty output -- gh can return a valid object with no `reviews` key (an
+# error object) or a non-JSON error page, so `(.reviews // [])` defaults the
+# missing key and the trailing `|| true` keeps a jq parse error from aborting
+# the script under set -e (which would otherwise bypass the timeout).
 pending_bots() {
-    local reviews
-    reviews=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json reviews 2>/dev/null || true)
+    local reviews="$1"
     if [ -z "$reviews" ]; then
         return 0
     fi
@@ -72,33 +82,43 @@ pending_bots() {
         --arg head "$HEAD_SHA" \
         --arg known "$known_bots_nl" '
         ($known | split("\n") | map(select(length > 0))) as $known_bots |
-        ([.reviews[] | {login: (.author.login // ""), oid: (.commit.oid // "")}]) as $rows |
+        ([(.reviews // [])[] | {login: (.author.login // ""), oid: (.commit.oid // "")}]) as $rows |
         ([$rows[].login] | unique) as $present |
+        # active = known ∩ present; jq has no intersect builtin, so A - (A - B)
         ($known_bots - ($known_bots - $present)) as $active_bots |
         [ $active_bots[]
           | . as $bot
           | select(([$rows[] | select(.login == $bot and .oid == $head)] | length) == 0)
         ] | .[]
-    '
+    ' || true
 }
 
 # Bounded poll: the loop condition itself carries the timeout guard (elapsed
 # wall-clock vs TIMEOUT_SECONDS), so the wait always terminates even if a bot
-# never reaches HEAD -- never an open-ended loop.
+# never reaches HEAD -- never an open-ended loop. `fetch_ok` records whether any
+# poll actually reached GitHub, so a total fetch failure is reported honestly
+# rather than as a false "quiescent".
 start=$SECONDS
 interval=$POLL_INTERVAL
-pending=$(pending_bots)
+fetch_ok=0
+reviews=$(fetch_reviews)
+if [ -n "$reviews" ]; then fetch_ok=1; fi
+pending=$(pending_bots "$reviews")
 while [ -n "$pending" ] && [ "$((SECONDS - start))" -lt "$TIMEOUT_SECONDS" ]; do
     sleep "$interval"
     if [ "$interval" -lt "$MAX_POLL_INTERVAL" ]; then
         interval=$((interval + POLL_INTERVAL))
     fi
-    pending=$(pending_bots)
+    reviews=$(fetch_reviews)
+    if [ -n "$reviews" ]; then fetch_ok=1; fi
+    pending=$(pending_bots "$reviews")
 done
 
-if [ -z "$pending" ]; then
-    echo "quiescent: all active bots have reviewed $HEAD_SHA"
-else
+if [ -n "$pending" ]; then
     echo "timed-out waiting for: $(echo "$pending" | paste -sd, -)"
+elif [ "$fetch_ok" -eq 0 ]; then
+    echo "could not confirm quiescence: gh fetch failed"
+else
+    echo "quiescent: all active bots have reviewed $HEAD_SHA"
 fi
 exit 0

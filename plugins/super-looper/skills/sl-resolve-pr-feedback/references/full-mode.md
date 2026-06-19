@@ -215,7 +215,7 @@ If `${CLAUDE_SKILL_DIR}` does not resolve to the bundled script (e.g. running of
 - **Per-wait timeout.** The script stops waiting and exits after ~5 minutes even if an active bot never reaches HEAD (hanging is the worst failure). On timeout it prints `timed-out waiting for: <logins>` -- **proceed anyway** (re-fetch), and note in the step 9 summary that a late bot round may still arrive, so the result does not imply full quiescence.
 - **Max fix-round cap of 3** (below): after the third fix-verify cycle the recurring-pattern escalation fires instead of looping again.
 
-**Settle-window fallback (C).** Some reviewers post feedback that is *not* detectable as a re-review on HEAD -- a top-level comment with no SHA-tied review. For those the `commit.oid == HEAD` signal never trips, so do not wait on it forever: fall back to a **settle-window** -- conclude after a short quiet period with no new threads rather than blocking on a signal that will not come. Option A (poll-for-review-on-HEAD, above) is the primary, deterministic path; C is the documented secondary path for the non-SHA case.
+**Settle-window fallback (C).** Some reviewers post feedback that is *not* detectable as a re-review on HEAD -- a top-level comment with no SHA-tied review. For those the `commit.oid == HEAD` signal never trips, so do not wait on it forever: fall back to a **settle-window** -- after the gate returns, wait ~60s and re-fetch once via `get-pr-comments`; if no new threads appeared, conclude. This bounds the wait for non-SHA reviewers rather than blocking on a signal that will not come. Option A (poll-for-review-on-HEAD, above) is the primary, deterministic path; C is the documented secondary path for the non-SHA case.
 
 ### Re-fetch and loop
 
@@ -251,6 +251,7 @@ Not addressing (count): [what was skipped and why]
 Declined (count): [what was declined and the harm cited]
 
 Validation: [one line -- e.g., "bun test passed (893/893)" or "bun test passed with pre-existing failure in X noted"; omit when no code changes were committed]
+Reviewer wait: [include only when the step-8 quiescence gate timed out or fell back to the settle-window -- "an active reviewer (<logins>) had not re-reviewed the pushed commit at verify time; a late bot round may still arrive." Omit when the gate confirmed quiescence or no fix was pushed, so the summary never implies full quiescence it did not reach.]
 ```
 
 If any agent returned `needs-human`, append a decisions section. These are rare but high-signal. Each `needs-human` agent returns a `decision_context` field with a structured analysis: what the reviewer said, what the agent investigated, why it needs a decision, concrete options with tradeoffs, and the agent's lean if it has one.

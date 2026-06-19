@@ -85,6 +85,32 @@ describe("wait-for-bot-review poll script (U1)", () => {
       "must intersect the known list against logins present in the reviews payload (set-difference intersection), so a known bot that never reviewed this PR is never waited on",
     ).toContain("$known_bots - ($known_bots - $present)")
   })
+
+  test("tolerates a missing/malformed reviews payload and never aborts under set -e (R4 proceed-not-fail)", () => {
+    // gh can return a valid object with no `reviews` key (an error object) or a
+    // non-JSON error page; without these guards jq errors ("Cannot iterate over
+    // null" / parse error) and `set -e` kills the whole script, bypassing the
+    // timeout the gate exists to guarantee.
+    expect(
+      body,
+      "default a missing .reviews key so jq does not error on null",
+    ).toContain("(.reviews // [])")
+    expect(
+      body,
+      "guard the jq pipe with `|| true` so a parse error on a malformed payload cannot abort the script",
+    ).toContain("' || true")
+    expect(
+      body.trimEnd().endsWith("exit 0"),
+      "the script's terminal statement must be an unconditional `exit 0` -- the gate proceeds on timeout/failure, it never fails the caller",
+    ).toBe(true)
+  })
+
+  test("reports a total fetch failure honestly rather than as false quiescence", () => {
+    expect(
+      body,
+      "if every poll's gh fetch failed, the gate must say so -- not claim the bots reviewed HEAD when it never reached GitHub",
+    ).toMatch(/could not confirm quiescence/i)
+  })
 })
 
 describe("full-mode.md step 8 quiescence gate (U2)", () => {
@@ -124,7 +150,7 @@ describe("full-mode.md step 8 quiescence gate (U2)", () => {
 
   test("states both bounds: proceed-on-timeout and the raised cap of 3 (R4)", () => {
     expect(step8, "per-wait timeout must be stated").toMatch(/timeout/i)
-    expect(step8, "the gate must proceed on timeout rather than hang").toMatch(/proceed/i)
+    expect(step8, "the gate must proceed on timeout rather than hang").toMatch(/proceed anyway/i)
     expect(step8).toContain("Max fix-round cap of 3")
     expect(step8).toContain("After the third fix-verify cycle")
     expect(
