@@ -104,7 +104,7 @@ When invoking any skill referenced below, resolve its name against the available
 
       where `<run-id>` is parsed from the check's details URL or workflow run.
 
-   3. Read the failure logs, identify the root cause, and apply a fix in the working tree. Do NOT weaken, skip, or mock the failing assertion to make it pass — repair the actual issue. If the failure is a flaky test that has no fix path, **record a flaky-no-fix-path disposition for this run** — carry it in your run context through the remaining iterations and the give-up GATE; there is nothing to commit, so skip step (4) for this iteration — and document it as the residual outcome below rather than retrying without a code change. The give-up GATE reads this disposition to decide whether to escalate (see the debug-escalation rung).
+   3. Read the failure logs, identify the root cause, and apply a fix in the working tree. Do NOT weaken, skip, or mock the failing assertion to make it pass — repair the actual issue. If a *specific* failing check is a flaky test that has no fix path, **record a flaky-no-fix-path disposition for this run, tagged to that check** — carry these per-check dispositions in your run context through the remaining iterations and the give-up GATE; there is nothing to commit for a flaky check, so skip step (4) for it — and document it as the residual outcome below rather than retrying without a code change. Tag each check individually: a run with several failing checks may have a flaky one alongside a genuinely-unfixable one, and the give-up GATE reads these per-check dispositions to decide whether to escalate (see the debug-escalation rung).
 
    4. Stage only the files you changed, commit, and push:
 
@@ -116,10 +116,10 @@ When invoking any skill referenced below, resolve its name against the available
 
    5. Return to iteration (1) with the next attempt counter.
 
-   GATE: STOP iterating after 3 failed attempts. If CI is still red after 3 fix cycles, do not loop again — branch on the failure disposition recorded during the iterations:
+   GATE: STOP iterating after 3 failed attempts. If CI is still red after 3 fix cycles, do not loop again — branch on the per-check dispositions recorded during the iterations:
 
-   - **Flaky-no-fix-path disposition recorded** (an iteration took the flaky branch in (3)): skip the escalation and go straight to the floor below. Escalation fires only for failures lfg attempted to fix and could not — not for failures already classified as flaky with no fix path.
-   - **Genuine exhaustion** (3 real fix attempts, no flaky disposition recorded): run the debug-escalation rung once before the floor.
+   - **Flaky-no-fix-path disposition recorded for every remaining unresolved failure**: skip the escalation and go straight to the floor below. Escalation fires only for failures lfg attempted to fix and could not — not for failures already classified as flaky with no fix path. The bypass requires *all* remaining failures to be flaky; a single flaky check does not suppress escalation when a genuine failure is still red.
+   - **Genuine exhaustion** (at least one remaining unresolved failure had real fix attempts and no flaky disposition): run the debug-escalation rung once before the floor.
 
    **Debug-escalation rung** (runs once; not a loop — no attempt counter, no return-to-iteration edge):
 

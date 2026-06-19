@@ -52,7 +52,7 @@ describe("sl-debug non-interactive mode (U1)", () => {
     expect(section).toContain("default-branch branch-creation prompt")
 
     // And restated at the Phase 3 workspace check at its point of action
-    const phase3 = content.split("**Workspace and branch check:**")[1].split("### Phase 4")[0]
+    const phase3 = sliceBetween(content, "**Workspace and branch check:**", "### Phase 4")
     expect(phase3).toContain("In `mode:unattended`, skip both checks below")
     expect(phase3).toContain(
       "uncommitted-work confirmation **and** the default-branch branch-creation prompt",
@@ -84,7 +84,8 @@ describe("sl-debug non-interactive mode (U1)", () => {
     const content = await readRepoFile(SL_DEBUG)
     const fastPath = sliceBetween(content, "**Trivial-bug fast-path:**", "**Otherwise**")
     expect(fastPath).toContain("mode:unattended")
-    expect(fastPath).toContain("skip this gate")
+    // Unattended resolves the fast-path's user-choice gate to "Fix it now" (no ambiguity)
+    expect(fastPath).toContain('treat the fast-path as "Fix it now"')
   })
 
   test("Phase 4 handoff returns without committing in unattended mode, at its point of action", async () => {
@@ -157,9 +158,7 @@ describe("lfg debug-escalation rung (U2)", () => {
     expect(step9).toContain("skip the escalation and go straight to the floor")
 
     // The flaky branch does not invoke sl-debug — slice the flaky bullet and assert no escalation there
-    const flakyBullet = step9
-      .split("Flaky-no-fix-path disposition recorded")[1]
-      .split("Genuine exhaustion")[0]
+    const flakyBullet = sliceBetween(step9, "Flaky-no-fix-path disposition recorded", "Genuine exhaustion")
     expect(flakyBullet).not.toContain("sl-debug")
   })
 
