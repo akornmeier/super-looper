@@ -281,6 +281,9 @@ json_str_or_null() {
 
 emit_record() {
   # emit_record <exit-code> — write the structured run-record to RECORD_FILE.
+  # Invoked best-effort ("emit_record ... || true") at each terminal site, so a
+  # write failure (e.g. an unwritable --log-dir) can never perturb the stable
+  # exit-code contract — the record is observability; the exit code is the API.
   # Reads driver state from globals and stays safe to call from the pre-launch
   # refusal sites: every optional global is defaulted, and target_pr_url (defined
   # later in the script) is never called here — the PR pointer is read from the
@@ -332,6 +335,9 @@ emit_record() {
 
   mkdir -p "$LOG_DIR" 2>/dev/null || true
   chmod 700 "$LOG_DIR" 2>/dev/null || true
+  # Ensure the transcript pointer resolves: create it empty when absent (the
+  # pre-launch refusal paths never open it). >> never truncates an existing log.
+  : >>"$LOG_FILE" 2>/dev/null || true
   cat >"$RECORD_FILE" <<EOF
 {
   "schema_version": $RECORD_SCHEMA_VERSION,
@@ -384,7 +390,7 @@ if [ "$CT" = "$CP" ] || [ "${CT#"$CP"/}" != "$CT" ] || [ "${CP#"$CT"/}" != "$CP"
   echo "loop.sh: refusing to run — target and plugin-dir overlap (self-edit hazard)." >&2
   echo "         target=$CT" >&2
   echo "         plugin-dir=$CP" >&2
-  emit_record "$EX_ISOLATION"
+  emit_record "$EX_ISOLATION" || true
   exit "$EX_ISOLATION"
 fi
 
@@ -483,7 +489,7 @@ fi
 
 # --- Fail fast when there is no verification path -----------------------------
 if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
-  emit_record "$EX_NO_VERIFY"
+  emit_record "$EX_NO_VERIFY" || true
   fail "$EX_NO_VERIFY" "no verification mode available: target has no git remote and no --verify-cmd was supplied."
 fi
 
@@ -626,11 +632,11 @@ done
 if [ "$done_reached" -ne 1 ]; then
   if [ "$timed_out" -eq 1 ]; then
     echo "loop.sh: FAILED (timeout) — last attempt timed out without DONE after $attempt attempt(s). Log: $LOG_FILE" >&2
-    emit_record "$EX_TIMEOUT"
+    emit_record "$EX_TIMEOUT" || true
     exit "$EX_TIMEOUT"
   fi
   echo "loop.sh: FAILED (cap-exhausted) — crashed without DONE after $attempt attempt(s) and no open PR. Log: $LOG_FILE" >&2
-  emit_record "$EX_CAP"
+  emit_record "$EX_CAP" || true
   exit "$EX_CAP"
 fi
 
@@ -657,10 +663,10 @@ if [ "$verify_green" -eq 1 ]; then
   else
     echo "loop.sh: SUCCESS — $route + --verify-cmd green. Log: $LOG_FILE"
   fi
-  emit_record "$EX_OK"
+  emit_record "$EX_OK" || true
   exit "$EX_OK"
 fi
 
 echo "loop.sh: FAILED (DONE-but-red) — finished but target verification is red. Log: $LOG_FILE" >&2
-emit_record "$EX_DONE_RED"
+emit_record "$EX_DONE_RED" || true
 exit "$EX_DONE_RED"

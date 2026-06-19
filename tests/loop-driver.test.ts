@@ -964,6 +964,20 @@ describe("run-record (R9)", () => {
     expect(rec.attempts.results).toEqual(["open-PR-reconciled"])
   })
 
+  test("a pre-launch record's transcript_log pointer resolves to a real file", async () => {
+    // isolation-refusal never opens the transcript; emit_record creates it empty
+    // so the pointer is not dangling.
+    const same = mkdirInWork("same")
+    const dir = recordsDir()
+    const { exitCode } = await runLoop(
+      ["--target", same, "--plugin-dir", same, "--seed", "x", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(3)
+    const rec = readRecord(dir)
+    expect(fs.existsSync(rec.pointers.transcript_log)).toBe(true)
+  })
+
   test("a usage error (exit 2) writes no record", async () => {
     const target = mkdirInWork("target")
     const plugin = mkdirInWork("plugin")
