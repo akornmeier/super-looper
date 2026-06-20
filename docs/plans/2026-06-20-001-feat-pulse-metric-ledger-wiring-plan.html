@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feat: Wire pulse strategy metrics to a committed run-record ledger</title>
+<style>
+  :root{
+    --ink:#1f2937; --ink-soft:#4b5563; --muted:#6b7280;
+    --bg:#fbfbfd; --card:#ffffff; --line:#e5e7eb;
+    --accent:#4f46e5; --accent-soft:#eef2ff; --accent-line:#c7d2fe;
+    --ok:#047857; --ok-soft:#ecfdf5; --ok-line:#a7f3d0;
+    --warn:#b45309; --warn-soft:#fff7ed; --warn-line:#fed7aa;
+    --defer:#7c3aed; --defer-soft:#f5f3ff; --defer-line:#ddd6fe;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.6;}
+  .wrap{max-width:920px;margin-inline:auto;padding:40px 24px 80px;}
+  p,li{max-width:72ch}
+  h1{font-size:1.9rem;line-height:1.2;margin:.2em 0 .1em;letter-spacing:-.01em}
+  h2{font-size:1.3rem;margin:0 0 .5em;letter-spacing:-.01em}
+  h3{font-size:1.02rem;margin:0}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.86em;background:#f3f4f6;padding:.1em .35em;border-radius:4px}
+  strong{color:inherit}
+  hr{border:none;border-top:1px solid var(--line);margin:36px 0}
+  section{margin:0 0 8px}
+  .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+  /* header */
+  .meta{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:14px 0 6px}
+  .chip{display:inline-flex;align-items:center;gap:.4em;font-size:.74rem;font-weight:600;
+    border-radius:999px;padding:.28em .7em;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+  .chip.k{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 4px}
+  .stat{flex:1 1 150px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .stat .n{font-size:1.3rem;font-weight:700;letter-spacing:-.02em}
+  .stat .l{font-size:.78rem;color:var(--muted)}
+  /* tables */
+  table{border-collapse:collapse;width:100%;margin:6px 0 4px;font-size:.93rem}
+  th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+  td.id,th.id{width:54px;white-space:nowrap}
+  .idchip{font-family:var(--mono);font-size:.78rem;font-weight:600;background:var(--accent-soft);
+    color:var(--accent);border:1px solid var(--accent-line);border-radius:6px;padding:.05em .4em}
+  .grouphead{font-size:.74rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--ink-soft);margin:18px 0 2px}
+  /* cards */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
+  article.unit{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
+  .unit > .uhead{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+  dl.strip{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
+  dl.strip dt{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding-top:2px}
+  dl.strip dd{margin:0}
+  dl.strip dd code{font-size:.82em}
+  details{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+  details > summary{cursor:pointer;font-size:.82rem;font-weight:600;color:var(--ink-soft);list-style:revert}
+  details[open] > summary{margin-bottom:6px}
+  details ul{margin:6px 0}
+  .note{border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.9rem;border:1px solid}
+  .note.exec{background:var(--warn-soft);border-color:var(--warn-line);color:#7c4a06}
+  .note .lbl{font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:2px}
+  /* scope + risk callouts */
+  .callout{border-radius:10px;padding:12px 14px;margin:10px 0;border:1px solid}
+  .callout .lbl{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px}
+  .c-in{background:var(--ok-soft);border-color:var(--ok-line)} .c-in .lbl{color:var(--ok)}
+  .c-defer{background:var(--defer-soft);border-color:var(--defer-line)} .c-defer .lbl{color:var(--defer)}
+  .c-follow{background:var(--accent-soft);border-color:var(--accent-line)} .c-follow .lbl{color:var(--accent)}
+  .risk{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0}
+  .risk .eb{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+  .risk.open .eb{color:var(--warn)} .risk.mit .eb{color:var(--ok)}
+  figure{margin:14px 0}
+  figure svg{max-width:100%;height:auto;display:block}
+  figcaption{font-size:.82rem;color:var(--muted);margin-top:6px}
+  .refs li{margin:4px 0}
+  footer.composition-signal{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);
+    font-size:.78rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="eyebrow">Implementation Plan</p>
+<h1>Wire pulse strategy metrics to a committed run-record ledger</h1>
+<div class="meta">
+  <span class="chip k">type: feat</span>
+  <span class="chip"><time datetime="2026-06-20">2026-06-20</time></span>
+  <span class="chip">origin: <a href="https://github.com/akornmeier/super-looper/blob/main/docs/brainstorms/2026-06-20-pulse-strategy-metric-wiring-requirements.md"><code>2026-06-20-pulse-strategy-metric-wiring-requirements.md</code></a></span>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="n">1</div><div class="l">strategy metric moved from <code>no data</code> to live</div></div>
+  <div class="stat"><div class="n">5</div><div class="l">implementation units</div></div>
+  <div class="stat"><div class="n">10</div><div class="l">requirements across 3 concerns</div></div>
+  <div class="stat"><div class="n">3</div><div class="l">metrics still deferred / proxied</div></div>
+</div>
+
+<hr>
+
+<section id="summary">
+  <h2>Summary</h2>
+  <p>Make the loop driver's per-run records durable in a committed JSONL ledger, teach the
+  <code>sl-product-pulse</code> skill to read a local ledger source, and repoint
+  <code>unattended_completion_rate</code> from <code>no data (instrumentation pending)</code> to a real
+  <code>success / total</code> rate over the pulse window. Add a git-derived, clearly labeled
+  learning-reuse proxy. Goal-fidelity scoring stays out of scope.</p>
+</section>
+
+<hr>
+
+<section id="problem-frame">
+  <h2>Problem Frame</h2>
+  <p>The loop driver already emits a structured run-record per terminal run — the hard part is done.
+  Research confirmed the gap is a <em>corpus and a pointer</em>, not a pipeline, but it also surfaced two
+  facts the brainstorm assumed away:</p>
+  <ul>
+    <li>The pulse skill has <strong>no file/JSONL source path</strong>. Source resolution routes a metric name to a
+      provider token (analytics/tracing/payments/DB) and then assumes a provider query. Reading a committed
+      ledger and aggregating <code>success/total</code> is not in the skill today, so a real skill change is
+      required — a config edit alone resolves to <code>no data</code>.</li>
+    <li>The gitignored <code>config.local.yaml</code> <strong>does not travel</strong> to a fresh checkout or worktree
+      (per the plugin's own config-reading guidance). The committed ledger travels to the cloud routine's
+      checkout; the routing config does not. That bounds where the live metric can be computed.</li>
+  </ul>
+  <p>A past CI learning adds a constraint: a directory that exists only on the author's disk is absent on a
+  clean checkout, and code that distinguishes "missing" from "empty" then behaves differently in CI than
+  locally.</p>
+</section>
+
+<hr>
+
+<section id="htd">
+  <h2>High-Level Technical Design</h2>
+  <p>The metric's data crosses a process and machine boundary the prose can name but a picture makes
+  obvious: records are produced ephemerally on operator machines running the loop against <em>other</em> repos,
+  then promoted across the durability boundary into this repo's committed ledger, where the pulse reads them.</p>
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="Data flow from loop run to the unattended completion rate metric, across an ephemeral-to-committed boundary.">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+        </marker>
+        <style>
+          .bx{stroke-width:1.5;rx:8}
+          .eph{fill:#fff7ed;stroke:#f59e0b}
+          .com{fill:#eef2ff;stroke:#6366f1}
+          .t1{font:600 12px var(--sans,sans-serif);fill:#1f2937}
+          .t2{font:400 10px var(--mono,monospace);fill:#4b5563}
+          .al{font:600 10.5px var(--sans,sans-serif);fill:#374151;paint-order:stroke fill;stroke:#fbfbfd;stroke-width:3px}
+          .bl{font:700 9px var(--sans,sans-serif);letter-spacing:.06em;fill:#6b7280}
+          .edge{stroke:#9ca3af;stroke-width:1.6;fill:none}
+        </style>
+      </defs>
+
+      <!-- boundary -->
+      <line x1="24" y1="152" x2="634" y2="152" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 4"/>
+      <text class="bl" x="24" y="146">EPHEMERAL &middot; OPERATOR MACHINES</text>
+      <text class="bl" x="24" y="168">COMMITTED &middot; THIS REPO &rarr; CLOUD CHECKOUT</text>
+
+      <!-- row 1 -->
+      <rect class="bx eph" x="24" y="44" width="170" height="54" rx="8"/>
+      <text class="t1" x="109" y="66" text-anchor="middle">loop.sh run</text>
+      <text class="t2" x="109" y="84" text-anchor="middle">target repo</text>
+
+      <rect class="bx eph" x="244" y="44" width="170" height="54" rx="8"/>
+      <text class="t1" x="329" y="66" text-anchor="middle">run-record JSON</text>
+      <text class="t2" x="329" y="84" text-anchor="middle">/tmp/&hellip;/loop-*.json</text>
+
+      <rect class="bx eph" x="464" y="44" width="170" height="54" rx="8"/>
+      <text class="t1" x="549" y="66" text-anchor="middle">wrapper append</text>
+      <text class="t2" x="549" y="84" text-anchor="middle">loop.example.env</text>
+
+      <!-- row 2 -->
+      <rect class="bx com" x="464" y="206" width="170" height="54" rx="8"/>
+      <text class="t1" x="549" y="228" text-anchor="middle">ledger.jsonl</text>
+      <text class="t2" x="549" y="246" text-anchor="middle">docs/run-records/</text>
+
+      <rect class="bx com" x="244" y="206" width="170" height="54" rx="8"/>
+      <text class="t1" x="329" y="228" text-anchor="middle">sl-product-pulse</text>
+      <text class="t2" x="329" y="246" text-anchor="middle">read + aggregate</text>
+
+      <rect class="bx com" x="24" y="206" width="170" height="54" rx="8"/>
+      <text class="t1" x="109" y="228" text-anchor="middle">unattended_</text>
+      <text class="t1" x="109" y="242" text-anchor="middle">completion_rate</text>
+
+      <!-- arrows row1 L->R -->
+      <line class="edge" x1="194" y1="71" x2="240" y2="71" marker-end="url(#arr)"/>
+      <text class="al" x="217" y="62" text-anchor="middle">emit</text>
+      <line class="edge" x1="414" y1="71" x2="460" y2="71" marker-end="url(#arr)"/>
+      <text class="al" x="437" y="62" text-anchor="middle">pick newest</text>
+
+      <!-- vertical hop across boundary -->
+      <line class="edge" x1="549" y1="98" x2="549" y2="204" marker-end="url(#arr)"/>
+      <text class="al" x="560" y="140" text-anchor="start">append line</text>
+      <text class="al" x="560" y="153" text-anchor="start">outside env -i</text>
+
+      <!-- arrows row2 R->L -->
+      <line class="edge" x1="464" y1="233" x2="418" y2="233" marker-end="url(#arr)"/>
+      <text class="al" x="441" y="224" text-anchor="middle">read</text>
+      <line class="edge" x1="244" y1="233" x2="198" y2="233" marker-end="url(#arr)"/>
+      <text class="al" x="221" y="224" text-anchor="middle">rate / window</text>
+    </svg>
+    <figcaption>The loop runs against other repos on operator machines; the wrapper append is the single
+    promotion step across the ephemeral&rarr;committed boundary. Learning-reuse (not shown) is a one-step git
+    query over this repo's history, not a multi-stage flow.</figcaption>
+  </figure>
+</section>
+
+<hr>
+
+<section id="requirements">
+  <h2>Requirements</h2>
+
+  <div class="grouphead">Corpus durability and centralization</div>
+  <table>
+    <thead><tr><th class="id">ID</th><th>Requirement</th></tr></thead>
+    <tbody>
+      <tr><td class="id"><span id="r1" class="idchip">R1</span></td><td>Run-records accumulate in a durable location that survives reboot, not only the ephemeral <code>/tmp/super-looper/loop/</code>.</td></tr>
+      <tr><td class="id"><span id="r2" class="idchip">R2</span></td><td>Records collect into a single committed, append-only JSONL ledger (one record per line) readable by both a local pulse and the cloud pulse checkout.</td></tr>
+      <tr><td class="id"><span id="r3" class="idchip">R3</span></td><td>The append occurs outside the loop's guarded <code>env -i</code> launch (operator-side wrapper); <code>loop.sh</code> stays the sole writer of records.</td></tr>
+      <tr><td class="id"><span id="r4" class="idchip">R4</span></td><td>The ledger inherits the record's no-PII / index-not-copy property; the append step adds no seed text or identifiers.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grouphead">Pulse wiring</div>
+  <table>
+    <thead><tr><th class="id">ID</th><th>Requirement</th><th>Covered by</th></tr></thead>
+    <tbody>
+      <tr><td class="id"><span id="r5" class="idchip">R5</span></td><td>The pulse computes unattended completion rate as <code>success / total</code> over records whose <code>timing.started_at</code> falls in the window, where <code>success</code> = run-record <code>outcome == "success"</code>.</td><td><a href="#u3">U3</a></td></tr>
+      <tr><td class="id"><span id="r6" class="idchip">R6</span></td><td>The pulse skill gains a generic local-file / JSONL "ledger" source kind it can read and aggregate over the window. Product-agnostic; not super-looper-specific.</td><td><a href="#u3">U3</a></td></tr>
+      <tr><td class="id"><span id="r7" class="idchip">R7</span></td><td><code>unattended_completion_rate</code> moves out of <code>pulse_pending_metrics</code> into <code>pulse_metric_sources</code> pointing at the ledger source.</td><td><a href="#u4">U4</a></td></tr>
+      <tr><td class="id"><span id="r8" class="idchip">R8</span></td><td>When the ledger is absent or empty, the metric renders <code>no data</code> gracefully — never an error or a fabricated zero rate.</td><td><a href="#u3">U3</a></td></tr>
+      <tr><td class="id"><span id="r9" class="idchip">R9</span></td><td>Learning reuse renders a labeled citation-count proxy (window commits/PRs referencing <code>docs/solutions/</code> or <code>[[backlinks]]</code>) rather than <code>no data</code>.</td><td><a href="#u5">U5</a></td></tr>
+    </tbody>
+  </table>
+
+  <div class="grouphead">Integrity and CI</div>
+  <table>
+    <thead><tr><th class="id">ID</th><th>Requirement</th><th>Covered by</th></tr></thead>
+    <tbody>
+      <tr><td class="id"><span id="r10" class="idchip">R10</span></td><td>The ledger's canonical directory survives a clean checkout via a tracked placeholder; tests distinguish missing-path (config error) from empty-ledger (valid, zero runs) and behave identically locally and in CI.</td><td><a href="#u1">U1</a>, <a href="#u3">U3</a></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr>
+
+<section id="ktd">
+  <h2>Key Technical Decisions</h2>
+
+  <div class="card"><div class="uhead"><span class="idchip" id="ktd1">KTD1</span><h3>Ledger lives at <code>docs/run-records/ledger.jsonl</code> in this repo</h3></div>
+    <p>Committed here rather than in a dedicated metrics repo: it travels to the cloud routine's checkout, mirrors
+    the existing <code>docs/pulse-reports/</code> precedent, and needs no second repo wired. A dedicated metrics repo
+    only earns its cost if loop runs across many target repos need cross-project aggregation — YAGNI for one plugin.</p>
+  </div>
+
+  <div class="card"><div class="uhead"><span class="idchip" id="ktd2">KTD2</span><h3>Append in the operator wrapper, selecting newest <code>loop-*.json</code> by mtime</h3></div>
+    <p><code>RUN_ID</code> embeds the <code>loop.sh</code> PID and a runtime timestamp and is not exported, so the wrapper
+    cannot reconstruct the record filename a priori — it selects the newest <code>loop-*.json</code> in <code>LOG_DIR</code>
+    by mtime. The append runs in the operator's normal shell after the real run, never under <code>env -i</code>, so the
+    self-edit guard (which scopes only the <code>claude</code> child) never fires.</p>
+  </div>
+
+  <div class="card"><div class="uhead"><span class="idchip" id="ktd3">KTD3</span><h3>Add a generic JSONL-ledger source kind to the shipped pulse skill</h3></div>
+    <p>The capability is "read a local JSONL ledger and aggregate a field over the window," not "read super-looper
+    run-records." Keeping it product-agnostic means any pulse user can point a metric at a local ledger via config,
+    and the super-looper-specific part (which field, which predicate) stays in the metric's own definition the pulse
+    already re-reads from <code>STRATEGY.md</code>.</p>
+  </div>
+
+  <div class="card"><div class="uhead"><span class="idchip" id="ktd4">KTD4</span><h3><code>success := outcome == "success"</code>; the give-up floor is already a failure</h3></div>
+    <p>The loop's honest terminal states — DONE-but-red, timeout, cap-exhausted, the give-up floor — all map to
+    <code>outcome: "failure"</code> in the record by construction (only DONE + green verification yields
+    <code>success</code>). So the metric needs no new classification and cannot overstate completion by counting a
+    clean-exit give-up as a win.</p>
+  </div>
+
+  <div class="card"><div class="uhead"><span class="idchip" id="ktd5">KTD5</span><h3>Cloud routing stays in the self-contained routine prompt; live metric targets the local pulse</h3></div>
+    <p>Because the gitignored config does not travel, the weekly cloud routine cannot read <code>pulse_metric_sources</code>.
+    The committed ledger <em>does</em> travel, so the cloud routine could compute the metric — but its routing lives in
+    the RemoteTrigger prompt, and updating that prompt is an out-of-band operation, deferred to follow-up. This plan's
+    live metric is scoped to the local pulse.</p>
+  </div>
+
+  <div class="card"><div class="uhead"><span class="idchip" id="ktd6">KTD6</span><h3>Tracked <code>.gitkeep</code>; empty-ledger is a valid no-data state distinct from missing-path</h3></div>
+    <p>A <code>.gitkeep</code> keeps <code>docs/run-records/</code> present on a clean checkout. The aggregator treats an
+    absent or empty ledger as a graceful "no data yet," not a missing-path error — the distinction the past CI learning
+    warns must behave identically locally and in CI.</p>
+  </div>
+</section>
+
+<hr>
+
+<section id="units">
+  <h2>Implementation Units</h2>
+
+  <article class="unit" id="u1">
+    <div class="uhead"><span class="idchip">U1</span><h3>Establish the committed ledger directory</h3></div>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Make <code>docs/run-records/</code> the canonical committed home for the ledger and ensure it survives a clean checkout.</dd>
+      <dt>Requirements</dt><dd>R2, R10</dd>
+      <dt>Dependencies</dt><dd>none</dd>
+      <dt>Files</dt><dd><code>docs/run-records/.gitkeep</code> (new), <code>docs/run-records/README.md</code> (new, brief)</dd>
+    </dl>
+    <details>
+      <summary>Approach, patterns, test expectation</summary>
+      <p><strong>Approach:</strong> Commit a tracked <code>.gitkeep</code> so the directory exists on any clone; the
+      <code>ledger.jsonl</code> file itself appears on first append (its absence is a valid no-data state, not an error).
+      A short README states the file's shape (one run-record JSON object per line, index-not-copy, no PII) and that it is
+      append-only operator output.</p>
+      <p><strong>Patterns to follow:</strong> <code>docs/pulse-reports/</code> as the precedent for skill-adjacent durable
+      data under <code>docs/</code>; the empty-dir CI learning for the placeholder choice.</p>
+      <p><strong>Test expectation:</strong> none — scaffolding. The missing-vs-empty behavior is exercised in U3.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u2">
+    <div class="uhead"><span class="idchip">U2</span><h3>Operator-side ledger append in the loop wrapper</h3></div>
+    <dl class="strip">
+      <dt>Goal</dt><dd>After a real <code>loop.sh</code> run, append the newest run-record as one compact JSONL line to the committed ledger.</dd>
+      <dt>Requirements</dt><dd>R1, R3, R4</dd>
+      <dt>Dependencies</dt><dd>U1</dd>
+      <dt>Files</dt><dd><code>scripts/append-run-record.sh</code> (new), <code>scripts/loop.example.env</code> (modify), <code>tests/append-run-record.test.ts</code> (new)</dd>
+    </dl>
+    <div class="note exec"><span class="lbl">Execution note</span>Write the empty-<code>LOG_DIR</code> guard test first — a no-op on no records is the behavior that keeps the wrapper safe to run unconditionally.</div>
+    <details>
+      <summary>Approach, patterns, test scenarios, verification</summary>
+      <p><strong>Approach:</strong> A small helper script resolves <code>LOG_DIR</code> (default
+      <code>/tmp/super-looper/loop</code>, or the value passed to <code>--log-dir</code>), selects the newest
+      <code>loop-*.json</code> by mtime, compacts it to a single line, and appends to
+      <code>docs/run-records/ledger.jsonl</code>. The wrapper calls it after the real run (after the final
+      <code>loop.sh</code> invocation), in the operator's normal shell — outside <code>env -i</code>. The record is an
+      index with no inlined seed text, so the no-PII property holds without scrubbing.</p>
+      <p><strong>Patterns to follow:</strong> <code>scripts/loop.sh</code> JSON emission and <code>LOG_DIR</code> handling;
+      <code>tests/loop-driver.test.ts</code> as the TS-harness-over-shell-script pattern (temp dirs, binary stubs).</p>
+      <p><strong>Test scenarios:</strong></p>
+      <ul>
+        <li>Happy: a <code>LOG_DIR</code> with several <code>loop-*.json</code> of differing mtimes → only the newest is appended, as one valid compact JSON line.</li>
+        <li>Edge: empty <code>LOG_DIR</code> (no records) → exits 0, appends nothing, no error.</li>
+        <li>Append-only: a second invocation appends a second line; prior lines are byte-preserved.</li>
+        <li>Integrity: the appended line round-trips as JSON with the expected run-record keys and no fields added by the wrapper.</li>
+      </ul>
+      <p><strong>Verification:</strong> Running the wrapper against a fixture <code>LOG_DIR</code> grows the ledger by exactly one well-formed line per run; an empty dir leaves it untouched.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u3">
+    <div class="uhead"><span class="idchip">U3</span><h3>Add a JSONL-ledger source kind to the pulse skill</h3></div>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Teach the pulse to resolve a metric whose source is a local JSONL ledger, read it, window-filter by a timestamp field, and aggregate.</dd>
+      <dt>Requirements</dt><dd>R5, R6, R8, R10</dd>
+      <dt>Dependencies</dt><dd>U1</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-product-pulse/references/report-template.md</code> (modify), <code>plugins/super-looper/skills/sl-product-pulse/SKILL.md</code> (modify), <code>plugins/super-looper/skills/sl-product-pulse/references/interview.md</code> (modify, brief)</dd>
+    </dl>
+    <div class="note exec"><span class="lbl">Execution note</span>Validate behaviorally via the <code>skill-creator</code> eval workflow, not <code>bun test</code> — plugin skill prose caches at session start, so in-session typed dispatch tests pre-edit content (per <code>AGENTS.md</code>).</div>
+    <details>
+      <summary>Approach, patterns, test scenarios, verification</summary>
+      <p><strong>Approach:</strong> Extend the source-resolution prose so a metric source can name a local JSONL ledger
+      (e.g., a <code>ledger</code> token plus the repo-relative path, defaulting to <code>docs/run-records/ledger.jsonl</code>).
+      When resolved, the agent reads the file, filters records into the pulse window by their timestamp field, and computes
+      the metric the strategy defines — for unattended completion rate, the share with <code>outcome == "success"</code>.
+      An absent or empty ledger renders <code>no data</code>; a malformed line is skipped, not fatal. Keep the source kind
+      generic — "a local JSONL ledger aggregated over the window" — so it is reusable beyond this product.</p>
+      <p><strong>Patterns to follow:</strong> the existing source-resolution block in <code>report-template.md</code>
+      (pending → sourced ordering, <code>(default source)</code> marker); the DB-read path in <code>SKILL.md</code> Phase 2.1
+      as the nearest "read local data" precedent.</p>
+      <p><strong>Test scenarios (skill-creator evals):</strong></p>
+      <ul>
+        <li>Populated ledger, mixed outcomes in window → renders the rate (e.g., 3/4 = 75%), not <code>no data</code>.</li>
+        <li>Absent or empty ledger → renders <code>no data</code>, no error.</li>
+        <li>Records with <code>started_at</code> outside the window → excluded from numerator and denominator.</li>
+        <li>Give-up / DONE-but-red records (<code>outcome: "failure"</code>) → counted in denominator only.</li>
+        <li>A malformed JSONL line present → skipped; the rest still aggregate.</li>
+      </ul>
+      <p><strong>Verification:</strong> A pulse run with the ledger source configured and a seeded ledger reports a concrete rate; with no ledger, the metric line reads <code>no data</code> and the run completes.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u4">
+    <div class="uhead"><span class="idchip">U4</span><h3>Repoint config and document the ledger source</h3></div>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Activate the metric locally and make the new source discoverable to other users.</dd>
+      <dt>Requirements</dt><dd>R7</dd>
+      <dt>Dependencies</dt><dd>U3</dd>
+      <dt>Files</dt><dd><code>.super-looper/config.local.yaml</code> (modify, machine-local), <code>.super-looper/config.local.example.yaml</code> (modify, committed)</dd>
+    </dl>
+    <details>
+      <summary>Approach, test expectation</summary>
+      <p><strong>Approach:</strong> In the local config, remove <code>unattended_completion_rate</code> from
+      <code>pulse_pending_metrics</code> and add it to <code>pulse_metric_sources</code> pointing at the ledger source
+      (pending is checked first, so it must leave the pending list to render). In the committed example config, document the
+      ledger source token shape so users discover the option. The local config is gitignored and machine-local; this edit
+      affects only the local pulse, consistent with KTD5.</p>
+      <p><strong>Test expectation:</strong> none — config. Behavior is covered by U3's evals.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u5">
+    <div class="uhead"><span class="idchip">U5</span><h3>Learning-reuse citation-count proxy</h3></div>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Render <code>learning_reuse</code> as a labeled git-derived proxy instead of <code>no data</code>.</dd>
+      <dt>Requirements</dt><dd>R9</dd>
+      <dt>Dependencies</dt><dd>U3 (shares the pulse rendering surface)</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-product-pulse/references/report-template.md</code> (modify), <code>plugins/super-looper/skills/sl-product-pulse/SKILL.md</code> (modify), <code>.super-looper/config.local.yaml</code> (modify, machine-local)</dd>
+    </dl>
+    <div class="note exec"><span class="lbl">Execution note</span>Validate via <code>skill-creator</code> eval; same plugin-caching caveat as U3.</div>
+    <details>
+      <summary>Approach, test scenarios, verification</summary>
+      <p><strong>Approach:</strong> For <code>learning_reuse</code>, the pulse counts window commits/PRs referencing
+      <code>docs/solutions/</code> paths or <code>[[backlink]]</code> citations and renders the count with an explicit
+      <em>(proxy)</em> marker — the count approximates reuse, it is not a "prevented-a-repeat" measure. Route it off the
+      pending list to the existing git source. Capturing true reuse semantics stays deferred.</p>
+      <p><strong>Test scenarios (skill-creator evals):</strong></p>
+      <ul>
+        <li>Window commits cite <code>docs/solutions/…</code> → renders the citation count marked <em>(proxy)</em>.</li>
+        <li>No citations in window → renders <code>0 (proxy)</code>, not an error.</li>
+      </ul>
+      <p><strong>Verification:</strong> A pulse run over a window with solution citations reports a labeled count; the label makes the proxy nature unmistakable to the reader.</p>
+    </details>
+  </article>
+</section>
+
+<hr>
+
+<section id="scope">
+  <h2>Scope Boundaries</h2>
+  <div class="callout c-in"><span class="lbl">In scope</span>
+    Unattended completion rate end-to-end (durable corpus, committed ledger, wrapper append, pulse ledger source, local config repoint) and the learning-reuse citation proxy.</div>
+  <div class="callout c-defer"><span class="lbl">Deferred for later</span>
+    Goal-fidelity scoring (an LLM-judged plan-vs-outcome comparison keyed by the record's <code>run_id</code>; no ground-truth mechanism). True learning-<em>reuse</em> semantics beyond the citation proxy. Dashboards or alerting. Ledger retention / rotation. Multi-target aggregation policy when loops run against many repos.</div>
+  <div class="callout c-follow"><span class="lbl">Deferred to follow-up work</span>
+    Update the weekly cloud routine's RemoteTrigger prompt to compute the metric from the committed ledger (out-of-band; not a repo change). After landing, capture the net-new learnings — the pulse config contract, the run-record schema as a consumed artifact, and the "gitignored config doesn't travel" failure — via <code>/sl-compound</code>.</div>
+</section>
+
+<hr>
+
+<section id="risks">
+  <h2>Risks &amp; Dependencies</h2>
+  <div class="risk open"><div class="eb">OPEN &middot; FLAGGED</div>
+    <strong>Cloud pulse won't show the metric until the routine prompt is updated.</strong> The committed ledger travels,
+    but the gitignored routing config does not, and the weekly routine reads git signals only. A reader expecting the cloud
+    report to show the rate will see it absent until the follow-up prompt update lands (KTD5).</div>
+  <div class="risk open"><div class="eb">OPEN &middot; DEFERRED TO U2</div>
+    <strong>Concurrent loops in one <code>LOG_DIR</code> can confuse newest-by-mtime selection.</strong> If an operator runs
+    overlapping loops sharing a log dir, the wrapper may append the wrong record. Acceptable for v1 (rare); note the limit and
+    consider keying on the record's <code>ended_at</code> if it becomes real.</div>
+  <div class="risk mit"><div class="eb">MITIGATED</div>
+    <strong>Plugin skill caching blocks in-session validation.</strong> Behavioral changes to the pulse skill (U3, U5) cannot
+    be validated by in-session typed-agent dispatch. Mitigation: validate via <code>skill-creator</code> evals or a fresh
+    session, per <code>AGENTS.md</code>.</div>
+  <div class="risk mit"><div class="eb">MITIGATED</div>
+    <strong>New committed directory absent on clean checkout.</strong> A directory that exists only locally diverges between
+    local and CI. Mitigation: tracked <code>.gitkeep</code> (U1) plus an empty-ledger-is-valid path (U3); run <code>bun test</code>
+    and <code>bun run release:validate</code> before landing since skill prose changed.</div>
+</section>
+
+<hr>
+
+<section id="open-questions">
+  <h2>Open Questions</h2>
+  <ul>
+    <li><strong>Ledger source token shape</strong> — whether the config value is <code>ledger:&lt;path&gt;</code>, a bare path, or a token plus a path default. Resolve in U3; lean to the simplest form the pulse agent can follow, defaulting the path to <code>docs/run-records/ledger.jsonl</code>.</li>
+    <li><strong>Record selection under concurrency</strong> — newest-by-mtime versus matching the record's own <code>ended_at</code>. Resolve in U2; mtime for v1.</li>
+  </ul>
+</section>
+
+<hr>
+
+<section id="sources">
+  <h2>Sources &amp; Research</h2>
+  <ul class="refs">
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/brainstorms/2026-06-20-pulse-strategy-metric-wiring-requirements.md"><code>docs/brainstorms/2026-06-20-pulse-strategy-metric-wiring-requirements.md</code></a> — origin brainstorm.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/scripts/loop.sh"><code>scripts/loop.sh</code></a> — run-record JSON shape (<code>:341</code>–<code>376</code>), <code>RUN_ID</code>/<code>RECORD_FILE</code> (<code>:257</code>–<code>259</code>), isolation guard (<code>:389</code>–<code>395</code>), <code>env -i</code> allowlist (<code>:438</code>–<code>440</code>).</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/scripts/loop.example.env"><code>scripts/loop.example.env</code></a> — operator wrapper; the append seam is after the final run invocation.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/sl-product-pulse/references/report-template.md"><code>sl-product-pulse/references/report-template.md</code></a> — source resolution (<code>:12</code>–<code>15</code>); no file-source path today.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/sl-product-pulse/SKILL.md"><code>sl-product-pulse/SKILL.md</code></a> — Phase 2.1 query dispatch (provider-shaped).</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/AGENTS.md"><code>plugins/super-looper/AGENTS.md</code></a> — config reading from repo root and the worktree/config-travel rule (<code>:262</code>–<code>281</code>).</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/developer-experience/git-untracked-empty-dirs-break-ci.md"><code>docs/solutions/developer-experience/git-untracked-empty-dirs-break-ci.md</code></a> — placeholder + missing-vs-empty discipline.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/skill-design/bounded-escalation-rung.md"><code>docs/solutions/skill-design/bounded-escalation-rung.md</code></a> — the give-up floor; why <code>outcome == "success"</code> is the right predicate.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/loop-driver.md"><code>docs/loop-driver.md</code></a> — Run record section (index-not-copy, written on every operational terminal path).</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/STRATEGY.md"><code>STRATEGY.md</code></a> — the four key metrics and their measurement notes.</li>
+    <li>Run-record substrate shipped in <a href="https://github.com/akornmeier/super-looper/pull/15">PR #15</a>.</li>
+  </ul>
+</section>
+
+<footer class="composition-signal">Composed 2026-06-20 by sl-plan from <code>docs/brainstorms/2026-06-20-pulse-strategy-metric-wiring-requirements.md</code>. Plan is a decision artifact; execution progress is derived from git, not stored here.</footer>
+
+</div>
+</body>
+</html>
