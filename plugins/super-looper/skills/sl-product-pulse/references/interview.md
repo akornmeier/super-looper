@@ -124,6 +124,8 @@ The answer produces (tool name, query shape). If multiple entries land in the sa
 
 **Persist per-strategy-metric source mapping.** For each strategy metric whose source differs from the default (`pulse_analytics_source` for analytics-class metrics, `pulse_payments_source` for revenue/payments-class metrics, etc.), record the override in `pulse_metric_sources` as a `metric=source` pair. Example: if `pulse_analytics_source` is `posthog` but `nps` is captured in Delighted, write `pulse_metric_sources: "nps=delighted"`. Strategy metrics whose source matches the class default do not need an entry. Without this mapping, multi-source setups silently lose the per-metric routing between runs.
 
+**Local JSONL ledger as a source.** A metric whose data lives in a committed JSONL file (one record per line) rather than a provider can be wired with the `ledger` token: `metric=ledger` (default path `docs/run-records/ledger.jsonl`) or `metric=ledger:<repo-relative-path>`. The pulse reads the file from disk, window-filters by the metric's timestamp field, and aggregates — no provider connection needed. Right call when the signal is already captured as committed records.
+
 **Dual-source arbitration.** If a single signal could be answered from two different sources (e.g., both PostHog and a read-only DB replica have the search events), pick one as canonical and name it in the config. Ask: "Both `{{source A}}` and `{{source B}}` can cover this - which is the source of truth? The pulse queries one per signal so numbers stay consistent across runs." Capture the canonical source. The other tool may still be used for ad-hoc investigation but is not wired into the pulse.
 
 **If the user says "we don't have that instrumented yet"** (common for strategy-seeded metrics like retention or NPS): offer two off-ramps and let them pick.
@@ -244,7 +246,7 @@ pulse_analytics_source: {{posthog | mixpanel | custom | omit}}
 pulse_tracing_source: {{sentry | datadog | custom | omit}}
 pulse_payments_source: {{stripe | custom | omit}}    # omit if not used
 pulse_db_enabled: {{true | false}}                   # default false; read-only DB access only
-pulse_metric_sources: "{{metric=source,metric=source}}"  # strategy-metric -> source overrides; omit metrics that use the class default (pulse_analytics_source for analytics-class, pulse_payments_source for revenue, etc.)
+pulse_metric_sources: "{{metric=source,metric=source}}"  # strategy-metric -> source overrides; omit metrics that use the class default (pulse_analytics_source for analytics-class, pulse_payments_source for revenue, etc.); a source may be a `ledger` token for a local JSONL ledger (e.g. unattended_completion_rate=ledger)
 pulse_pending_metrics: "{{metric,metric}}"           # strategy metrics deferred for instrumentation; render as 'no data'; omit if none
 pulse_excluded_metrics: "{{metric,metric}}"          # strategy metrics intentionally not in pulse; omit if none
 ~~~
