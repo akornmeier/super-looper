@@ -52,6 +52,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+run_id_of() {
+  # Print the run_id value from a JSON record read on stdin; empty if absent.
+  grep -o '"run_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed -E 's/.*"([^"]*)"$/\1/'
+}
+
 # Newest record by mtime. ls -1t is safe here (record names have no spaces). A
 # missing dir or no match yields empty (ls error swallowed) — the no-op guard
 # the wrapper relies on.
@@ -65,6 +70,21 @@ fi
 if [ ! -s "$newest" ]; then
   echo "[append-run-record] newest record $(basename "$newest") is empty; nothing to append" >&2
   exit 0
+fi
+
+# Idempotency: skip when this record is already the last ledger line. The wrapper
+# runs the append unconditionally, but loop.sh writes NO record on a pre-flight
+# /usage error (exit 2) or --dry-run — so the "newest" loop-*.json may be a prior
+# run already promoted. Re-appending it would duplicate a record and bias the
+# metric. run_ids are unique per run (timestamp + pid), so a match against the
+# last ledger line means "already appended."
+record_run_id="$(run_id_of < "$newest" || true)"
+if [ -n "$record_run_id" ] && [ -s "$LEDGER" ]; then
+  last_run_id="$(tail -n1 "$LEDGER" | run_id_of || true)"
+  if [ "$record_run_id" = "$last_run_id" ]; then
+    echo "[append-run-record] newest record ($record_run_id) already appended; skipping" >&2
+    exit 0
+  fi
 fi
 
 mkdir -p "$(dirname "$LEDGER")"

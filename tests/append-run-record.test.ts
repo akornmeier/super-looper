@@ -228,3 +228,42 @@ describe("argument validation", () => {
     expect(stderr).toContain("unknown argument")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Idempotency: re-running with no new record (e.g. loop.sh exited 2 / --dry-run
+// and wrote nothing, leaving a prior run as the newest loop-*.json) must not
+// re-append the same record and double-count it in the metric.
+// ---------------------------------------------------------------------------
+describe("idempotency", () => {
+  test("re-running with no new record does not duplicate the last ledger line", async () => {
+    const logDir = mkLogDir()
+    const ledger = path.join(work, "ledger.jsonl")
+    const rec = record({ run_id: "loop-only-once" })
+    writeRecord(logDir, "loop-1.json", rec, 1000)
+
+    await runAppend(["--log-dir", logDir, "--ledger", ledger])
+    // Second invocation, newest record unchanged (no new loop run happened).
+    const { exitCode } = await runAppend(["--log-dir", logDir, "--ledger", ledger])
+    expect(exitCode).toBe(0)
+
+    const lines = ledgerLines(ledger)
+    expect(lines.length).toBe(1)
+    expect(JSON.parse(lines[0])).toEqual(rec)
+  })
+
+  test("a genuinely new record still appends after a prior one", async () => {
+    const logDir = mkLogDir()
+    const ledger = path.join(work, "ledger.jsonl")
+    const first = record({ run_id: "loop-aaa" })
+    writeRecord(logDir, "loop-1.json", first, 1000)
+    await runAppend(["--log-dir", logDir, "--ledger", ledger])
+
+    const second = record({ run_id: "loop-bbb" })
+    writeRecord(logDir, "loop-2.json", second, 2000)
+    await runAppend(["--log-dir", logDir, "--ledger", ledger])
+
+    const lines = ledgerLines(ledger)
+    expect(lines.length).toBe(2)
+    expect(JSON.parse(lines[1])).toEqual(second)
+  })
+})
