@@ -28,6 +28,12 @@ To resolve a ledger-sourced metric:
 
 **Worked instance — `unattended_completion_rate`** (super-looper's loop-driver ledger): window-filter by `timing.started_at`; the rate is `success / total` where `success` is a record with `outcome == "success"`. Records with any other outcome (timeout, cap-exhausted, done-but-red, the give-up floor) count in the denominator only — so a clean-exit give-up cannot be counted as a win. With records in the window, render the rate (e.g., `3/4 = 75%`); with none in the window, or no ledger at all, render `no data`.
 
+## Git-derived proxy metrics
+
+Some strategy metrics have no true instrumentation but can be approximated from git/GitHub history. Render these as a **labeled proxy** rather than `no data`, sourced from the git/GitHub source (`metric=github`). Always mark the value `(proxy)` so the reader knows it approximates the metric — it is not the metric itself.
+
+**Worked instance — `learning_reuse`** (super-looper strategy metric): there is no "prevented-a-repeat" signal, so render the count of commits and PRs in the window that reference a `docs/solutions/` path or a `[[backlink]]` citation, marked `(proxy)`. The count approximates reuse by counting citations; it is not a measure of repeats prevented. With no citations in the window, render `0 (proxy)` — never an error. True reuse semantics stay deferred.
+
 ## Template
 
 The block below is the literal content to write. Replace every `{{placeholder}}` with query output. Delete lines whose data isn't available for this run.
