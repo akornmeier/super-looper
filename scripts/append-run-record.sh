@@ -72,8 +72,8 @@ mkdir -p "$(dirname "$LEDGER")"
 # Compact to a single line by stripping structural newlines. Safe because
 # loop.sh's json_escape escapes embedded \n/\r inside string values, so the file's
 # only bare newlines are formatting — never content. No fields are added (R4).
-# ponytail: relies on loop.sh escaping embedded newlines; if a record ever inlines
-# a literal newline in a value, switch to `jq -c .`.
+# This relies on that escaping: if a record ever inlines a literal newline in a
+# value, switch to `jq -c .`.
 { tr -d '\r\n' < "$newest"; printf '\n'; } >>"$LEDGER"
 
 echo "[append-run-record] appended $(basename "$newest") -> $LEDGER" >&2
