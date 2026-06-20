@@ -171,7 +171,9 @@ The returned `id` is the authoritative thread ID to use for reply and resolve. I
 
 1. **Reply** using [scripts/reply-to-pr-thread](../scripts/reply-to-pr-thread):
 ```bash
-echo "REPLY_TEXT" | bash "${CLAUDE_SKILL_DIR}/scripts/reply-to-pr-thread" THREAD_ID
+bash "${CLAUDE_SKILL_DIR}/scripts/reply-to-pr-thread" THREAD_ID <<'EOF'
+REPLY_TEXT
+EOF
 ```
 Check that the returned comment URL contains the correct `OWNER/REPO` and PR number before proceeding.
 
