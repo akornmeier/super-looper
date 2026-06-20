@@ -18,6 +18,10 @@
 # pulse_payments_source: stripe                         # stripe | custom (no default)
 # pulse_db_enabled: false                               # true | false (default: false; read-only DB if true)
 # pulse_metric_sources: "retention_d7=posthog,nps=delighted"  # strategy-metric -> source overrides; comma-separated 'metric=source' pairs; unlisted metrics fall back to pulse_analytics_source
+#   A source may also be a local JSONL ledger via the `ledger` token, read from
+#   disk and aggregated over the window instead of queried from a provider:
+#     pulse_metric_sources: "unattended_completion_rate=ledger"            # default path docs/run-records/ledger.jsonl
+#     pulse_metric_sources: "unattended_completion_rate=ledger:path/to/x.jsonl"  # explicit repo-relative path
 # pulse_pending_metrics: "retention_d7,nps"             # comma-separated strategy metrics awaiting instrumentation; render as 'no data'
 # pulse_excluded_metrics: "north_star"                  # comma-separated strategy metrics intentionally not in pulse
 
