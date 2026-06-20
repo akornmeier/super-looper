@@ -33,6 +33,17 @@ The classification of a Learning as either bug or knowledge, decided by its prob
 ### Pattern doc
 Guidance generalized from several Learnings into a broader rule. Higher-leverage than any single incident-level Learning, and higher-risk when stale, because future work treats it as broadly applicable.
 
+## Loop driver
+
+### Loop driver
+The unattended runner that launches the autopilot Pipeline headlessly against a target repo, bounded by a wall-clock-and-retry cap and stopped by a target-scoped success predicate. It treats the pipeline's DONE as a routing signal, not a success signal, and requires an independent green verification before declaring success. It emits one Run-record per terminal run.
+
+### Run-record
+The structured, index-not-copy record the Loop driver writes on every operational terminal path — success or any honest failure. It names the run's outcome, verification result, timing, and pointers (transcript, pull request, residual findings) without inlining seed text or identifiers, so it indexes a run rather than copying its content.
+
+### Run-record ledger
+The committed, append-only corpus — one Run-record per line — that accumulates Run-records across runs so a downstream reader can aggregate them over a window. It survives a clean checkout and travels to a fresh or cloud checkout, unlike machine-local config; its absence is a valid "no runs yet" state, not an error.
+
 ## Skill orchestration
 
 ### Model tier
