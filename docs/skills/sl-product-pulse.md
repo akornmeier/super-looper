@@ -77,6 +77,8 @@ Saved reports contain count distributions and anonymized notes only — no user 
 
 Phase 2.1 dispatches analytics, tracing, and payments queries in parallel (different tools, no shared load), then runs read-only DB queries serially (one at a time, scoped, no full-table scans). The split prevents accidental load on the production database while still using available wall-clock budget effectively.
 
+A metric's source need not be a provider at all: the `ledger` token points a metric at a **local JSONL ledger** (one record per line, e.g. `docs/run-records/ledger.jsonl`), which the pulse reads from disk, window-filters by a timestamp field, and aggregates — no provider, no network. An absent or empty ledger renders `no data`; a malformed line is skipped. This is how super-looper's own `unattended_completion_rate` is measured from committed loop run-records (`success / total` where `success` is `outcome == "success"`).
+
 ### 8. SMART metric pushback
 
 The interview applies a SMART bar (specific, measurable, actionable, relevant, timely) to every metric, event, and signal the user proposes. Vanity metrics get pushed back on; vague metrics get sharpened. The result is a config that produces signal, not noise.

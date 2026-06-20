@@ -68,7 +68,7 @@ If the line above is an absolute path, use it as `<repo-root>`. If it is empty o
 - `pulse_tracing_source` -- string identifying tracing provider (e.g., `sentry`, `datadog`, `custom`)
 - `pulse_payments_source` -- string identifying payments provider (e.g., `stripe`, `custom`); omit if not used
 - `pulse_db_enabled` -- `true` or default `false`; when `true`, read-only DB access is part of the pulse
-- `pulse_metric_sources` -- comma-separated `metric=source` pairs giving per-strategy-metric source overrides (e.g., `retention_d7=posthog,nps=delighted`). Strategy metrics not listed fall back to `pulse_analytics_source` and are rendered with a `(default source)` marker so the implicit routing is visible.
+- `pulse_metric_sources` -- comma-separated `metric=source` pairs giving per-strategy-metric source overrides (e.g., `retention_d7=posthog,nps=delighted`). Strategy metrics not listed fall back to `pulse_analytics_source` and are rendered with a `(default source)` marker so the implicit routing is visible. A source may also be a local JSONL ledger via the `ledger` token (`ledger` or `ledger:<repo-relative-path>`, default path `docs/run-records/ledger.jsonl`) -- read from disk and aggregated over the window rather than queried from a provider (see Phase 2.1 and the "Local JSONL ledger sources" procedure in `references/report-template.md`).
 - `pulse_pending_metrics` -- comma-separated string of strategy-doc metric names awaiting instrumentation; rendered as `no data` in each pulse report until instrumentation lands
 - `pulse_excluded_metrics` -- comma-separated string of strategy-doc metric names intentionally excluded from the pulse; the metric stays in `STRATEGY.md` but is not surfaced in pulse reports
 
@@ -126,6 +126,8 @@ Run these in **parallel** (different tools, no shared load):
 - Product analytics query (primary event count, value-realization count, completions, conversion ratios) over the window
 - Application tracing query (error counts by category, latency distribution, top error signatures) over the window
 - Payments query, if configured (new customers, churn, revenue delta) over the window
+- Local JSONL ledger reads, for any metric whose `pulse_metric_sources` entry is a `ledger` token. Read the committed file with the `Read` tool, window-filter by the metric's timestamp field, and aggregate the field the metric defines, per the "Local JSONL ledger sources" procedure in `references/report-template.md`. An absent or empty ledger renders `no data`; a malformed line is skipped, not fatal.
+- Git-derived proxy queries, for metrics rendered as a labeled proxy from git/GitHub history (e.g., `learning_reuse`): count window commits/PRs referencing a `docs/solutions/` path or a `[[backlink]]` citation, rendered marked `(proxy)` per the "Git-derived proxy metrics" note in `references/report-template.md`. Zero citations renders `0 (proxy)`, not an error.
 
 Run these **serially**, after the parallel batch:
 
