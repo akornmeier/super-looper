@@ -126,7 +126,7 @@ Run these in **parallel** (different tools, no shared load):
 - Product analytics query (primary event count, value-realization count, completions, conversion ratios) over the window
 - Application tracing query (error counts by category, latency distribution, top error signatures) over the window
 - Payments query, if configured (new customers, churn, revenue delta) over the window
-- Local JSONL ledger reads, for any metric whose `pulse_metric_sources` entry is a `ledger` token. Read the committed file with the file-read tool, window-filter by the metric's timestamp field, and aggregate the field the metric defines, per the "Local JSONL ledger sources" procedure in `references/report-template.md`. An absent or empty ledger renders `no data`; a malformed line is skipped, not fatal. These reads touch only committed repo files (no provider, no network), so they are safe in the parallel batch.
+- Local JSONL ledger reads, for any metric whose `pulse_metric_sources` entry is a `ledger` token. Read the committed file with the file-read tool, window-filter by the metric's timestamp field, and aggregate the field the metric defines, per the "Local JSONL ledger sources" procedure in `references/report-template.md`. An absent or empty ledger renders `no data`; a malformed line is skipped, not fatal.
 - Git-derived proxy queries, for metrics rendered as a labeled proxy from git/GitHub history (e.g., `learning_reuse`): count window commits/PRs referencing a `docs/solutions/` path or a `[[backlink]]` citation, rendered marked `(proxy)` per the "Git-derived proxy metrics" note in `references/report-template.md`. Zero citations renders `0 (proxy)`, not an error.
 
 Run these **serially**, after the parallel batch:

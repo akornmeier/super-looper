@@ -52,24 +52,28 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Newest record by mtime. ls -t sorts newest-first; run-record names are
-# loop-<ts>-<pid>.json (no spaces), so line-parsing ls is safe here. A missing
-# dir or no match yields empty (ls error swallowed) — the unconditional-no-op
-# guard the wrapper relies on.
+# Newest record by mtime. ls -1t is safe here (record names have no spaces). A
+# missing dir or no match yields empty (ls error swallowed) — the no-op guard
+# the wrapper relies on.
 newest="$(ls -1t "$LOG_DIR"/loop-*.json 2>/dev/null | head -n1 || true)"
 if [ -z "$newest" ]; then
   echo "[append-run-record] no run-records in $LOG_DIR; nothing to append" >&2
   exit 0
 fi
+# Skip a zero-byte record (loop.sh killed mid-emit): appending it would write a
+# bare blank line and corrupt the JSONL ledger.
+if [ ! -s "$newest" ]; then
+  echo "[append-run-record] newest record $(basename "$newest") is empty; nothing to append" >&2
+  exit 0
+fi
 
 mkdir -p "$(dirname "$LEDGER")"
 
-# Compact to a single line by stripping literal newlines. Safe because loop.sh's
-# json_escape escapes embedded \n/\r inside string values, so the only newlines
-# in the file are structural formatting — never content. Insignificant inter-token
-# whitespace that remains is valid JSON. No fields are added (R4).
-# ponytail: tr-strip relies on loop.sh escaping embedded newlines; if records
-# ever inline a literal newline in a value, switch to `jq -c .`.
+# Compact to a single line by stripping structural newlines. Safe because
+# loop.sh's json_escape escapes embedded \n/\r inside string values, so the file's
+# only bare newlines are formatting — never content. No fields are added (R4).
+# ponytail: relies on loop.sh escaping embedded newlines; if a record ever inlines
+# a literal newline in a value, switch to `jq -c .`.
 { tr -d '\r\n' < "$newest"; printf '\n'; } >>"$LEDGER"
 
 echo "[append-run-record] appended $(basename "$newest") -> $LEDGER" >&2

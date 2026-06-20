@@ -178,3 +178,53 @@ describe("integrity", () => {
     expect(Object.keys(parsed).sort()).toEqual(Object.keys(rec).sort())
   })
 })
+
+// ---------------------------------------------------------------------------
+// Edge cases: a zero-byte record (loop.sh killed mid-emit) must not corrupt the
+// ledger with a blank line; the ledger's parent dir is created on demand.
+// ---------------------------------------------------------------------------
+describe("edge cases", () => {
+  test("zero-byte record: no-op, appends nothing", async () => {
+    const logDir = mkLogDir()
+    const ledger = path.join(work, "ledger.jsonl")
+    const p = path.join(logDir, "loop-empty.json")
+    fs.writeFileSync(p, "") // zero bytes — a truncated/crashed emit
+    fs.utimesSync(p, 1000, 1000)
+    const { exitCode } = await runAppend(["--log-dir", logDir, "--ledger", ledger])
+    expect(exitCode).toBe(0)
+    expect(fs.existsSync(ledger)).toBe(false)
+  })
+
+  test("creates the ledger's parent directory when absent", async () => {
+    const logDir = mkLogDir()
+    const ledger = path.join(work, "nested", "deeper", "ledger.jsonl") // parents do not exist
+    const rec = record()
+    writeRecord(logDir, "loop-1.json", rec, 1000)
+    const { exitCode } = await runAppend(["--log-dir", logDir, "--ledger", ledger])
+    expect(exitCode).toBe(0)
+    expect(JSON.parse(ledgerLines(ledger)[0])).toEqual(rec)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Argument validation: value-taking flags require a value; unknown flags fail.
+// ---------------------------------------------------------------------------
+describe("argument validation", () => {
+  test("--log-dir with no value exits 2", async () => {
+    const { exitCode, stderr } = await runAppend(["--log-dir"])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--log-dir requires a value")
+  })
+
+  test("--ledger with no value exits 2", async () => {
+    const { exitCode, stderr } = await runAppend(["--ledger"])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--ledger requires a value")
+  })
+
+  test("unknown flag exits 2", async () => {
+    const { exitCode, stderr } = await runAppend(["--nope"])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("unknown argument")
+  })
+})

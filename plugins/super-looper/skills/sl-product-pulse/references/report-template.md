@@ -20,7 +20,7 @@ A metric's source in `pulse_metric_sources` may be a **local JSONL ledger** inst
 
 To resolve a ledger-sourced metric:
 
-1. Resolve the path: the part after `ledger:`, or `docs/run-records/ledger.jsonl` by default. Resolve it against the repo root (`git rev-parse --show-toplevel`).
+1. Resolve the path: the part after `ledger:`, or `docs/run-records/ledger.jsonl` by default. Resolve it against the repo root already resolved in Phase 0.
 2. If the file is **absent or empty**, render the metric `no data` — never an error, never a fabricated `0` / `0%`. (The directory is tracked via `.gitkeep`, so an absent `ledger.jsonl` is the valid "no runs yet" state, not a missing-path config error.)
 3. Read the file as JSONL: one JSON object per line. **Skip any line that does not parse as JSON** — a malformed line is not fatal; aggregate over the rest.
 4. **Window-filter** by the metric's timestamp field: keep records whose timestamp falls within the pulse window (the same `[now - window - 15m, now - 15m]` bound used elsewhere).
