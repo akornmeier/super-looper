@@ -585,6 +585,14 @@ const PLATFORM_VAR_ACKNOWLEDGED = new Map<string, string>([
     "plugins/super-looper/skills/sl-update/SKILL.md#CLAUDE_SKILL_DIR",
     "SKILL.md routes unset/unresolved CLAUDE_SKILL_DIR (scripts failing) to its __CE_UPDATE_NOT_MARKETPLACE__ handling.",
   ],
+  [
+    "plugins/super-looper/skills/sl-resolve-pr-feedback/references/full-mode.md#CLAUDE_SKILL_DIR",
+    "Core-script skill: every bundled script (get-pr-comments, get-thread-for-comment, reply-to-pr-thread, resolve-pr-thread, wait-for-bot-review) is pinned via allowed-tools and invoked as a single pinned command rather than an `if [ -f ]` guard (AGENTS.md permission caveat -- a compound guard defeats the narrow allow-rule). The prose at the gate call states the unresolved-CLAUDE_SKILL_DIR fallback: the bash call fails loudly and the agent skips the wait, proceeding to the re-fetch.",
+  ],
+  [
+    "plugins/super-looper/skills/sl-resolve-pr-feedback/references/targeted-mode.md#CLAUDE_SKILL_DIR",
+    "Same core-script skill as full-mode.md: get-thread-for-comment is invoked as a single pinned command (pinned via allowed-tools), not a bare relative path, so the Bash CWD (project root) cannot silently miss the bundled script.",
+  ],
 ])
 
 /** Rule 4 scanner for one markdown file: every non-graceful occurrence. */

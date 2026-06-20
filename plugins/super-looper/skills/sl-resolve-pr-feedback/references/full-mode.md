@@ -12,7 +12,7 @@ gh pr view --json number -q .number
 Then fetch all feedback using the GraphQL script at [scripts/get-pr-comments](../scripts/get-pr-comments):
 
 ```bash
-bash scripts/get-pr-comments PR_NUMBER
+bash "${CLAUDE_SKILL_DIR}/scripts/get-pr-comments" PR_NUMBER
 ```
 
 Returns a JSON object with three keys:
@@ -165,19 +165,21 @@ For `needs-human` verdicts, post the reply but do NOT resolve the thread. Leave 
 ```bash
 # Extract numeric comment ID from the comment URL (e.g. discussion_r2589700 → 2589700)
 GH_REPO=OWNER/REPO gh api repos/{owner}/{repo}/pulls/comments/COMMENT_ID --jq .node_id
-bash scripts/get-thread-for-comment PR_NUMBER COMMENT_NODE_ID OWNER/REPO
+bash "${CLAUDE_SKILL_DIR}/scripts/get-thread-for-comment" PR_NUMBER COMMENT_NODE_ID OWNER/REPO
 ```
 The returned `id` is the authoritative thread ID to use for reply and resolve. If it differs from what `get-pr-comments` returned, use the one from this script.
 
 1. **Reply** using [scripts/reply-to-pr-thread](../scripts/reply-to-pr-thread):
 ```bash
-echo "REPLY_TEXT" | bash scripts/reply-to-pr-thread THREAD_ID
+bash "${CLAUDE_SKILL_DIR}/scripts/reply-to-pr-thread" THREAD_ID <<'EOF'
+REPLY_TEXT
+EOF
 ```
 Check that the returned comment URL contains the correct `OWNER/REPO` and PR number before proceeding.
 
 2. **Resolve** using [scripts/resolve-pr-thread](../scripts/resolve-pr-thread):
 ```bash
-bash scripts/resolve-pr-thread THREAD_ID
+bash "${CLAUDE_SKILL_DIR}/scripts/resolve-pr-thread" THREAD_ID
 ```
 
 ### PR comments and review bodies
@@ -192,19 +194,44 @@ Include enough quoted context in the reply so the reader can follow which commen
 
 ## 8. Verify
 
-Re-fetch feedback to confirm resolution:
+Automated reviewers (Copilot, CodeRabbit, Greptile) re-review **asynchronously**: a fix push triggers a re-review that lands seconds-to-minutes later. Re-fetching immediately after the push sees "0 unresolved," concludes, and the bot's next round arrives afterward -- forcing the user to re-run. So when this round pushed a fix, **wait for the active bots to re-review the pushed commit before re-fetching.**
+
+### Reviewer-quiescence gate
+
+**Engage the gate only when this round pushed a fix** -- i.e., step 5's aggregated `files_changed` was non-empty and step 6 ran. A reply-only round (all verdicts `replied` / `not-addressing` / `declined` / `needs-human`, nothing pushed) **skips the wait** and proceeds straight to the re-fetch: there is no new commit for a bot to re-review.
+
+When a fix was pushed, wait for the active automated reviewers to re-review the pushed HEAD:
 
 ```bash
-bash scripts/get-pr-comments PR_NUMBER
+bash "${CLAUDE_SKILL_DIR}/scripts/wait-for-bot-review" PR_NUMBER "$(git rev-parse HEAD)"
+```
+
+Keep this a single pinned command, not an `if [ -f … ]` guard -- a compound guard defeats the narrow `Bash(bash *wait-for-bot-review)` allow-rule (the permission checker evaluates the `[` subcommand separately) and prompts on every run. `${CLAUDE_SKILL_DIR}` resolves to this skill's directory on Claude Code; if it is unresolved (e.g. running off Claude Code), the call fails loudly with "No such file or directory" -- treat that as "skip the wait" and proceed straight to the re-fetch below, degrading to the pre-gate "re-fetch now" behavior, never worse.
+
+**Bots only -- never humans.** The wait targets known automated reviewer logins that are *active* on this PR (have at least one prior review). It **never waits on human reviewers** -- human threads are handled in the round they are present, not waited on. The script intersects its known-bot list with the PR's actual reviewers, so a configured bot that never reviews this PR is a no-op, not a wait.
+
+**Two bounds keep the gate from hanging:**
+
+- **Per-wait timeout.** The script stops waiting and exits after ~5 minutes even if an active bot never reaches HEAD (hanging is the worst failure). On timeout it prints `timed-out waiting for: <logins>` -- **proceed anyway** (re-fetch), and note in the step 9 summary that a late bot round may still arrive, so the result does not imply full quiescence.
+- **Max fix-round cap of 3** (below): after the third fix-verify cycle the recurring-pattern escalation fires instead of looping again.
+
+**Settle-window fallback (C).** Some reviewers post feedback that is *not* detectable as a re-review on HEAD -- a top-level comment with no SHA-tied review. For those the `commit.oid == HEAD` signal never trips, so do not wait on it forever: fall back to a **settle-window** -- after the gate returns, wait ~60s and re-fetch once via `get-pr-comments`; if no new threads appeared, conclude. This bounds the wait for non-SHA reviewers rather than blocking on a signal that will not come. Option A (poll-for-review-on-HEAD, above) is the primary, deterministic path; C is the documented secondary path for the non-SHA case.
+
+### Re-fetch and loop
+
+Once the gate returns (quiescent or timed out), re-fetch feedback to confirm resolution:
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/scripts/get-pr-comments" PR_NUMBER
 ```
 
 The `review_threads` array should be empty (except `needs-human` items).
 
-**If new threads remain**, check the iteration count for this run:
+**If new threads remain**, check the fix-round count for this run:
 
-- **First or second fix-verify cycle**: Repeat from step 2 for the remaining threads.
+- **First, second, or third fix-verify cycle**: Repeat from step 2 for the remaining threads.
 
-- **After the second fix-verify cycle** (3rd pass would begin): Stop looping. Surface remaining issues to the user with context about the recurring pattern: "Multiple rounds of feedback on [area/theme] suggest a deeper issue. Here's what we've fixed so far and what keeps appearing." Use the same `needs-human` escalation pattern -- leave threads open and present the pattern for the user to decide.
+- **After the third fix-verify cycle** (4th pass would begin): Stop looping. Surface remaining issues to the user with context about the recurring pattern: "Multiple rounds of feedback on [area/theme] suggest a deeper issue. Here's what we've fixed so far and what keeps appearing." Use the same `needs-human` escalation pattern -- leave threads open and present the pattern for the user to decide.
 
 PR comments and review bodies have no resolve mechanism, so they will still appear in the output. Verify they were replied to by checking the PR conversation.
 
@@ -224,6 +251,7 @@ Not addressing (count): [what was skipped and why]
 Declined (count): [what was declined and the harm cited]
 
 Validation: [one line -- e.g., "bun test passed (893/893)" or "bun test passed with pre-existing failure in X noted"; omit when no code changes were committed]
+Reviewer wait: [include only when the step-8 quiescence gate timed out or fell back to the settle-window -- "an active reviewer (<logins>) had not re-reviewed the pushed commit at verify time; a late bot round may still arrive." Omit when the gate confirmed quiescence or no fix was pushed, so the summary never implies full quiescence it did not reach.]
 ```
 
 If any agent returned `needs-human`, append a decisions section. These are rare but high-signal. Each `needs-human` agent returns a `decision_context` field with a structured analysis: what the reviewer said, what the agent investigated, why it needs a decision, concrete options with tradeoffs, and the agent's lean if it has one.

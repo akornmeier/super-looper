@@ -119,9 +119,11 @@ This keeps reviewers oriented when they read the reply weeks later — they see 
 
 Threads on outdated lines often have `line: null` and require fallback to `originalLine`. The skill carries the `isOutdated` flag and all four location fields (`line`, `originalLine`, `startLine`, `originalStartLine`) into each agent's dispatch so the agent knows the reported line may have drifted and can relocate appropriately.
 
-### 9. Two-pass loop with escalation
+### 9. Bot-aware verify loop with bounded escalation
 
-If new threads remain after the verify step, the skill repeats from triage for the remaining threads. After two fix-verify cycles, the skill stops looping and surfaces the recurring pattern as `needs-human`: "Multiple rounds of feedback on [theme] suggest a deeper issue."
+Automated reviewers (Copilot, CodeRabbit, Greptile) re-review *asynchronously* — a fix push triggers a re-review that lands seconds-to-minutes later. So after pushing a fix, the verify step **waits for the active bots to re-review the pushed commit** (keyed on a review tied to the pushed `commit.oid`) before re-fetching threads — catching the bot's next round in the same invocation instead of concluding early and forcing a re-run. The wait targets only known bot logins active on the PR (never humans), is bounded by a per-wait timeout (proceed, don't hang), and falls back to a settle-window for reviewers whose feedback isn't a SHA-tied re-review.
+
+If new threads remain after the verify step, the skill repeats from triage for the remaining threads. After three fix-verify cycles, the skill stops looping and surfaces the recurring pattern as `needs-human`: "Multiple rounds of feedback on [theme] suggest a deeper issue."
 
 ### 10. Two modes — Full and Targeted
 
@@ -230,7 +232,7 @@ The file-collision check before dispatch catches most cases — overlapping item
 The agent investigated the feedback and the code, but cannot determine the right action confidently — usually because the choice depends on user intent the agent can't infer. The thread stays open with an acknowledgment reply, and the summary surfaces a structured `decision_context`: quoted feedback, investigation findings, options with tradeoffs, the agent's lean if any.
 
 **What if the feedback loop never converges?**
-After two fix-verify cycles, the skill stops looping and escalates the recurring pattern as `needs-human` with the cumulative context. It doesn't retry indefinitely.
+After three fix-verify cycles, the skill stops looping and escalates the recurring pattern as `needs-human` with the cumulative context. It doesn't retry indefinitely. Between rounds, when a fix was pushed it waits for the active review bots to re-review the pushed commit before concluding, so an asynchronous bot round doesn't slip past the verify and force a re-run.
 
 ---
 

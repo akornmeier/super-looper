@@ -68,3 +68,8 @@ The honest terminal state an autopilot loop falls back to when it cannot resolve
 
 ### Escalation rung
 A bounded, one-shot deeper step inserted before a loop's give-up floor. It fires only on genuine exhaustion (reading a disposition the loop already recorded, not re-judging at the gate), runs the deeper tool once, re-checks the success signal exactly once, and has only two exits: it converges with the normal success path or it falls through to the floor. It never loops and never manufactures a false pass — because a re-check certifies only the existing checks, the no-weaken discipline, not the re-check, is what guards against a masked failure shipping as success.
+
+### Quiescence gate
+A wait inserted before a fix-then-verify loop re-reads state, blocking until the asynchronous actors that respond to the just-pushed change have responded to *that* change — keyed on a per-action signal rather than on elapsed time — so the loop does not conclude on a premature "nothing pending right now" reading.
+
+It waits only on the actors that produce the async signal (the automated reviewers active on the work), never on those handled synchronously in the round they appear. The wait is bounded by a per-wait timeout that proceeds rather than hangs, and on timeout it labels the conclusion provisional — surfacing that a late round may still arrive — rather than implying a quiescence it never observed. Shares the honesty principle of the [Escalation rung](#escalation-rung) and [Give-up floor](#give-up-floor): a conclusion drawn from a premature or partial signal must be marked as such, never reported as certain.

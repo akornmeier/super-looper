@@ -2,7 +2,7 @@
 name: sl-resolve-pr-feedback
 description: Resolve PR review feedback by evaluating validity and fixing issues in parallel. Use when addressing PR review comments, resolving review threads, or fixing code review feedback.
 argument-hint: "[PR number, comment URL, or blank for current branch's PR]"
-allowed-tools: Bash(gh *), Bash(git *), Read
+allowed-tools: Bash(gh *), Bash(git *), Bash(bash *get-pr-comments), Bash(bash *get-thread-for-comment), Bash(bash *reply-to-pr-thread), Bash(bash *resolve-pr-thread), Bash(bash *wait-for-bot-review), Read
 ---
 
 # Resolve PR Review Feedback
@@ -39,6 +39,7 @@ After determining mode, read the matching reference and follow it. Each referenc
 - [scripts/get-thread-for-comment](scripts/get-thread-for-comment) -- Map a comment node ID to its parent thread (for targeted mode)
 - [scripts/reply-to-pr-thread](scripts/reply-to-pr-thread) -- GraphQL mutation to reply within a review thread
 - [scripts/resolve-pr-thread](scripts/resolve-pr-thread) -- GraphQL mutation to resolve a thread by ID
+- [scripts/wait-for-bot-review](scripts/wait-for-bot-review) -- Poll until active review bots re-review the pushed HEAD, or timeout (Full-mode verify gate)
 
 ## Success Criteria
 
