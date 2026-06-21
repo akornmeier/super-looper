@@ -33,7 +33,7 @@ KNOWN_BOTS=(
 # elapses even if an active bot has not reached HEAD -- hanging is the worst
 # failure. Tuned to the observed ~3-min Copilot re-review latency; this is the
 # single tunable if real-world latency runs higher.
-TIMEOUT_SECONDS=300
+TIMEOUT_SECONDS=150
 POLL_INTERVAL=10
 MAX_POLL_INTERVAL=30
 
