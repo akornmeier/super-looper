@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.3.0...super-looper-v0.4.0) (2026-06-21)
+
+
+### Features
+
+* **pulse:** wire unattended completion rate to a run-record ledger ([db4dd7d](https://github.com/akornmeier/super-looper/commit/db4dd7da34252b334bed7db11991ac20ba5f9edd))
+* **sl-product-pulse:** add local JSONL ledger source kind (U3) ([23cd9d5](https://github.com/akornmeier/super-looper/commit/23cd9d5c87276d7747270514cc9db85b82bf343a))
+* **sl-product-pulse:** render learning_reuse as labeled git citation proxy (U5) ([61eaf1b](https://github.com/akornmeier/super-looper/commit/61eaf1b497e62b9f9ea5cf101e05af19997a9d9f))
+
+
+### Bug Fixes
+
+* **loop:** run ledger append on failed loops and guard ledger integrity ([f261e38](https://github.com/akornmeier/super-looper/commit/f261e38cb1df1d9d20bf90473f042a25c867f898))
+
 ## [0.3.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.2.0...super-looper-v0.3.0) (2026-06-20)
 
 
