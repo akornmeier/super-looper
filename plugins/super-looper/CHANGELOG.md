@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/akornmeier/super-looper/compare/super-looper-v0.4.0...super-looper-v0.4.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **agents:** assign role-based colors to all 43 agents ([c43ffc1](https://github.com/akornmeier/super-looper/commit/c43ffc17957501ddd5386e63b195ab1a40f3d40d))
+* **agents:** role-based, fleet-scoped color scheme for all 43 agents ([a031cfc](https://github.com/akornmeier/super-looper/commit/a031cfccb79a923e671c533281089bcc769f1d13))
+
 ## [0.4.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.3.0...super-looper-v0.4.0) (2026-06-21)
 
 
