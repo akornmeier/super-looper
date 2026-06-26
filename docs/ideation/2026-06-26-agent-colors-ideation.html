@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideation: Agent Colors — Unique &amp; Accessible</title>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --canvas: #ffffff;
+    --ink: #1d1c1a;
+    --ink-soft: #56524c;
+    --ink-faint: #8a847b;
+    --line: #e4e0d8;
+    --line-strong: #d2cdc2;
+    --accent: #6a4df0;
+    --accent-soft: #efeaff;
+    --accent-text: #4a32c0;
+    --good: #2f7d4f;
+    --good-soft: #e7f3ec;
+    --warn: #9a6a17;
+    --warn-soft: #f6efdf;
+    --bad: #b23b3b;
+    --bad-soft: #f7e8e6;
+    /* representative terminal ANSI hues (for swatches only) */
+    --c-red:#cc4b4b; --c-blue:#3f6fd0; --c-green:#3fa564; --c-yellow:#c9a227;
+    --c-purple:#8e5bbf; --c-orange:#d97a2b; --c-pink:#d660a4; --c-cyan:#2fb3c4;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#141312; --canvas:#1c1b19; --ink:#ece8e1;
+      --ink-soft:#b3ada3; --ink-faint:#857f76; --line:#2e2c28; --line-strong:#3a3733;
+      --accent:#9d86ff; --accent-soft:#272140; --accent-text:#c3b4ff;
+      --good:#6fcf97; --good-soft:#1d2d23; --warn:#d9b25a; --warn-soft:#2e2716;
+      --bad:#e07a7a; --bad-soft:#2f1c1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 920px; margin-inline: auto; padding: 56px 24px 96px; }
+  header.doc { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 8px; }
+  .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-text); font-weight: 600; }
+  h1 { font-size: 33px; line-height: 1.15; margin: 10px 0 14px; letter-spacing: -0.01em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; color: var(--ink-soft); }
+  .meta b { color: var(--ink); font-weight: 600; }
+  p, li { max-width: 72ch; }
+  h2 { font-size: 22px; margin: 52px 0 14px; letter-spacing: -0.01em; padding-top: 8px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  a { color: var(--accent-text); text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+  code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em;
+         background: var(--accent-soft); color: var(--accent-text); padding: 1px 5px; border-radius: 5px; }
+  /* stats strip */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 26px 0 8px; }
+  .stat { background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .stat .n { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .l { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2,1fr);} h1{font-size:27px;} }
+  /* grounding */
+  .ground { background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 22px 14px; }
+  .ground ul { padding-left: 20px; }
+  .ground li { margin: 7px 0; }
+  /* axes */
+  .axes { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .axes li { background: var(--canvas); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+             border-radius: 8px; padding: 11px 15px; max-width: none; }
+  .axes .ax-name { font-weight: 600; }
+  .axes .ax-q { color: var(--ink-soft); font-size: 14px; }
+  /* jump list */
+  .jump { background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 20px; margin: 6px 0 30px; }
+  .jump ol { margin: 6px 0 0; padding-left: 20px; }
+  .jump li { margin: 5px 0; max-width: none; }
+  .jump a { font-weight: 500; }
+  /* idea cards */
+  .idea { background: var(--canvas); border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px;
+          margin: 0 0 22px; scroll-margin-top: 16px; }
+  .idea-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .rank { font-size: 13px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 6px;
+          padding: 2px 9px; letter-spacing: .02em; }
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid transparent; }
+  .chip.axis { background: var(--accent-soft); color: var(--accent-text); }
+  .chip.conf { background: var(--good-soft); color: var(--good); }
+  .chip.cx   { background: var(--warn-soft); color: var(--warn); }
+  .field { margin: 14px 0; }
+  .field .lab { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; display: block; margin-bottom: 3px; }
+  .basis-tag { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 700; }
+  .basis-tag.direct { color: var(--good); }
+  .basis-tag.external { color: var(--accent-text); }
+  .basis-tag.reasoned { color: var(--warn); }
+  .down { color: var(--ink-soft); }
+  /* swatch primitives */
+  .sw { display: inline-block; width: 15px; height: 15px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; border: 1px solid rgba(0,0,0,.18); }
+  .legend { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 8px 0 2px; }
+  .legend-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center;
+                padding: 9px 14px; border-top: 1px solid var(--line); font-size: 14px; }
+  .legend-row:first-child { border-top: none; }
+  .legend-row .fam { font-weight: 600; display: flex; align-items: center; }
+  .legend-row .ex { color: var(--ink-soft); font-size: 12.5px; font-family: ui-monospace, monospace; }
+  .swatch-pill { display:inline-flex; align-items:center; font-size:12px; font-weight:600; color:#fff;
+                 padding:3px 10px; border-radius:999px; margin:3px 4px 3px 0; }
+  .fleet { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:8px 0; }
+  .fleet .ft { font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:8px; }
+  .fleet .note { font-size:12.5px; color:var(--ink-soft); margin-top:6px; }
+  .pairbox { display:flex; gap:14px; flex-wrap:wrap; margin:6px 0; }
+  .pair { flex:1 1 200px; border:1px solid var(--bad); background:var(--bad-soft); border-radius:10px; padding:10px 14px; }
+  .pair .pt { font-size:12px; font-weight:700; color:var(--bad); text-transform:uppercase; letter-spacing:.06em; }
+  .demo { display:flex; gap:14px; flex-wrap:wrap; margin:8px 0 2px; }
+  .demo .d { flex:1 1 220px; border-radius:10px; padding:14px 16px; font-weight:600; font-size:14px; border:1px solid var(--line); }
+  .cap { font-size:12.5px; color:var(--ink-faint); margin:6px 0 0; font-style: italic; }
+  /* rejection table */
+  table.rej { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  table.rej th, table.rej td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.rej th { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+  table.rej td:first-child { font-weight: 600; white-space: nowrap; }
+  footer.composition-signal { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
+            font-size: 12.5px; color: var(--ink-faint); }
+  footer.composition-signal code { background: none; color: var(--ink-faint); padding: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="eyebrow">Ideation · Super Looper</div>
+  <h1>Agent Colors: Unique &amp; Accessible</h1>
+  <div class="meta">
+    <span><b>Date</b> <time datetime="2026-06-26">2026-06-26</time></span>
+    <span><b>Topic</b> agent-colors</span>
+    <span><b>Focus</b> make the 43 agents' colors unique &amp; readable</span>
+    <span><b>Mode</b> repo-grounded</span>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="n">43</div><div class="l">agents total</div></div>
+  <div class="stat"><div class="n">8</div><div class="l">colors the field allows</div></div>
+  <div class="stat"><div class="n">13&times;</div><div class="l">agents all set to <code>blue</code></div></div>
+  <div class="stat"><div class="n">25</div><div class="l">agents with no color</div></div>
+</div>
+
+<section>
+<h2>Grounding Context</h2>
+<p>The point that reshapes the whole request: Claude Code's agent <code>color</code> field accepts
+<strong>exactly eight named values</strong> &mdash; <span class="sw" style="background:var(--c-red)"></span>red,
+<span class="sw" style="background:var(--c-blue)"></span>blue,
+<span class="sw" style="background:var(--c-green)"></span>green,
+<span class="sw" style="background:var(--c-yellow)"></span>yellow,
+<span class="sw" style="background:var(--c-purple)"></span>purple,
+<span class="sw" style="background:var(--c-orange)"></span>orange,
+<span class="sw" style="background:var(--c-pink)"></span>pink,
+<span class="sw" style="background:var(--c-cyan)"></span>cyan. No hex, no custom values
+(<a href="https://code.claude.com/docs/en/sub-agents">official sub-agents docs</a>). So 43 <em>unique</em> colors is
+literally impossible &mdash; "unique" has to be reframed before anything else is decided.</p>
+<div class="ground">
+<ul>
+  <li><b>The current state is collision, not uniqueness.</b> Of 43 agents, only 18 set a color and 25 set none. Of the 18: <code>blue&nbsp;&times;13</code> plus one each of cyan / purple / red / yellow / violet. Thirteen agents look identical.</li>
+  <li><b>One value is already invalid.</b> <code>sl-design-iterator</code> uses <code>violet</code>, which is not in the eight &mdash; it ships broken and nothing caught it.</li>
+  <li><b>Nothing validates color.</b> No reference to the field in <code>src/release/</code>, <code>scripts/release/</code>, or <code>tests/</code>. The only enforced frontmatter convention is the <code>sl-</code> name prefix (<a href="https://github.com/akornmeier/super-looper/blob/main/tests/skill-agent-sl-prefix.test.ts">tests/skill-agent-sl-prefix.test.ts</a>).</li>
+  <li><b>Agents run in parallel fleets &mdash; that's where color earns its keep.</b> <code>sl-doc-review</code> dispatches exactly 7 personas (fits the 8 cleanly); <code>sl-code-review</code> dispatches 6 always-on plus conditionals (9&ndash;14, the one fleet that overflows 8). <code>sl-learnings-researcher</code> alone appears in 4 different fleets.</li>
+  <li><b>The name is always next to the chip.</b> In the task list and transcript, the color renders beside the agent's (already-unique) name &mdash; so color is a fast <em>grouping</em> cue, not the unique identifier. Redundant encoding already exists for free.</li>
+  <li><b>Accessibility is real here.</b> Named ANSI remaps to each user's terminal theme. <code>blue</code> is the classic casualty on dark themes; bright <code>yellow</code> washes out on light. <code>red</code>/<code>green</code> and <code>blue</code>/<code>purple</code> are the two color-vision-deficiency (CVD) confusable pairs. The 8 map closely onto the CVD-safe Okabe&ndash;Ito set.</li>
+</ul>
+</div>
+</section>
+
+<section>
+<h2>Topic Axes</h2>
+<ul class="axes">
+  <li><span class="ax-name">Assignment scheme</span> &mdash; <span class="ax-q">how the 8 colors map onto the 43 agents.</span></li>
+  <li><span class="ax-name">Accessibility &amp; contrast</span> &mdash; <span class="ax-q">CVD-safety, light/dark legibility, which pairs to avoid.</span></li>
+  <li><span class="ax-name">Coverage &amp; correctness</span> &mdash; <span class="ax-q">the 25 unset agents, the invalid <code>violet</code>, the <code>blue&times;13</code> collision.</span></li>
+  <li><span class="ax-name">Governance &amp; drift</span> &mdash; <span class="ax-q">keeping every future agent on-palette without manual policing.</span></li>
+  <li><span class="ax-name">Meaning of "unique"</span> &mdash; <span class="ax-q">what distinctness can mean when 43 items exceed 8 colors.</span></li>
+</ul>
+</section>
+
+<section>
+<h2>Ranked Ideas</h2>
+<div class="jump">
+  <strong>Jump to:</strong>
+  <ol>
+    <li><a href="#i1">Color by role-family, not by agent</a></li>
+    <li><a href="#i2">Redefine "unique" as distinct-within-a-fleet</a></li>
+    <li><a href="#i3">Add a palette + coverage validation test</a></li>
+    <li><a href="#i4">Reserve the loud colors for block-the-ship roles</a></li>
+    <li><a href="#i5">Make "accessible" a checkable rule, not a vibe</a></li>
+    <li><a href="#i6">Make the scheme self-maintaining</a></li>
+  </ol>
+</div>
+
+<!-- IDEA 1 -->
+<article class="idea" id="i1">
+  <div class="idea-head"><span class="rank">1</span><h3>Color by role-family, not by agent</h3></div>
+  <div class="chips">
+    <span class="chip axis">assignment-scheme</span>
+    <span class="chip conf">Confidence 90%</span>
+    <span class="chip cx">Complexity Medium</span>
+  </div>
+
+  <p>Stop trying to color 43 agents and color the ~6 <em>families</em> they already fall into; each agent
+  inherits its family's hue. The impossible 43&rarr;8 mapping becomes a comfortable 6&rarr;8 one, and the chip
+  starts <em>meaning</em> something &mdash; you read an agent's role off its color instead of memorizing 43 arbitrary
+  assignments. A concrete starting map (colors are illustrative of the named ANSI values):</p>
+
+  <div class="legend">
+    <div class="legend-row"><span class="fam"><span class="sw" style="background:var(--c-blue)"></span>Code-review</span><span class="ex">correctness, maintainability, testing, security, performance&hellip; (~18)</span></div>
+    <div class="legend-row"><span class="fam"><span class="sw" style="background:var(--c-purple)"></span>Doc-review</span><span class="ex">coherence, feasibility, product-lens, scope-guardian&hellip; (7)</span></div>
+    <div class="legend-row"><span class="fam"><span class="sw" style="background:var(--c-cyan)"></span>Researchers</span><span class="ex">web, repo-research, learnings, framework-docs, git-history&hellip; (~10)</span></div>
+    <div class="legend-row"><span class="fam"><span class="sw" style="background:var(--c-pink)"></span>Design / UI</span><span class="ex">design-iterator, figma-design-sync, design-implementation&hellip; (~4)</span></div>
+    <div class="legend-row"><span class="fam"><span class="sw" style="background:var(--c-green)"></span>Writers / resolvers</span><span class="ex">ankane-readme-writer, pr-comment-resolver</span></div>
+    <div class="legend-row"><span class="fam"><span class="sw" style="background:var(--c-orange)"></span>Data / deploy</span><span class="ex">data-integrity-guardian, data-migration, deployment-verification</span></div>
+  </div>
+  <p class="cap">Six families, eight colors &mdash; with red and yellow held in reserve (see idea&nbsp;4). The split a reader needs is "which kind of agent is this," and the chip answers it pre-attentively.</p>
+
+  <div class="field"><span class="lab">Design fork worth deciding</span>
+  Color can key on <b>role-family</b> (above) or on <b>loop phase</b> (ideate / plan / work / review / learn / ship). Phase ties color to Super Looper's core narrative &mdash; a glance tells you which phase is live &mdash; but families map more cleanly onto how agents are actually grouped today. Pick one axis of meaning; don't blend both.</div>
+
+  <div class="field"><span class="lab">Basis</span>
+  <span class="basis-tag external">external:</span> mature design systems (Adobe Spectrum, Workday Canvas) and process-coloring tools (docker-compose, Turborepo) all assign color by <em>function class</em>, never per item, precisely because items outnumber colors.
+  <span class="basis-tag direct">direct:</span> the families are already visible in the agent filenames and in how skills dispatch them.</div>
+
+  <div class="field"><span class="lab">Rationale</span>
+  This is the one decision everything else hangs off. It converts an unsolvable constraint into a solvable one and makes color informative rather than decorative &mdash; the difference between "agent #4" and "a reviewer is running."</div>
+
+  <div class="field"><span class="lab">Downsides</span><span class="down">
+  Agents within a family share a color, so color alone won't tell two reviewers apart (the name does). Family boundaries are a judgment call &mdash; a few agents straddle two families and need an arbitration rule.</span></div>
+</article>
+
+<!-- IDEA 2 -->
+<article class="idea" id="i2">
+  <div class="idea-head"><span class="rank">2</span><h3>Redefine "unique" as distinct-within-a-fleet</h3></div>
+  <div class="chips">
+    <span class="chip axis">unique-meaning</span>
+    <span class="chip conf">Confidence 88%</span>
+    <span class="chip cx">Complexity Low</span>
+  </div>
+
+  <p>Two agents only ever compete for your eye when they're dispatched <em>together</em>. So "unique" doesn't
+  mean unique across all 43 &mdash; it means no two agents that co-run share a color. That target is reachable:
+  most fleets fit inside 8.</p>
+
+  <div class="fleet">
+    <div class="ft">sl-doc-review &mdash; 7 personas, all distinct (fits 8)</div>
+    <span class="swatch-pill" style="background:var(--c-red)">adversarial-doc</span>
+    <span class="swatch-pill" style="background:var(--c-blue)">coherence</span>
+    <span class="swatch-pill" style="background:var(--c-green)">design-lens</span>
+    <span class="swatch-pill" style="background:var(--c-yellow);color:#3a2f06">feasibility</span>
+    <span class="swatch-pill" style="background:var(--c-purple)">product-lens</span>
+    <span class="swatch-pill" style="background:var(--c-orange)">scope-guardian</span>
+    <span class="swatch-pill" style="background:var(--c-cyan)">security-lens</span>
+    <div class="note">Provably collision-free &mdash; 7 personas, 8 colors.</div>
+  </div>
+  <div class="fleet">
+    <div class="ft">sl-code-review &mdash; 9&ndash;14 agents (the one fleet that overflows 8)</div>
+    <span class="swatch-pill" style="background:var(--c-red)">correctness</span>
+    <span class="swatch-pill" style="background:var(--c-blue)">maintainability</span>
+    <span class="swatch-pill" style="background:var(--c-green)">testing</span>
+    <span class="swatch-pill" style="background:var(--c-orange)">security</span>
+    <span class="swatch-pill" style="background:var(--c-purple)">performance</span>
+    <span class="swatch-pill" style="background:var(--c-cyan)">reliability</span>
+    <span class="swatch-pill" style="background:var(--c-blue)">api-contract</span>
+    <span class="swatch-pill" style="background:var(--c-green)">data-migration</span>
+    <div class="note">Colors repeat here &mdash; accept it. The name disambiguates the repeats, like the two black suits in a deck.</div>
+  </div>
+  <p class="cap">The subtlety that makes this a real constraint, not a slogan: one agent holds one color but joins several fleets (<code>sl-learnings-researcher</code> is in 4), so it's a single graph-coloring of the co-dispatch graph, not independent per-fleet assignment.</p>
+
+  <div class="field"><span class="lab">Basis</span>
+  <span class="basis-tag direct">direct:</span> verified fleet sizes &mdash; doc-review = 7, code-review = 6 always-on + conditionals, learnings-researcher in 4 fleets.
+  <span class="basis-tag external">external:</span> transit maps reuse ~8 line colors across cities because two cities' lines never share one map; heraldry's rule of tincture and the four-color theorem are the same adjacency-coloring idea.</div>
+
+  <div class="field"><span class="lab">Rationale</span>
+  This is the reframe that makes the user's literal "unique" request <em>achievable</em> where it actually matters (inside a panel) and honestly <em>impossible</em> only in the single fleet that overflows &mdash; which then gets special handling instead of pretending.</div>
+
+  <div class="field"><span class="lab">Downsides</span><span class="down">
+  Requires knowing each skill's dispatch set to assign correctly; that set changes as agents are added (which is exactly what idea&nbsp;6's guardrail is for). Code-review's overflow has no clean answer &mdash; it leans on the name as the tiebreaker.</span></div>
+</article>
+
+<!-- IDEA 3 -->
+<article class="idea" id="i3">
+  <div class="idea-head"><span class="rank">3</span><h3>Add a palette + coverage validation test</h3></div>
+  <div class="chips">
+    <span class="chip axis">coverage-correctness</span>
+    <span class="chip conf">Confidence 92%</span>
+    <span class="chip cx">Complexity Low</span>
+  </div>
+
+  <p>Clone the pattern the repo already trusts. A small test beside
+  <code>tests/skill-agent-sl-prefix.test.ts</code> that asserts every agent has a <code>color</code> and that it's
+  one of the eight valid values. It fails the build today on <code>violet</code> and on the 25 unset agents, then
+  catches every future regression. Wire it into <code>release:validate</code>.</p>
+
+  <div class="field"><span class="lab">Basis</span>
+  <span class="basis-tag direct">direct:</span> <code>color</code> is validated nowhere; <code>violet</code> is invalid and shipped; 25 agents are unset; and the <code>sl-</code>-prefix test is a working template for exactly this kind of frontmatter contract.</div>
+
+  <div class="field"><span class="lab">Rationale</span>
+  Highest return for the least code. It's the difference between a one-time cleanup that decays back to <code>blue&times;13</code> and a property that stays true forever. The <code>violet</code> bug is the ready-made regression-test seed.</div>
+
+  <div class="field"><span class="lab">Downsides</span><span class="down">
+  A bare "must be on-palette" check enforces validity but not <em>good</em> assignment &mdash; it won't notice a fleet drifting toward one color. Pairing it with idea&nbsp;2's co-dispatch check (idea&nbsp;6) closes that gap.</span></div>
+</article>
+
+<!-- IDEA 4 -->
+<article class="idea" id="i4">
+  <div class="idea-head"><span class="rank">4</span><h3>Reserve the loud colors for block-the-ship roles</h3></div>
+  <div class="chips">
+    <span class="chip axis">assignment-scheme</span>
+    <span class="chip conf">Confidence 85%</span>
+    <span class="chip cx">Complexity Low</span>
+  </div>
+
+  <p>Don't spread the palette evenly &mdash; weight it by attention. The perceptually loud hues go to agents whose
+  findings can stop a merge; the recessive hues go to background workers you don't need to track moment-to-moment.
+  Color then carries a third free signal: urgency.</p>
+
+  <div class="demo">
+    <div class="d" style="background:var(--c-red);color:#fff">LOUD &mdash; must not miss<br><span style="font-weight:500;font-size:12.5px;opacity:.92">adversarial, security, correctness, data-integrity</span></div>
+    <div class="d" style="background:var(--c-orange);color:#fff">MID &mdash; structural<br><span style="font-weight:500;font-size:12.5px;opacity:.92">maintainability, reliability, api-contract</span></div>
+    <div class="d" style="background:var(--c-cyan);color:#08323a">RECESSIVE &mdash; background<br><span style="font-weight:500;font-size:12.5px;opacity:.85">web, repo-research, learnings, framework-docs</span></div>
+  </div>
+  <p class="cap"><code>sl-adversarial-reviewer</code> is already <code>red</code> &mdash; this just makes that deliberate and pulls security off recessive blue, where a critical finding currently hides.</p>
+
+  <div class="field"><span class="lab">Basis</span>
+  <span class="basis-tag external">external:</span> design systems reserve red/yellow for high-attention roles and blue/cyan for background; biology does the same with aposematic warning coloration.
+  <span class="basis-tag direct">direct:</span> security currently sits on <code>blue</code> &mdash; both the most-collided and least-legible-on-dark color.</div>
+
+  <div class="field"><span class="lab">Rationale</span>
+  It spends the scarce, attention-grabbing colors where a missed signal is expensive, and it fixes the specific wrongness that today's highest-stakes reviewers render in the quietest, hardest-to-see color.</div>
+
+  <div class="field"><span class="lab">Downsides</span><span class="down">
+  Urgency and family can conflict (a security <em>doc</em>-lens vs a security <em>code</em>-reviewer) &mdash; you need a rule for which axis wins. Over-using red dilutes its "stop" meaning.</span></div>
+</article>
+
+<!-- IDEA 5 -->
+<article class="idea" id="i5">
+  <div class="idea-head"><span class="rank">5</span><h3>Make "accessible" a checkable rule, not a vibe</h3></div>
+  <div class="chips">
+    <span class="chip axis">accessibility-contrast</span>
+    <span class="chip conf">Confidence 80%</span>
+    <span class="chip cx">Complexity Low</span>
+  </div>
+
+  <p>"Readable" was half the literal ask. Turn it into two rules a validator (idea&nbsp;3/6) can enforce, instead
+  of a judgment call. <b>Rule one:</b> never place a CVD-confusable pair on two agents that co-dispatch.
+  <b>Rule two:</b> keep <code>blue</code> and bright <code>yellow</code> off the highest-attention agents, since each
+  vanishes on one of the two common themes.</p>
+
+  <div class="pairbox">
+    <div class="pair"><div class="pt">confusable pair</div>
+      <span class="sw" style="background:var(--c-red)"></span>red &nbsp;&amp;&nbsp; <span class="sw" style="background:var(--c-green)"></span>green &mdash; protan/deutan CVD</div>
+    <div class="pair"><div class="pt">confusable pair</div>
+      <span class="sw" style="background:var(--c-blue)"></span>blue &nbsp;&amp;&nbsp; <span class="sw" style="background:var(--c-purple)"></span>purple &mdash; merge for many viewers</div>
+  </div>
+  <div class="demo">
+    <div class="d" style="background:#16181c;color:#3f6fd0;border-color:#2a2d33">blue on a dark theme &mdash; sinks into the background</div>
+    <div class="d" style="background:#fbfbf7;color:#e7d24a;border-color:#eceae0">bright yellow on a light theme &mdash; washes out</div>
+  </div>
+  <p class="cap">These two demos are the failure modes literally rendered &mdash; and <code>blue</code> is today's most-used color, on the fleet that most needs to be seen.</p>
+
+  <div class="field"><span class="lab">Basis</span>
+  <span class="basis-tag external">external:</span> the 8 map closely onto the CVD-safe Okabe&ndash;Ito palette; red/green and blue/purple are the documented confusable pairs; named ANSI remaps to the user's theme, so <code>blue</code>-on-dark and <code>yellow</code>-on-light are well-known casualties. Modern terminals add min-contrast enforcement, so violations degrade rather than disappear.</div>
+
+  <div class="field"><span class="lab">Rationale</span>
+  It converts "accessible" from an aspiration into a property you can test on every release &mdash; the only way it stays true as a distributed plugin ships into terminal themes you don't control.</div>
+
+  <div class="field"><span class="lab">Downsides</span><span class="down">
+  Constraints shrink the usable palette inside a fleet, tightening an already-tight 8. Full CVD-safety for every fleet may be unreachable for the code-review overflow &mdash; treat it as best-effort there.</span></div>
+</article>
+
+<!-- IDEA 6 -->
+<article class="idea" id="i6">
+  <div class="idea-head"><span class="rank">6</span><h3>Make the scheme self-maintaining</h3></div>
+  <div class="chips">
+    <span class="chip axis">governance-drift</span>
+    <span class="chip conf">Confidence 70%</span>
+    <span class="chip cx">Complexity Medium</span>
+  </div>
+
+  <p>The leverage play: spend a little structure now so the scheme survives every future agent without anyone
+  re-deciding it. Four small moves that compound &mdash; declare the family&rarr;color taxonomy once in
+  <code>CONCEPTS.md</code> (the repo's glossary home); let a metadata step derive each <code>color</code> from
+  family so a new agent is colored for free; emit a color-coverage report at release time (counts per color, unset
+  list, any fleet over its collision budget); and capture the rationale as a <code>docs/solutions/</code> learning
+  via <code>sl-compound</code> so the next maintainer inherits <em>why</em>, not just <em>what</em>.</p>
+
+  <div class="field"><span class="lab">Basis</span>
+  <span class="basis-tag direct">direct:</span> <code>CONCEPTS.md</code>, <code>extract-metadata.py</code>-style generation, the <code>docs/solutions/</code> convention, and <code>sl-compound</code> all already exist &mdash; this reuses the repo's own muscle rather than inventing machinery.</div>
+
+  <div class="field"><span class="lab">Rationale</span>
+  Without it, even a perfect one-time recoloring decays back toward <code>blue</code> the moment the next agent is copied from an existing one. This is what turns "a cleanup" into "a convention."</div>
+
+  <div class="field"><span class="lab">Downsides</span><span class="down">
+  More surface than the core fix &mdash; easy to over-build. Generating <code>color</code> into frontmatter adds a sync step that itself needs validation. Best sequenced <em>after</em> ideas 1&ndash;3 land, not before.</span></div>
+</article>
+</section>
+
+<section>
+<h2>Rejection Summary</h2>
+<table class="rej">
+  <thead><tr><th>Idea</th><th>Reason cut</th></tr></thead>
+  <tbody>
+    <tr><td>Forbid color; encode family in the name (<code>sl-rev-correctness</code>)</td><td>Renaming changes <code>subagent_type</code> &mdash; a breaking change to every dispatch call. Too expensive for the value; the chip already sits beside the name.</td></tr>
+    <tr><td>Forward-compatible hex token map</td><td>Speculative &mdash; depends on Claude Code adding hex, which issue <a href="https://github.com/anthropics/claude-code/issues/21501">#21501</a> (closed/not-planned) suggests isn't near. Premature abstraction.</td></tr>
+    <tr><td>Collapse to a 3-color extreme palette</td><td>Loses the family granularity ~6 groups need. Useful as input to idea&nbsp;5 (favor max-separation), not as a standalone direction.</td></tr>
+    <tr><td>Color as a product-wide loop language (status line, pulse reports, demo reels)</td><td>Scope overrun &mdash; expands past agent colors to other surfaces. Partially folded into idea&nbsp;6; revisit once the agent scheme lands.</td></tr>
+    <tr><td>Loop-phase color scheme (as a separate idea)</td><td>Not cut &mdash; folded into idea&nbsp;1 as the alternative meaning-axis to decide.</td></tr>
+    <tr><td>Per-fleet collision-budget test; document the 8-value enum in-repo</td><td>Folded into ideas&nbsp;6 and 3 respectively &mdash; they're the enforcement/record arms of the surviving ideas, not separate directions.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<footer class="composition-signal">
+  Composed 2026-06-26 by sl-ideate from the prompt <code>"customize agent colors to be unique and accessible"</code> &mdash; grounded in <code>plugins/super-looper/agents/</code>, the Claude Code sub-agents docs, and web research on terminal color accessibility.
+</footer>
+
+</div>
+</body>
+</html>
