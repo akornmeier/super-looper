@@ -62,6 +62,9 @@ The inline remnant left in a Skill when load-bearing content moves to a referenc
 ### Reviewer persona
 A single-lens reviewer Agent that evaluates work from one specific perspective — security, correctness, scope, design, and so on. Review Skills dispatch a panel of personas and merge their findings.
 
+### Fleet
+The set of agents a Skill dispatches together in one parallel fan-out — the reviewer-persona panel is one example, but ideation and research fleets exist too. Fleet is the unit that scopes agent-color distinctness. Where a fleet is small enough to fit the 8-value `color` palette, every agent in it takes a distinct color so a user can tell co-running agents apart at a glance. Where a fleet exceeds the palette (e.g. code-review), it sub-splits into attention tiers and agents sharing a tier may share a color, disambiguated by the agent name rendered beside the chip. Colors may be reused across fleets that never co-dispatch.
+
 ### Confidence anchor
 A discrete, self-scored confidence value on a fixed small scale, each level tied to a behavioral criterion the model can honestly apply, used to gate and rank review findings instead of a continuous score that invites false precision. Each review Skill sets its own actionable threshold; corroboration across personas promotes a finding by one level.
 

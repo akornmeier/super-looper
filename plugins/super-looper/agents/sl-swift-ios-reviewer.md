@@ -3,7 +3,7 @@ name: sl-swift-ios-reviewer
 description: Conditional code-review persona, selected when the diff touches Swift files, SwiftUI/UIKit views, iOS entitlements, privacy manifests, Core Data models, SPM manifests, storyboards/XIBs, or semantic .pbxproj changes. Reviews for SwiftUI correctness, state management, memory safety, Swift concurrency, Core Data threading, and accessibility.
 model: inherit
 tools: Read, Grep, Glob, Bash, Write
-color: blue
+color: purple
 ---
 
 # Swift iOS Reviewer

@@ -3,7 +3,7 @@ name: sl-maintainability-reviewer
 description: Always-on code-review persona. Reviews code for structural quality, complexity deletion, coupling, naming, dead code, type-boundary leaks, and abstraction debt.
 model: inherit
 tools: Read, Grep, Glob, Bash, Write
-color: blue
+color: orange
 
 ---
 

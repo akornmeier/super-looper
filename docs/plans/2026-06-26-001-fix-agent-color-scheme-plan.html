@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fix: Agent color scheme — role-based, fleet-scoped</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --canvas:#fff; --ink:#1d1c1a; --ink-soft:#56524c; --ink-faint:#8a847b;
+    --line:#e4e0d8; --line-strong:#d2cdc2;
+    --accent:#6a4df0; --accent-soft:#efeaff; --accent-text:#4a32c0;
+    --good:#2f7d4f; --good-soft:#e7f3ec; --warn:#9a6a17; --warn-soft:#f6efdf; --bad:#b23b3b;
+    --c-red:#cc4b4b; --c-blue:#3f6fd0; --c-green:#3fa564; --c-yellow:#c9a227;
+    --c-purple:#8e5bbf; --c-orange:#d97a2b; --c-pink:#d660a4; --c-cyan:#2fb3c4;
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#141312; --canvas:#1c1b19; --ink:#ece8e1; --ink-soft:#b3ada3; --ink-faint:#857f76;
+      --line:#2e2c28; --line-strong:#3a3733;
+      --accent:#9d86ff; --accent-soft:#272140; --accent-text:#c3b4ff;
+      --good:#6fcf97; --good-soft:#1d2d23; --warn:#d9b25a; --warn-soft:#2e2716; --bad:#e07a7a;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin-inline:auto;padding:56px 24px 96px}
+  header.doc{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:8px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-text);font-weight:600}
+  h1{font-size:31px;line-height:1.15;margin:10px 0 14px;letter-spacing:-0.01em}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13.5px;color:var(--ink-soft)}
+  .meta b{color:var(--ink);font-weight:600}
+  .meta a{color:var(--accent-text)}
+  p,li{max-width:74ch}
+  h2{font-size:21px;margin:48px 0 12px;letter-spacing:-0.01em;padding-top:8px}
+  h3{font-size:16px;margin:0 0 4px}
+  a{color:var(--accent-text);text-underline-offset:2px;text-decoration-color:var(--line-strong)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em;
+    background:var(--accent-soft);color:var(--accent-text);padding:1px 5px;border-radius:5px}
+  hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:24px 0 4px}
+  .stat{background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px}
+  .stat .n{font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .stat .l{font-size:12px;color:var(--ink-faint);margin-top:2px}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:26px}}
+  .sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px;border:1px solid rgba(0,0,0,.2)}
+  section>p:first-child{margin-top:0}
+  /* KTD cards */
+  .ktd{background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin:0 0 12px}
+  .ktd h3{font-size:15px}
+  .ktd p{margin:6px 0 0;color:var(--ink-soft);font-size:14.5px}
+  /* req groups */
+  .reqgroup{font-weight:600;margin:18px 0 6px;font-size:14px}
+  ul.req{list-style:none;padding:0;margin:0}
+  ul.req li{padding:7px 0;border-top:1px solid var(--line);max-width:none}
+  ul.req li:first-child{border-top:none}
+  .rid{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent-text);font-size:13px;margin-right:6px}
+  /* table */
+  table.colors{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+  table.colors th,table.colors td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
+  table.colors th{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint)}
+  table.colors td.agent{font-family:ui-monospace,monospace;font-size:12.5px}
+  table.colors td.tier{color:var(--ink-soft)}
+  /* before/after panel */
+  .panel{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:8px 0}
+  .panel .pt{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px}
+  .chip{display:inline-flex;align-items:center;font-size:11px;font-weight:600;color:#fff;
+    padding:3px 9px;border-radius:999px;margin:3px 4px 3px 0}
+  .chip.unset{background:#8a847b}
+  .chip.darktext{color:#2a2305}
+  .cap{font-size:12.5px;color:var(--ink-faint);margin:6px 0 0;font-style:italic}
+  /* units */
+  article.unit{background:var(--canvas);border:1px solid var(--line);border-radius:13px;padding:20px 22px;margin:0 0 18px;scroll-margin-top:14px}
+  .uhead{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+  .uid{font-size:12px;font-weight:700;color:#fff;background:var(--accent);border-radius:6px;padding:2px 8px}
+  dl.strip{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:14px 0 4px;font-size:14px}
+  dl.strip dt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;padding-top:2px}
+  dl.strip dd{margin:0}
+  dl.strip dd code{font-size:.82em}
+  details{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  summary{cursor:pointer;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);font-weight:600}
+  details ul{margin:8px 0 0;padding-left:20px}
+  details li{font-size:14px;margin:4px 0}
+  .scope{background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius);padding:6px 20px 14px}
+  .scope ul{padding-left:20px}
+  footer.composition-signal{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-faint)}
+  footer.composition-signal code{background:none;color:var(--ink-faint);padding:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="eyebrow">Implementation Plan · Super Looper</div>
+  <h1>fix: Agent color scheme — role-based, fleet-scoped</h1>
+  <div class="meta">
+    <span><b>Type</b> fix</span>
+    <span><b>Date</b> <time datetime="2026-06-26">2026-06-26</time></span>
+    <span><b>Origin</b> <a href="https://github.com/akornmeier/super-looper/blob/main/docs/brainstorms/2026-06-26-agent-color-scheme-requirements.md"><code>docs/brainstorms/2026-06-26-agent-color-scheme-requirements.md</code></a></span>
+    <span><b>Depth</b> Standard</span>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="n">43</div><div class="l">agents recolored</div></div>
+  <div class="stat"><div class="n">4</div><div class="l">implementation units</div></div>
+  <div class="stat"><div class="n">8</div><div class="l">palette ceiling</div></div>
+  <div class="stat"><div class="n">3</div><div class="l">live defects fixed</div></div>
+</div>
+
+<section>
+<h2>Summary</h2>
+<p>Assign a valid <code>color</code> to all 43 agents by role, spreading the 8-value palette so each co-dispatched fleet's task-list panel shows several colors instead of one. Work proceeds family-by-family across four units: code-review reviewers (split into three attention tiers), the seven doc-review personas (each distinct), the researcher/auditor cluster (distinct within the plan and compound waves), and the design/writer agents. This fixes the invalid <code>violet</code>, the 25 unset agents, and the <code>blue×13</code> collision.</p>
+</section>
+
+<hr>
+
+<section>
+<h2>Problem Frame</h2>
+<p>Of 43 agents, 25 set no <code>color</code> and 13 are all <code>blue</code>; <code>sl-design-iterator</code> uses <code>violet</code>, which the field does not accept. The collision lands where parallelism is highest — <code>sl-code-review</code> dispatches up to ~14 agents, most of them the blue ones — so the densest panel is nearly monochrome and color carries no signal exactly when a user is trying to tell parallel agents apart. The field accepts only eight named values, so the goal is per-panel legibility, not global per-agent uniqueness <em>(see origin: <code>docs/brainstorms/2026-06-26-agent-color-scheme-requirements.md</code>)</em>.</p>
+</section>
+
+<hr>
+
+<section>
+<h2>Requirements</h2>
+<p>Carried from the origin requirements doc.</p>
+
+<div class="reqgroup">Coverage and correctness</div>
+<ul class="req">
+  <li><span class="rid">R1.</span> Every agent sets <code>color</code> to one of the eight valid values (<code>red, blue, green, yellow, purple, orange, pink, cyan</code>); none left unset.</li>
+  <li><span class="rid">R2.</span> No off-palette value; the current <code>violet</code> on <code>sl-design-iterator</code> is corrected.</li>
+  <li><span class="rid">R3.</span> The <code>blue×13</code> collision is eliminated — no single color applied to a majority of agents as an unconsidered default.</li>
+</ul>
+
+<div class="reqgroup">Assignment scheme</div>
+<ul class="req">
+  <li><span class="rid">R4.</span> An agent's color is determined by its role, grouping into ~6 families (code-review, doc-review, researchers, design/UI, writers/resolvers, data/deploy).</li>
+  <li><span class="rid">R5.</span> The palette is spread so each co-dispatched fleet's panel shows multiple colors — optimized for in-panel legibility, not global per-agent uniqueness.</li>
+  <li><span class="rid">R6.</span> A color may carry different roles in different panels; reuse across fleets that never co-run is intended.</li>
+</ul>
+
+<div class="reqgroup">Per-fleet distinctness</div>
+<ul class="req">
+  <li><span class="rid">R7.</span> In a fleet of ≤8 co-dispatched agents (e.g. <code>sl-doc-review</code>'s 7), every agent has a distinct color.</li>
+  <li><span class="rid">R8.</span> In a fleet exceeding 8 (<code>sl-code-review</code>), agents are sub-split into three attention tiers — high-stakes, structural, routine — so the panel shows several colors; agents sharing a tier may share a color, disambiguated by name.</li>
+  <li><span class="rid">R9.</span> An agent in multiple fleets keeps one fixed color, chosen to stay distinct within every fleet it joins.</li>
+  <li><span class="rid">R10.</span> A straddling agent's color follows the fleet it dispatches in, not its topic.</li>
+</ul>
+</section>
+
+<hr>
+
+<section>
+<h2>Key Technical Decisions</h2>
+
+<div class="ktd"><h3>Hand-author the colors; do not build a generator</h3>
+<p>Each color is written directly into the agent's frontmatter. The assignment changes only when agents are added or fleets reshuffle (rare), so a graph-coloring generator is carrying cost the change doesn't justify. The deferred validation test — not a generator — is what guards drift.</p></div>
+
+<div class="ktd"><h3>Code-review is split into three attention tiers</h3>
+<p>High-stakes (block-the-ship: correctness, security, adversarial) takes the loudest hue; structural and routine take their own. This folds urgency into the palette so a critical finding never renders in recessive blue, and gives the densest panel 3+ colors.</p></div>
+
+<div class="ktd"><h3>Distinctness is verified per fleet, not globally</h3>
+<p>The coloring was solved against the actual co-dispatch map: <code>sl-doc-review</code> (7), <code>sl-code-review</code> (≤16), <code>sl-plan</code> (14, dispatched in waves), <code>sl-compound</code> (8), <code>sl-ideate</code> grounding (4), <code>sl-optimize</code> (2). An agent in several fleets (e.g. <code>sl-learnings-researcher</code>, in 4) holds one color picked to stay distinct in each. <code>sl-resolve-pr-feedback</code> lists all 42 agents as a persona <em>catalog</em>, not a 42-way parallel panel, so it imposes no all-vs-all constraint.</p></div>
+
+<div class="ktd"><h3>The name is the identity channel</h3>
+<p>Same-color agents within a tier are told apart by the agent name, which always renders beside the chip. Color groups; the name identifies.</p></div>
+</section>
+
+<hr>
+
+<section>
+<h2>High-Level Technical Design</h2>
+<p>The deliverable is the per-agent color assignment below. The visual shows what the assignment buys for the worst panel.</p>
+
+<div class="panel">
+  <div class="pt">sl-code-review panel — before</div>
+  <span class="chip" style="background:var(--c-blue)">correctness</span>
+  <span class="chip" style="background:var(--c-blue)">security</span>
+  <span class="chip" style="background:var(--c-blue)">maintainability</span>
+  <span class="chip" style="background:var(--c-blue)">testing</span>
+  <span class="chip" style="background:var(--c-blue)">performance</span>
+  <span class="chip" style="background:var(--c-blue)">reliability</span>
+  <span class="chip" style="background:var(--c-blue)">api-contract</span>
+  <span class="chip unset">data-migration ·unset</span>
+  <span class="chip unset">agent-native ·unset</span>
+  <span class="chip unset">learnings ·unset</span>
+  <span class="chip" style="background:var(--c-red)">adversarial</span>
+  <div class="cap">One hue plus uncolored defaults — color tells you nothing.</div>
+</div>
+<div class="panel">
+  <div class="pt">sl-code-review panel — after</div>
+  <span class="chip" style="background:var(--c-red)">correctness</span>
+  <span class="chip" style="background:var(--c-red)">security</span>
+  <span class="chip" style="background:var(--c-red)">adversarial</span>
+  <span class="chip" style="background:var(--c-orange)">maintainability</span>
+  <span class="chip" style="background:var(--c-orange)">reliability</span>
+  <span class="chip" style="background:var(--c-orange)">api-contract</span>
+  <span class="chip" style="background:var(--c-orange)">data-migration</span>
+  <span class="chip" style="background:var(--c-blue)">testing</span>
+  <span class="chip" style="background:var(--c-blue)">project-standards</span>
+  <span class="chip" style="background:var(--c-blue)">performance</span>
+  <span class="chip" style="background:var(--c-green)">agent-native</span>
+  <span class="chip" style="background:var(--c-cyan)">learnings</span>
+  <div class="cap">Red = block-the-ship, orange = structural, blue = routine; off-family agents pop in their own hues. Within a tier, the name disambiguates.</div>
+</div>
+
+<h3 style="margin-top:24px">Full assignment</h3>
+<p style="font-size:13.5px;color:var(--ink-soft)">Each row is one frontmatter <code>color:</code> value. Grouped by the unit that applies it.</p>
+
+<table class="colors">
+  <thead><tr><th>Agent</th><th>Color</th><th>Tier / note</th></tr></thead>
+  <tbody>
+    <tr><td class="agent">sl-correctness-reviewer</td><td><span class="sw" style="background:var(--c-red)"></span>red</td><td class="tier">high-stakes</td></tr>
+    <tr><td class="agent">sl-security-reviewer</td><td><span class="sw" style="background:var(--c-red)"></span>red</td><td class="tier">high-stakes</td></tr>
+    <tr><td class="agent">sl-adversarial-reviewer</td><td><span class="sw" style="background:var(--c-red)"></span>red</td><td class="tier">high-stakes</td></tr>
+    <tr><td class="agent">sl-maintainability-reviewer</td><td><span class="sw" style="background:var(--c-orange)"></span>orange</td><td class="tier">structural</td></tr>
+    <tr><td class="agent">sl-reliability-reviewer</td><td><span class="sw" style="background:var(--c-orange)"></span>orange</td><td class="tier">structural</td></tr>
+    <tr><td class="agent">sl-api-contract-reviewer</td><td><span class="sw" style="background:var(--c-orange)"></span>orange</td><td class="tier">structural</td></tr>
+    <tr><td class="agent">sl-data-migration-reviewer</td><td><span class="sw" style="background:var(--c-orange)"></span>orange</td><td class="tier">structural</td></tr>
+    <tr><td class="agent">sl-testing-reviewer</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">routine</td></tr>
+    <tr><td class="agent">sl-project-standards-reviewer</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">routine</td></tr>
+    <tr><td class="agent">sl-performance-reviewer</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">routine</td></tr>
+    <tr><td class="agent">sl-previous-comments-reviewer</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">routine</td></tr>
+    <tr><td class="agent">sl-julik-frontend-races-reviewer</td><td><span class="sw" style="background:var(--c-purple)"></span>purple</td><td class="tier">stack-specific</td></tr>
+    <tr><td class="agent">sl-swift-ios-reviewer</td><td><span class="sw" style="background:var(--c-purple)"></span>purple</td><td class="tier">stack-specific</td></tr>
+    <tr><td class="agent">sl-agent-native-reviewer</td><td><span class="sw" style="background:var(--c-green)"></span>green</td><td class="tier">parity (CE always-on)</td></tr>
+    <tr><td colspan="3" style="background:var(--accent-soft);font-weight:600;font-size:12px;color:var(--accent-text)">doc-review — 7 distinct</td></tr>
+    <tr><td class="agent">sl-adversarial-document-reviewer</td><td><span class="sw" style="background:var(--c-red)"></span>red</td><td class="tier">distinct</td></tr>
+    <tr><td class="agent">sl-security-lens-reviewer</td><td><span class="sw" style="background:var(--c-orange)"></span>orange</td><td class="tier">distinct</td></tr>
+    <tr><td class="agent">sl-coherence-reviewer</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">distinct</td></tr>
+    <tr><td class="agent">sl-feasibility-reviewer</td><td><span class="sw" style="background:var(--c-green)"></span>green</td><td class="tier">distinct</td></tr>
+    <tr><td class="agent">sl-product-lens-reviewer</td><td><span class="sw" style="background:var(--c-purple)"></span>purple</td><td class="tier">distinct</td></tr>
+    <tr><td class="agent">sl-design-lens-reviewer</td><td><span class="sw" style="background:var(--c-pink)"></span>pink</td><td class="tier">distinct</td></tr>
+    <tr><td class="agent">sl-scope-guardian-reviewer</td><td><span class="sw" style="background:var(--c-cyan)"></span>cyan</td><td class="tier">distinct</td></tr>
+    <tr><td colspan="3" style="background:var(--accent-soft);font-weight:600;font-size:12px;color:var(--accent-text)">researchers / auditors / data — distinct within plan &amp; compound waves</td></tr>
+    <tr><td class="agent">sl-learnings-researcher</td><td><span class="sw" style="background:var(--c-cyan)"></span>cyan</td><td class="tier">in 4 fleets</td></tr>
+    <tr><td class="agent">sl-repo-research-analyst</td><td><span class="sw" style="background:var(--c-green)"></span>green</td><td class="tier">plan, optimize</td></tr>
+    <tr><td class="agent">sl-web-researcher</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">ideate, plan</td></tr>
+    <tr><td class="agent">sl-best-practices-researcher</td><td><span class="sw" style="background:var(--c-purple)"></span>purple</td><td class="tier">plan, compound</td></tr>
+    <tr><td class="agent">sl-framework-docs-researcher</td><td><span class="sw" style="background:var(--c-orange)"></span>orange</td><td class="tier">plan, compound</td></tr>
+    <tr><td class="agent">sl-slack-researcher</td><td><span class="sw" style="background:var(--c-pink)"></span>pink</td><td class="tier">ideate, plan, brainstorm</td></tr>
+    <tr><td class="agent">sl-issue-intelligence-analyst</td><td><span class="sw" style="background:var(--c-red)"></span>red</td><td class="tier">ideate</td></tr>
+    <tr><td class="agent">sl-spec-flow-analyzer</td><td><span class="sw" style="background:var(--c-yellow)"></span>yellow</td><td class="tier">plan</td></tr>
+    <tr><td class="agent">sl-git-history-analyzer</td><td><span class="sw" style="background:var(--c-cyan)"></span>cyan</td><td class="tier">standalone</td></tr>
+    <tr><td class="agent">sl-session-historian</td><td><span class="sw" style="background:var(--c-yellow)"></span>yellow</td><td class="tier">compound, sessions</td></tr>
+    <tr><td class="agent">sl-pattern-recognition-specialist</td><td><span class="sw" style="background:var(--c-green)"></span>green</td><td class="tier">plan, compound</td></tr>
+    <tr><td class="agent">sl-architecture-strategist</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">plan</td></tr>
+    <tr><td class="agent">sl-performance-oracle</td><td><span class="sw" style="background:var(--c-cyan)"></span>cyan</td><td class="tier">plan, compound</td></tr>
+    <tr><td class="agent">sl-security-sentinel</td><td><span class="sw" style="background:var(--c-red)"></span>red</td><td class="tier">plan, compound</td></tr>
+    <tr><td class="agent">sl-data-integrity-guardian</td><td><span class="sw" style="background:var(--c-pink)"></span>pink</td><td class="tier">plan, compound</td></tr>
+    <tr><td class="agent">sl-code-simplicity-reviewer</td><td><span class="sw" style="background:var(--c-blue)"></span>blue</td><td class="tier">compound</td></tr>
+    <tr><td class="agent">sl-deployment-verification-agent</td><td><span class="sw" style="background:var(--c-yellow)"></span>yellow</td><td class="tier">code-review, plan</td></tr>
+    <tr><td colspan="3" style="background:var(--accent-soft);font-weight:600;font-size:12px;color:var(--accent-text)">design / writers — family color</td></tr>
+    <tr><td class="agent">sl-design-implementation-reviewer</td><td><span class="sw" style="background:var(--c-pink)"></span>pink</td><td class="tier">design</td></tr>
+    <tr><td class="agent">sl-design-iterator</td><td><span class="sw" style="background:var(--c-pink)"></span>pink</td><td class="tier">design (fixes <code>violet</code>)</td></tr>
+    <tr><td class="agent">sl-figma-design-sync</td><td><span class="sw" style="background:var(--c-pink)"></span>pink</td><td class="tier">design</td></tr>
+    <tr><td class="agent">sl-ankane-readme-writer</td><td><span class="sw" style="background:var(--c-green)"></span>green</td><td class="tier">writer</td></tr>
+    <tr><td class="agent">sl-pr-comment-resolver</td><td><span class="sw" style="background:var(--c-green)"></span>green</td><td class="tier">resolver</td></tr>
+  </tbody>
+</table>
+<p class="cap">Distinctness verified for the real panels: doc-review (7 distinct), compound (8 distinct), plan deepening wave (7 distinct), ideate grounding (4 distinct). Code-review shares within a tier by design (R8).</p>
+</section>
+
+<hr>
+
+<section>
+<h2>Implementation Units</h2>
+
+<article class="unit" id="u1">
+  <div class="uhead"><span class="uid">U1</span><h3>Code-review reviewer colors (attention tiers)</h3></div>
+  <dl class="strip">
+    <dt>Goal</dt><dd>Color the 14 code-review-dispatched reviewers across three attention tiers so the densest panel shows several colors.</dd>
+    <dt>Requirements</dt><dd>R3, R4, R5, R8</dd>
+    <dt>Dependencies</dt><dd>none</dd>
+    <dt>Files</dt><dd><code>plugins/super-looper/agents/sl-{correctness,security,adversarial,maintainability,reliability,api-contract,data-migration,testing,project-standards,performance,previous-comments,julik-frontend-races,swift-ios,agent-native}-reviewer.md</code> (and <code>-agent</code> suffix where applicable)</dd>
+  </dl>
+  <details>
+    <summary>Approach · Test · Verification</summary>
+    <ul>
+      <li><strong>Approach:</strong> Set <code>color</code> in each agent's frontmatter per the High-Level Technical Design table. High-stakes = red, structural = orange, routine = blue, stack-specific = purple, parity = green. Several agents currently hold <code>blue</code> or are unset; overwrite to the assigned value.</li>
+      <li><strong>Test expectation:</strong> none — frontmatter metadata change, no runtime behavior. (The on-palette + coverage validation test is a deferred follow-up.)</li>
+      <li><strong>Verification:</strong> Every touched file's <code>color</code> is one of the eight values; the <code>sl-code-review</code> panel renders red/orange/blue/purple/green rather than a single hue; <code>bun run release:validate</code> still passes.</li>
+    </ul>
+  </details>
+</article>
+
+<article class="unit" id="u2">
+  <div class="uhead"><span class="uid">U2</span><h3>Doc-review persona colors (7 distinct)</h3></div>
+  <dl class="strip">
+    <dt>Goal</dt><dd>Give each of the 7 doc-review personas a distinct color so the doc-review panel is collision-free.</dd>
+    <dt>Requirements</dt><dd>R4, R5, R7</dd>
+    <dt>Dependencies</dt><dd>none</dd>
+    <dt>Files</dt><dd><code>plugins/super-looper/agents/sl-{adversarial-document,security-lens,coherence,feasibility,product-lens,design-lens,scope-guardian}-reviewer.md</code></dd>
+  </dl>
+  <details>
+    <summary>Approach · Test · Verification</summary>
+    <ul>
+      <li><strong>Approach:</strong> Assign red / orange / blue / green / purple / pink / cyan one-to-one per the table. This is the ≤8 fleet where full within-fleet uniqueness holds.</li>
+      <li><strong>Test expectation:</strong> none — frontmatter metadata change.</li>
+      <li><strong>Verification:</strong> All 7 colors are distinct and on-palette; <code>release:validate</code> passes.</li>
+    </ul>
+  </details>
+</article>
+
+<article class="unit" id="u3">
+  <div class="uhead"><span class="uid">U3</span><h3>Researcher, auditor &amp; data-agent colors</h3></div>
+  <dl class="strip">
+    <dt>Goal</dt><dd>Color the 17 research/auditor/data agents so they stay distinct within the plan and compound dispatch waves while keeping one color across the fleets they share.</dd>
+    <dt>Requirements</dt><dd>R4, R5, R6, R9, R10</dd>
+    <dt>Dependencies</dt><dd>none</dd>
+    <dt>Files</dt><dd><code>plugins/super-looper/agents/sl-{learnings-researcher,repo-research-analyst,web-researcher,best-practices-researcher,framework-docs-researcher,slack-researcher,issue-intelligence-analyst,spec-flow-analyzer,git-history-analyzer,session-historian,pattern-recognition-specialist,architecture-strategist,performance-oracle,security-sentinel,data-integrity-guardian,code-simplicity-reviewer,deployment-verification-agent}.md</code></dd>
+  </dl>
+  <details>
+    <summary>Approach · Test · Verification</summary>
+    <ul>
+      <li><strong>Approach:</strong> Apply the table values. The binding constraints are the compound fleet (8 agents → 8 distinct) and the plan deepening wave (7 distinct). Cross-fleet agents (<code>sl-learnings-researcher</code> cyan, <code>sl-deployment-verification-agent</code> yellow, etc.) take one color that holds in every fleet they join (R9). <code>sl-security-sentinel</code> stays red, consistent with high-stakes elsewhere (R10 keeps it independent of the doc-review <code>security-lens</code>).</li>
+      <li><strong>Test expectation:</strong> none — frontmatter metadata change.</li>
+      <li><strong>Verification:</strong> The compound 8 are distinct; the plan deepening wave (architecture-strategist, data-integrity-guardian, performance-oracle, security-sentinel, pattern-recognition, data-migration, deployment-verification) shows 7 distinct colors; the ideate grounding 4 (learnings, web, slack, issue-intelligence) are distinct; <code>release:validate</code> passes.</li>
+    </ul>
+  </details>
+</article>
+
+<article class="unit" id="u4">
+  <div class="uhead"><span class="uid">U4</span><h3>Design &amp; writer colors</h3></div>
+  <dl class="strip">
+    <dt>Goal</dt><dd>Color the design/UI agents pink and the writer/resolver agents green; correct the invalid <code>violet</code> here.</dd>
+    <dt>Requirements</dt><dd>R1, R2, R4</dd>
+    <dt>Dependencies</dt><dd>none</dd>
+    <dt>Files</dt><dd><code>plugins/super-looper/agents/sl-{design-implementation-reviewer,design-iterator,figma-design-sync,ankane-readme-writer,pr-comment-resolver}.md</code></dd>
+  </dl>
+  <details>
+    <summary>Approach · Test · Verification</summary>
+    <ul>
+      <li><strong>Approach:</strong> Design agents → pink (family color); writer/resolver → green. <code>sl-design-iterator</code>'s <code>violet</code> becomes <code>pink</code>, resolving R2. These agents rarely co-dispatch, so a shared family color is acceptable; the name disambiguates if two ever appear together.</li>
+      <li><strong>Test expectation:</strong> none — frontmatter metadata change.</li>
+      <li><strong>Verification:</strong> No agent in the repo holds <code>violet</code> or any off-palette value; a grep of all 43 agents shows every <code>color</code> in the eight-value set and none unset (satisfies R1, R2 repo-wide); <code>release:validate</code> passes.</li>
+    </ul>
+  </details>
+</article>
+</section>
+
+<hr>
+
+<section>
+<h2>Scope Boundaries</h2>
+<div class="scope">
+<p><strong>Deferred to Follow-Up Work</strong> (separate PRs; recorded in the origin doc):</p>
+<ul>
+  <li>A validation test enforcing on-palette values and full color coverage across all agents — the guardrail that keeps the scheme from drifting back. Clone the pattern of <code>tests/skill-agent-sl-prefix.test.ts</code>.</li>
+  <li>Color-vision-deficiency and light/dark theme legibility rules (avoiding confusable pairs within a fleet; keeping <code>blue</code>/<code>yellow</code> off high-attention roles).</li>
+  <li>A deterministic generator deriving each color from a declared family/tier.</li>
+</ul>
+<p><strong>Outside this change:</strong> recoloring non-agent surfaces (status line, pulse reports, demo reels); loop-phase coloring (rejected upstream in favor of role).</p>
+</div>
+</section>
+
+<hr>
+
+<section>
+<h2>Risks &amp; Dependencies</h2>
+<ul class="req">
+  <li><span class="rid">·</span> The eight-value palette is a Claude Code platform contract, not validated in this repo. If the platform later adds values (e.g. hex), the scheme still holds; this plan does not depend on that.</li>
+  <li><span class="rid">·</span> Fleet composition can change as agents are added, which would require re-checking within-fleet distinctness. Without the deferred validation test, that check is manual until the follow-up lands.</li>
+  <li><span class="rid">·</span> <code>release:validate</code> does not inspect <code>color</code>, so it neither blocks nor verifies this change; verification is by grep + visual panel inspection until the validation test ships.</li>
+</ul>
+</section>
+
+<hr>
+
+<section>
+<h2>Sources &amp; Research</h2>
+<ul class="req">
+  <li><span class="rid">·</span> <a href="https://github.com/akornmeier/super-looper/blob/main/docs/brainstorms/2026-06-26-agent-color-scheme-requirements.md"><code>docs/brainstorms/2026-06-26-agent-color-scheme-requirements.md</code></a> — origin requirements (scheme, decisions, R1–R10).</li>
+  <li><span class="rid">·</span> <a href="https://github.com/akornmeier/super-looper/blob/main/docs/ideation/2026-06-26-agent-colors-ideation.html"><code>docs/ideation/2026-06-26-agent-colors-ideation.html</code></a> — upstream ideation.</li>
+  <li><span class="rid">·</span> <a href="https://github.com/akornmeier/super-looper/tree/main/plugins/super-looper/agents"><code>plugins/super-looper/agents/</code></a> — the 43 frontmatter files to edit; current state (<code>blue×13</code>, <code>violet</code>, 25 unset).</li>
+  <li><span class="rid">·</span> <a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/sl-code-review/SKILL.md"><code>plugins/super-looper/skills/sl-code-review/SKILL.md</code></a> and <code>sl-doc-review/</code>, <code>sl-plan/</code>, <code>sl-compound/</code> — fleet composition, the input to the coloring.</li>
+  <li><span class="rid">·</span> Claude Code sub-agents documentation — the authoritative 8-value <code>color</code> enum.</li>
+  <li><span class="rid">·</span> <a href="https://github.com/akornmeier/super-looper/blob/main/tests/skill-agent-sl-prefix.test.ts"><code>tests/skill-agent-sl-prefix.test.ts</code></a> — frontmatter-convention enforcement pattern, template for the deferred validation follow-up.</li>
+</ul>
+</section>
+
+<footer class="composition-signal">
+  Composed 2026-06-26 by sl-plan from <code>docs/brainstorms/2026-06-26-agent-color-scheme-requirements.md</code>.
+</footer>
+
+</div>
+</body>
+</html>
