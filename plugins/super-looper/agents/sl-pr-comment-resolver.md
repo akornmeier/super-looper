@@ -1,7 +1,7 @@
 ---
 name: sl-pr-comment-resolver
 description: "Evaluates and resolves one or more related PR review threads -- assesses validity, implements fixes, and returns structured summaries with reply text. Spawned by the resolve-pr-feedback skill."
-color: blue
+color: green
 model: inherit
 ---
 

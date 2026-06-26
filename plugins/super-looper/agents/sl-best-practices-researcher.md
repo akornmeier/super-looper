@@ -3,6 +3,7 @@ name: sl-best-practices-researcher
 description: "Researches and synthesizes external best practices, documentation, and examples for any technology or framework. Use when you need industry standards, community conventions, or implementation guidance."
 model: inherit
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, mcp__context7__*
+color: purple
 ---
 
 **Note: The current year is 2026.** Use this when searching for recent documentation and best practices.

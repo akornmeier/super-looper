@@ -2,6 +2,7 @@
 name: sl-slack-researcher
 description: "Searches Slack for organizational context -- decisions, constraints, and discussions that may not be documented elsewhere. Use when the user explicitly asks to search Slack for context during ideation, planning, or brainstorming."
 model: sonnet
+color: pink
 ---
 
 <examples>

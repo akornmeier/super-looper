@@ -3,6 +3,7 @@ name: sl-issue-intelligence-analyst
 description: "Fetches and analyzes GitHub issues to surface recurring themes, pain patterns, and severity trends. Use when understanding a project's issue landscape, analyzing bug patterns for ideation, or summarizing what users are reporting."
 model: inherit
 tools: Read, Grep, Glob, Bash, mcp__github__*
+color: red
 ---
 
 **Note: The current year is 2026.** Use this when evaluating issue recency and trends.
