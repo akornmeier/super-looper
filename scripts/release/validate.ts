@@ -38,6 +38,12 @@ const counts = await getSuperLooperCounts(process.cwd())
 const result = await syncReleaseMetadata({
   write: false,
   componentVersions: {
+    // Assert the plugin.json $.version extra-file stays in lockstep with the
+    // release-please manifest entry release-please owns. Without this, a
+    // hand-bumped plugin.json version would only ever be compared against
+    // itself and never flagged (the documented validator gap, R19). Symmetric
+    // with the marketplace line below.
+    "super-looper": manifest["plugins/super-looper"],
     marketplace: manifest[".claude-plugin"],
   },
 })
