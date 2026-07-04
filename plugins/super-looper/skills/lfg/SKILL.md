@@ -8,6 +8,8 @@ CRITICAL: You MUST execute every step below IN ORDER. Do NOT skip any required s
 
 When invoking any skill referenced below, resolve its name against the available-skills list the host platform provides and use that exact entry. Some platforms list skills under a plugin namespace (e.g., `super-looper:sl-plan`); others list the bare name. Invoking a short-form guess that isn't in the list will fail — always match a listed entry verbatim before calling the Skill/Task tool.
 
+**Goal-change protocol.** Autopilot — this pipeline and any skill it runs in `mode:unattended` — never edits `STRATEGY.md` or the active plan document during a run, whether to refine scope, reconcile a surprise, or record a decision. The plan fixed at step 1 stays authoritative through step 11. A goal that must change routes through interactive `sl-strategy` or a human-approved plan revision *before* a new run, never mid-run. loop.sh's checksum guard (exit 8, `typed_failure: "goal-drift"`) and the plugin's goal-guard hook enforce this — editing a goal file aborts the run rather than shipping the drift.
+
 1. **Produce or accept the plan.** `$ARGUMENTS` arrives as either a bare feature description (description mode) or a plan to execute named with a `plan:<path>` marker (plan-input mode). Recognize the marker however it arrives — a slash argument in an interactive session (`/lfg plan:docs/plans/...`) or named in the driving prompt a headless `loop.sh` run passes — using the same literal-prefix convention as `sl-code-review`'s `plan:<path>`.
 
    **Plan-input mode** (a `plan:<path>` marker is present):
