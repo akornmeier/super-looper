@@ -10,6 +10,8 @@ When invoking any skill referenced below, resolve its name against the available
 
 **Goal-change protocol.** Autopilot — this pipeline and any skill it runs in `mode:unattended` — never edits `STRATEGY.md` or the active plan document during a run, whether to refine scope, reconcile a surprise, or record a decision. The plan fixed at step 1 stays authoritative through step 11. A goal that must change routes through interactive `sl-strategy` or a human-approved plan revision *before* a new run, never mid-run. loop.sh's checksum guard (exit 8, `typed_failure: "goal-drift"`) and the plugin's goal-guard hook enforce this — editing a goal file aborts the run rather than shipping the drift.
 
+**Run-progress protocol.** A headless `loop.sh` run names a run-progress file with a `progress:<path>` marker in its driving prompt — the same literal-prefix convention as `plan:<path>`. When that marker is present, write the run's progress to `<path>` **at every step boundary** (after each numbered step below completes). Each write is atomic: write to a temp file in the same directory, then rename it over the target path, so a reader never observes a partial file. loop.sh owns the path — it lives under loop.sh's log directory, outside the target tree — so never stage, commit, or otherwise sweep it into a commit. **No `progress:<path>` marker means an interactive run: make no progress writes at all.** The exact JSON schema and per-field contract live in `references/progress-file.md`; load it when a `progress:<path>` marker is present.
+
 1. **Produce or accept the plan.** `$ARGUMENTS` arrives as either a bare feature description (description mode) or a plan to execute named with a `plan:<path>` marker (plan-input mode). Recognize the marker however it arrives — a slash argument in an interactive session (`/lfg plan:docs/plans/...`) or named in the driving prompt a headless `loop.sh` run passes — using the same literal-prefix convention as `sl-code-review`'s `plan:<path>`.
 
    **Plan-input mode** (a `plan:<path>` marker is present):
@@ -166,12 +168,12 @@ When invoking any skill referenced below, resolve its name against the available
 
 10. **Learn seam** (only when an open PR exists for the current branch and step 9 reached green)
 
-    Load the `sl-learn` skill. It captures any ship-time learning from this run — invoking `sl-compound` headless against the still-hot session context, committing the resulting `docs/solutions/` learning (and any `CONCEPTS.md` / instruction-file edits) into the PR, then re-confirming CI green — and returns. All capture, commit, and re-green logic lives in the skill; this step only triggers it.
+    Load the `sl-learn` skill, forwarding the `progress:<path>` marker when one is in play so the seam reads the recorded step-9 `ci_disposition` rather than grepping the PR body. It captures any ship-time learning from this run — invoking `sl-compound` headless against the still-hot session context, committing the resulting `docs/solutions/` learning (and any `CONCEPTS.md` / instruction-file edits) into the PR, then re-confirming CI green — and returns. All capture, commit, and re-green logic lives in the skill; this step only triggers it.
 
     Skip the seam (do not load `sl-learn`) and proceed to step 11 when either gate fails:
 
     - **No open PR** for the current branch (`gh pr view --json number,state` errors or reports none) — the same condition that skipped step 9.
-    - **Step 9 left CI unresolved** — the PR body carries a `## CI Failures Unresolved` section. Firing on a known-red PR would only commit a no-op.
+    - **Step 9 left CI unresolved.** When a `progress:<path>` file is in play, read the recorded step-9 `ci_disposition` from it — that recorded disposition is the machine gate: a non-green value (e.g. `unresolved`) means skip the seam. With no progress file (interactive invocation), fall back to the documented signal: the PR body carrying a `## CI Failures Unresolved` section. Either way, firing on a known-red PR would only commit a no-op. The `## CI Failures Unresolved` PR section is the human-facing record of the outcome, not the machine gate.
 
     The seam re-confirms CI green before returning, so step 11's `DONE` reflects a verified-green PR carrying the learning. Do NOT emit `DONE` until `sl-learn` returns.
 
