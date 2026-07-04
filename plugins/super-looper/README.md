@@ -39,7 +39,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 | Component | Count |
 |-----------|-------|
 | Agents | 41 |
-| Skills | 40 |
+| Skills | 39 |
 
 ## Skills
 

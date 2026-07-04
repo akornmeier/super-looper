@@ -608,7 +608,6 @@ describe("sl-code-review contract", () => {
   test("sl-work shipping-workflow enforces a residual-work gate after Tier 2 review", async () => {
     for (const path of [
       "plugins/super-looper/skills/sl-work/references/shipping-workflow.md",
-      "plugins/super-looper/skills/sl-work-beta/references/shipping-workflow.md",
     ]) {
       const workflow = await readRepoFile(path)
       await expect(readRepoFile(path.replace("shipping-workflow.md", "tracker-defer.md"))).resolves.toContain(

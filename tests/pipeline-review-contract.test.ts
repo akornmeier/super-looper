@@ -50,36 +50,12 @@ describe("sl-work review contract", () => {
     expect(content).not.toContain("[HARNESS_URL]")
   })
 
-  test("sl-work-beta mirrors review and commit delegation", async () => {
-    const beta = await readRepoFile("plugins/super-looper/skills/sl-work-beta/SKILL.md")
-    // Review/commit content extracted to references/shipping-workflow.md
-    const shipping = await readRepoFile("plugins/super-looper/skills/sl-work-beta/references/shipping-workflow.md")
-
-    // Extracted content in reference file: Simplify step at position 2,
-    // Code Review at position 3
-    expect(shipping).toContain("2. **Simplify**")
-    expect(shipping).toContain("3. **Code Review**")
-    expect(shipping).toContain("`sl-commit-push-pr` skill")
-    expect(shipping).toContain("`sl-commit` skill")
-
-    // Negative assertions stay on SKILL.md
-    expect(beta).not.toContain("Consider Code Review")
-    expect(beta).not.toContain("gh pr create")
-  })
-
-  test("sl-work-beta mirrors residual work gate sentinel with sl-work", async () => {
+  test("residual work gate sentinel present in sl-work shipping workflow", async () => {
     const workShipping = await readRepoFile(
       "plugins/super-looper/skills/sl-work/references/shipping-workflow.md",
     )
-    const betaShipping = await readRepoFile(
-      "plugins/super-looper/skills/sl-work-beta/references/shipping-workflow.md",
-    )
 
     expect(workShipping).toContain("Actionable findings: none.")
-    expect(betaShipping).toContain("Actionable findings: none.")
-    expect(betaShipping).not.toContain("Residual actionable work: none.")
-    expect(betaShipping).toContain("not yet fixed")
-    expect(betaShipping).not.toContain("skill did not auto-fix")
   })
 
   test("includes per-task testing deliberation in execution loop", async () => {
@@ -110,37 +86,8 @@ describe("sl-work review contract", () => {
     expect(shipping).not.toContain("Tests pass (run project's test command)")
   })
 
-  test("sl-work-beta mirrors testing deliberation and checklist changes", async () => {
-    const beta = await readRepoFile("plugins/super-looper/skills/sl-work-beta/SKILL.md")
-    // Checklist extracted to references/shipping-workflow.md
-    const shipping = await readRepoFile("plugins/super-looper/skills/sl-work-beta/references/shipping-workflow.md")
-
-    // Testing deliberation stays in SKILL.md (Phase 2 content)
-    expect(beta).toContain("Assess testing coverage")
-
-    // New checklist language in reference file
-    expect(shipping).toContain("Testing addressed")
-
-    // Old language removed from both
-    expect(beta).not.toContain("Tests pass (run project's test command)")
-    expect(beta).not.toContain("- All tests pass")
-    expect(shipping).not.toContain("Tests pass (run project's test command)")
-  })
-
   test("SKILL.md stub points to shipping-workflow reference", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
-
-    // Stub references the shipping-workflow file
-    expect(content).toContain("`references/shipping-workflow.md`")
-
-    // Extracted content is not in SKILL.md
-    expect(content).not.toContain("3. **Code Review**")
-    expect(content).not.toContain("## Quality Checklist")
-    expect(content).not.toContain("## Code Review Tiers")
-  })
-
-  test("sl:work-beta SKILL.md stub points to shipping-workflow reference", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work-beta/SKILL.md")
 
     // Stub references the shipping-workflow file
     expect(content).toContain("`references/shipping-workflow.md`")
@@ -156,26 +103,16 @@ describe("sl-work review contract", () => {
 
     expect(content).not.toContain("## Argument Parsing")
   })
-})
 
-describe("sl:work-beta contract", () => {
-  test("remains manual-invocation beta during rollout", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work-beta/SKILL.md")
-
-    expect(content).toContain("disable-model-invocation: true")
-    expect(content).toContain("Invoke `sl-work-beta` manually")
-    expect(content).toContain("planning and workflow handoffs remain pointed at stable `sl-work`")
-  })
-
-  test("has frontend design guidance ported from beta", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work-beta/SKILL.md")
+  test("carries frontend design guidance folded from the retired beta twin", async () => {
+    const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
 
     expect(content).toContain("**Frontend Design Guidance**")
     expect(content).toContain("`sl-frontend-design` skill")
   })
 })
 
-describe("sl:plan remains neutral during sl:work-beta rollout", () => {
+describe("sl:plan execution posture is delegation-neutral", () => {
   test("removes delegation-specific execution posture guidance", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-plan/SKILL.md")
 
