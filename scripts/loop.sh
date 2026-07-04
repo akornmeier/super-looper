@@ -323,6 +323,18 @@ emit_record() {
     goal_drift_json="{ \"file\": $(json_str_or_null "${goal_drift_file:-}"), \"change\": $(json_str_or_null "${goal_drift_kind:-}") }"
   fi
 
+  # Goal-fidelity (R6): lift the lfg step-5 verdict from the run-progress file
+  # VERBATIM when the file exists and carries one; null otherwise — nothing is
+  # fabricated, so "no data" stays honest. Read it HERE, before the scrub at the
+  # end of this function (U8's `rm -f "$PROGRESS_FILE"`); a read after the scrub
+  # would always see nothing. A missing jq, an absent file, or an absent/null
+  # `goal_fidelity` field each collapse to "null".
+  local goal_fidelity_json="null"
+  if [ -f "$PROGRESS_FILE" ] && command -v "$JQ_BIN" >/dev/null 2>&1; then
+    goal_fidelity_json="$( "$JQ_BIN" -c '.goal_fidelity // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
+    [ -n "$goal_fidelity_json" ] || goal_fidelity_json="null"
+  fi
+
   local route=""
   if [ "${done_reached:-0}" -eq 1 ]; then
     if [ "${routed_via_pr:-0}" -eq 1 ]; then route="open-PR (crash-reconciled)"; else route="DONE"; fi
@@ -369,6 +381,7 @@ emit_record() {
   "exit_code": $exit_code,
   "typed_failure": $(json_str_or_null "$typed_failure"),
   "goal_drift": $goal_drift_json,
+  "goal_fidelity": $goal_fidelity_json,
   "route": $(json_str_or_null "$route"),
   "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
   "attempts": {

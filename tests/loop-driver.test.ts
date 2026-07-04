@@ -1522,3 +1522,103 @@ exit 0
     expect(rec.typed_failure).toBe("cap-exhausted")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Goal-fidelity in the run-record (R6, U9) — emit_record lifts the lfg step-5
+// verdict from the run-progress file VERBATIM, read BEFORE the file is scrubbed at
+// the terminal. When no verdict was recorded (null / absent field / no progress
+// file), the run-record field is null — nothing is fabricated, "no data" stays
+// honest. All paths stub the LOOP_*_BIN seams; jq is real (as in resume tests).
+// ---------------------------------------------------------------------------
+describe("goal-fidelity run-record (U9 / R6)", () => {
+  function readRecord(dir: string): any {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".progress.json"))
+    expect(files.length).toBe(1)
+    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
+  }
+
+  // A claude stub that writes the given progress-file body (a JSON literal) then
+  // finishes with DONE — modeling a headless lfg that recorded step-5 fidelity.
+  function fidelityStub(progressBody: string): string {
+    return writeExec(
+      path.join(work, "claude"),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+cat > "$progress_path" <<'PJSON'
+${progressBody}
+PJSON
+printf 'done\\n${SENTINEL}\\n'
+exit 0
+`,
+    )
+  }
+
+  function runWith(claude: string) {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    return { target, plugin, dir, claude }
+  }
+
+  const envFor = (claude: string) => ({
+    LOOP_GH_BIN: ghStub(),
+    LOOP_TIMEOUT_BIN: timeoutStub(),
+    LOOP_CLAUDE_BIN: claude,
+  })
+
+  // Scenario (a): progress file carries a verdict → run-record includes it verbatim.
+  test("verdict in progress file → run-record includes it verbatim", async () => {
+    const claude = fidelityStub(
+      `{ "schema_version": 1, "step": 5, "goal_fidelity": { "verdict": "partial", "uncovered": ["R2", "R4"] } }`,
+    )
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toEqual({ verdict: "partial", uncovered: ["R2", "R4"] })
+  })
+
+  // Scenario (b-i): explicit null verdict → record field is null.
+  test("explicit null verdict → run-record field is null", async () => {
+    const claude = fidelityStub(`{ "schema_version": 1, "step": 5, "goal_fidelity": null }`)
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toBeNull()
+  })
+
+  // Scenario (b-ii): the field is absent from the progress file → record null.
+  test("absent verdict field → run-record field is null", async () => {
+    const claude = fidelityStub(`{ "schema_version": 1, "step": 5 }`)
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toBeNull()
+  })
+
+  // Scenario (b-iii): no progress file written at all → record null (nothing fabricated).
+  test("no progress file → run-record field is null (nothing fabricated)", async () => {
+    const claude = claudeStub("claude", `done\n${SENTINEL}`, 0, path.join(work, "fidelity-runs.log"))
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toBeNull()
+  })
+})

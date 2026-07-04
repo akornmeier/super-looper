@@ -161,8 +161,63 @@ describe("run-progress reference schema (U7 / R14)", () => {
     expect(ref).toContain("Scrubbed by loop.sh at terminals")
   })
 
-  test("goal_fidelity is present but null for now (stable shape ahead of U9)", async () => {
+  test("documents the goal_fidelity verdict shape and step-5 write (U9)", async () => {
     const ref = await readRepoFile(PROGRESS_REF)
-    expect(ref).toContain("`null` for now — U9 populates it")
+    // The null-for-now placeholder is gone; the field now carries the real shape.
+    expect(ref).not.toContain("`null` for now — U9 populates it")
+    // The three verdict values and the uncovered list.
+    expect(ref).toContain('"verdict": "met"')
+    expect(ref).toContain("partial")
+    expect(ref).toContain("drifted")
+    expect(ref).toContain("uncovered")
+    // Written at the step-5 boundary; emit_record lifts it into the run-record.
+    expect(ref).toContain("step-5 boundary")
+    expect(ref).toContain("emit_record")
+  })
+})
+
+// U9 (R6): lfg step 5 distills the step-4 requirements-completeness result into a
+// goal_fidelity verdict written to the progress file. Grep the step-5 region for the
+// distillation instruction so a rewrite that drops it fails loudly.
+describe("lfg step 5 goal-fidelity distillation (U9 / R6)", () => {
+  function step5Region(lfg: string): string {
+    return sliceBetween(lfg, "5. **Apply and persist review fixes**", "6. **Autonomous residual handoff**")
+  }
+
+  test("carries the verdict-distillation instruction and the met/partial/drifted shape", async () => {
+    const lfg = await readRepoFile(LFG)
+    const step5 = step5Region(lfg)
+
+    expect(step5).toContain("goal_fidelity")
+    expect(step5).toContain("requirements_completeness")
+    // The three verdict values plus the uncovered list, and the null-when-no-review case.
+    expect(step5).toContain('"verdict": "met|partial|drifted"')
+    expect(step5).toContain("uncovered")
+    expect(step5).toContain("no requirements check")
+    // Semi-automated: gated on the progress marker, no new review pass.
+    expect(step5).toContain("progress:<path>")
+    expect(step5).toContain("no new review pass")
+  })
+
+  test("review-followup reference carries the same derivation", async () => {
+    const ref = await readRepoFile("plugins/super-looper/skills/lfg/references/review-followup.md")
+    expect(ref).toContain("goal_fidelity")
+    expect(ref).toContain("Goal-fidelity verdict")
+    expect(ref).toContain("drifted")
+    expect(ref).toContain("emit_record")
+  })
+})
+
+// U9 (R6): sl-product-pulse maps goal_fidelity to the run-record ledger source
+// (it leaves pulse_pending_metrics). Grep the ledger worked-instances section.
+describe("pulse goal_fidelity ledger mapping (U9 / R6)", () => {
+  const PULSE_TEMPLATE = "plugins/super-looper/skills/sl-product-pulse/references/report-template.md"
+
+  test("maps goal_fidelity to the local JSONL ledger source", async () => {
+    const tmpl = await readRepoFile(PULSE_TEMPLATE)
+    // The worked instance lives under the Local JSONL ledger sources section.
+    const ledgerSection = sliceBetween(tmpl, "## Local JSONL ledger sources", "## Git-derived proxy metrics")
+    expect(ledgerSection).toContain("goal_fidelity")
+    expect(ledgerSection).toContain("verdict")
   })
 })

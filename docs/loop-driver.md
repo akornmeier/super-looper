@@ -228,6 +228,13 @@ A goal-drift record (`exit 8`) additionally carries a `goal_drift` object naming
 the changed `file` and the `change` kind (`modified` / `deleted` / `created`); it
 is `null` on every other path.
 
+Every record also carries a `goal_fidelity` field: the lfg step-5 plan-vs-outcome
+verdict, lifted verbatim from the run-progress file when lfg recorded one
+(`{"verdict": "met" | "partial" | "drifted", "uncovered": [<requirement IDs>]}`),
+and `null` when no verdict was recorded — no progress file, no requirements check,
+or a null value. The driver never fabricates it; "no data" stays honest as `null`.
+It is read out of the progress file *before* that file is scrubbed at the terminal.
+
 ## Isolation rule
 
 `loop.sh` is for running the loop on **other** repos. It refuses to run when the

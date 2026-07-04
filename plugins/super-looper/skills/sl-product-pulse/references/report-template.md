@@ -28,6 +28,8 @@ To resolve a ledger-sourced metric:
 
 **Worked instance — `unattended_completion_rate`** (super-looper's loop-driver ledger): window-filter by `timing.started_at`; the rate is `success / total` where `success` is a record with `outcome == "success"`. Records with any other outcome (timeout, cap-exhausted, done-but-red, the give-up floor) count in the denominator only — so a clean-exit give-up cannot be counted as a win. With records in the window, render the rate (e.g., `3/4 = 75%`); with none in the window, or no ledger at all, render `no data`.
 
+**Worked instance — `goal_fidelity`** (super-looper's loop-driver ledger): window-filter by `timing.started_at`; each record's `goal_fidelity` field is the lfg step-5 plan-vs-outcome verdict (`{"verdict": "met" | "partial" | "drifted", "uncovered": [...]}`) or `null` when the run recorded no verdict. Records with a `null` `goal_fidelity` carry no verdict (no requirements check ran) and are excluded from the tally — never counted as a pass or a miss. Aggregate the `verdict` distribution over the records that carry one (e.g., `met 3, partial 1, drifted 0` across 4 verdicts). With no records carrying a verdict in the window, or no ledger at all, render `no data`.
+
 ## Git-derived proxy metrics
 
 Some strategy metrics have no true instrumentation but can be approximated from git/GitHub history. Render these as a **labeled proxy** rather than `no data`, sourced from the git/GitHub source (`metric=github`). Always mark the value `(proxy)` so the reader knows it approximates the metric — it is not the metric itself.

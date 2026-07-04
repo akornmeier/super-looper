@@ -55,6 +55,8 @@ When invoking any skill referenced below, resolve its name against the available
 
    Load `references/review-followup.md` and execute its apply step (mechanical apply + commit/push when changes exist). Do not proceed to the residual handoff, run browser tests, or output DONE while eligible review fixes remain only in the working tree uncommitted.
 
+   **Goal-fidelity verdict (progress-file runs only).** When a `progress:<path>` marker is in play, distill step 4's `requirements_completeness` result into a `goal_fidelity` verdict and write it into the progress file's `goal_fidelity` field at this step's boundary — no new review pass; the verdict derives from the requirements-completeness check step 4 already ran. Shape: `{"verdict": "met|partial|drifted", "uncovered": ["R2", ...]}`, or `null` when step 4 ran no requirements check (no plan matched / `requirements_completeness` is null). Derive it: `met` when every planned requirement and implementation unit is addressed; `partial` when some are only partially addressed but none is entirely unaddressed; `drifted` when one or more is entirely unaddressed. `uncovered` lists the requirement/unit IDs not fully met (partial or unaddressed), empty on `met`. `references/review-followup.md` carries the same derivation. Interactive runs (no marker) write nothing.
+
 6. **Autonomous residual handoff** (only when step 4 reported one or more actionable `downstream-resolver` findings not applied in step 5; skip when it reported `Actionable findings: none.`)
 
    Do not prompt the user. This step embraces the autopilot contract: residuals must become durable before DONE, but the agent never stops to ask.
