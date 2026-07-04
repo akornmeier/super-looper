@@ -38,7 +38,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 
 | Component | Count |
 |-----------|-------|
-| Agents | 43 |
+| Agents | 41 |
 | Skills | 40 |
 
 ## Skills
@@ -184,7 +184,6 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 
 | Agent | Description |
 |-------|-------------|
-| `sl-design-implementation-reviewer` | Verify UI implementations match Figma designs |
 | `sl-design-iterator` | Iteratively refine UI through systematic design iterations |
 | `sl-figma-design-sync` | Synchronize web implementations with Figma designs |
 
@@ -194,12 +193,6 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 |-------|-------------|
 | `sl-pr-comment-resolver` | Address PR comments and implement fixes |
 | `sl-spec-flow-analyzer` | Analyze user flows and identify gaps in specifications |
-
-### Docs
-
-| Agent | Description |
-|-------|-------------|
-| `sl-ankane-readme-writer` | Create READMEs following Ankane-style template for Ruby gems |
 
 ## Installation
 
