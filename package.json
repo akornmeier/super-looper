@@ -13,7 +13,8 @@
     "release:sync-metadata": "bun run scripts/release/sync-metadata.ts --write",
     "release:validate": "bun run scripts/release/validate.ts",
     "solutions:validate": "bun run scripts/solutions/validate-frontmatter.ts docs/solutions",
-    "solutions:emit": "bun run scripts/solutions/emit-docs.ts --write"
+    "solutions:emit": "bun run scripts/solutions/emit-docs.ts --write",
+    "docs:emit-index": "bun run scripts/docs/emit-skills-index.ts --write"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
