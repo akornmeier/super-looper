@@ -1234,3 +1234,291 @@ describe("goal-drift guard (R1-R3)", () => {
     expect(rec.typed_failure).toBe("goal-drift")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Resume consumption (U8 / R15, R16, R18) — on a no-PR retry, loop.sh validates
+// the run-progress file (jq -e shape + binding fields) and, when it ties to THIS
+// run, skips reset_target, checks out the recorded branch, and relaunches with a
+// resume:<path> marker. ANY validation failure scrubs the file and cold-restarts
+// (fail toward cold restart, never toward trusting a stale/poisoned file). The
+// file is scrubbed at every terminal. Resume never fires once a PR exists
+// (reconciliation precedence, KTD6) and never extends the give-up floor (exit 5).
+// All paths stub the LOOP_*_BIN seams; the progress file is written by the claude
+// stub (parsing the progress: path from its own args, since it runs under env -i).
+// ---------------------------------------------------------------------------
+describe("resume consumption (U8 / R15,R16,R18)", () => {
+  // A claude stub that models a headless lfg crashing mid-run after writing a
+  // run-progress file. On its FIRST launch (no resume: marker) it creates a
+  // working branch + commit, drops an UNTRACKED canary (which reset_target's
+  // `git clean -fd` would delete — the reset detector), writes the progress file
+  // per `poison`, and crashes without DONE. On a RESUME launch (resume: marker
+  // present) it records whether the canary survived, then either finishes with
+  // DONE or crashes again (alwaysCrash, for the give-up-floor scenario).
+  function resumeStub(opts: {
+    name?: string
+    marker: string
+    promptLog: string
+    canaryLog: string
+    branch?: string
+    poison?: "corrupt" | "wrong-run-id" | "missing-branch"
+    alwaysCrash?: boolean
+  }): string {
+    const branch = opts.branch ?? "feat/resume-branch"
+    const name = opts.name ?? "claude"
+
+    // The progress-file body, keyed by poison mode. run_id/base/head are shell
+    // vars the stub computes at runtime; branch is baked in.
+    let writeProgress: string
+    if (opts.poison === "corrupt") {
+      writeProgress = `printf 'not json {{{ %s\\n' "$run_id" > "$progress_path"`
+    } else {
+      const runIdExpr = opts.poison === "wrong-run-id" ? "WRONG-RUN-ID-abc" : "$run_id"
+      const branchField = opts.poison === "missing-branch" ? "feat/does-not-exist" : branch
+      writeProgress = `cat > "$progress_path" <<PJSON
+{
+  "schema_version": 1,
+  "run_id": "${runIdExpr}",
+  "attempt": 1,
+  "step": 5,
+  "plan_path": "docs/plans/p.md",
+  "branch": "${branchField}",
+  "base_ref": "$base",
+  "head_sha": "$head",
+  "fix_iterations": 0,
+  "flaky_dispositions": {},
+  "ci_disposition": null,
+  "residuals_pointer": null,
+  "goal_fidelity": null,
+  "updated_at": "2026-07-04T00:00:00Z"
+}
+PJSON`
+    }
+
+    const resumeTail = opts.alwaysCrash
+      ? `printf 'resumed but crashed again\\n'\nexit 1`
+      : `printf 'resumed and finished\\n${SENTINEL}\\n'\nexit 0`
+
+    return writeExec(
+      path.join(work, name),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+printf -- '----\\n' >> '${opts.promptLog}'
+printf '%s\\n' "$prompt" >> '${opts.promptLog}'
+printf 'RUN\\n' >> '${opts.marker}'
+
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+run_id="$(basename "$progress_path" .progress.json)"
+
+is_resume=0
+case "$prompt" in *resume:*) is_resume=1 ;; esac
+
+if [ "$is_resume" = "1" ]; then
+  if [ -f resume-canary.txt ]; then printf 'CANARY_PRESENT\\n' >> '${opts.canaryLog}'; else printf 'CANARY_ABSENT\\n' >> '${opts.canaryLog}'; fi
+  ${resumeTail}
+fi
+
+base="$(git rev-parse HEAD)"
+git checkout -q -b ${branch} 2>/dev/null || git checkout -q ${branch}
+printf 'work\\n' > work.txt
+git add work.txt
+git -c user.email=t@t.t -c user.name=t commit -q -m work
+head="$(git rev-parse HEAD)"
+printf 'canary\\n' > resume-canary.txt
+
+${writeProgress}
+
+printf 'crashed before DONE\\n'
+exit 1
+`,
+    )
+  }
+
+  function progressFilesIn(dir: string): string[] {
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".progress.json"))
+  }
+  function readRecord(dir: string): any {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".progress.json"))
+    expect(files.length).toBe(1)
+    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
+  }
+
+  // Scenario (a): crash at step 5 with a valid progress file → second attempt
+  // skips reset (canary preserved) and its prompt carries the resume marker.
+  test("valid progress file → second attempt resumes (no reset, resume marker present)", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false) // command-mode verify, no remote needed
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "2", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } }, // no PR → retry path
+    )
+    expect(exitCode).toBe(0)
+    // Two launches: the crash, then the resume.
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(2)
+    // The reset was skipped — the untracked canary survived into the resume launch.
+    expect(fs.readFileSync(canaryLog, "utf8")).toContain("CANARY_PRESENT")
+    // The second launch's prompt carries the resume marker; the first does not.
+    const chunks = fs.readFileSync(promptLog, "utf8").split("----\n").filter((c) => c.trim().length > 0)
+    expect(chunks.length).toBe(2)
+    expect(chunks[0]).not.toContain("resume:")
+    expect(chunks[1]).toContain("resume:")
+    // Scrubbed at the success terminal.
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b): corrupt JSON → cold restart, file scrubbed, no resume marker.
+  test("corrupt progress file → cold restart, scrubbed, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "corrupt" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    // Never resumes → both attempts crash → cap exhausted.
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b'): wrong run_id → the poisoned-file guard rejects it (a stale
+  // file from another run must never fake a resume point).
+  test("wrong run_id → cold restart, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "wrong-run-id" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b''): recorded branch does not exist → cold restart.
+  test("missing recorded branch → cold restart, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "missing-branch" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (c): open PR + valid progress file → verification-only reconciliation
+  // route; resume does NOT fire (reconciliation precedence, KTD6).
+  test("open PR + valid progress file → reconcile only, resume never fires", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true) // remote → github verify mode
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "3", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/9",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(0)
+    // Reconciled on the first crash — exactly one launch, no resume relaunch.
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(1)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    // Scrubbed at the success terminal.
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (d): a successful run leaves no progress file behind (scrub-at-terminal).
+  test("successful run → progress file gone at exit", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    // A stub that writes a progress file then finishes with DONE on its first launch.
+    const claude = writeExec(
+      path.join(work, "claude"),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+printf '{ "schema_version": 1, "step": 7 }\\n' > "$progress_path"
+printf 'done\\n${SENTINEL}\\n'
+exit 0
+`,
+    )
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { LOOP_GH_BIN: ghStub(), LOOP_TIMEOUT_BIN: timeoutStub(), LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(0)
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (e): retries exhausted while the file stays valid → exit 5 (the
+  // give-up floor is NOT extended by resume), file scrubbed, run-record emitted.
+  test("retries exhausted with a valid file → exit 5, scrubbed, record emitted", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, alwaysCrash: true })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    // max-retries=1 → one cold attempt + one resume attempt, then the cap: 2 launches.
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(2)
+    // The second attempt DID resume (the give-up floor still caps it at exit 5).
+    expect(fs.readFileSync(canaryLog, "utf8")).toContain("CANARY_PRESENT")
+    // Scrubbed at the cap terminal; the run-record is still emitted.
+    expect(progressFilesIn(dir)).toEqual([])
+    const rec = readRecord(dir)
+    expect(rec.exit_code).toBe(5)
+    expect(rec.typed_failure).toBe("cap-exhausted")
+  })
+})
