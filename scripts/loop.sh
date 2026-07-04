@@ -460,6 +460,17 @@ fi
 claude_env=( env -i "HOME=$HOME" "PATH=$PATH" )
 if [ -n "${GH_TOKEN:-}" ]; then claude_env+=( "GH_TOKEN=$GH_TOKEN" ); fi
 if [ -n "${GITHUB_TOKEN:-}" ]; then claude_env+=( "GITHUB_TOKEN=$GITHUB_TOKEN" ); fi
+# Arm the plugin's goal-guard hook (defense-in-depth for the checksum guard
+# above): forward the exact resolved goal-file paths so a mid-run Write/Edit to
+# STRATEGY.md or the active plan is denied fast. NEWLINE-separated because a
+# resolved path may contain a colon. Seed mode carries STRATEGY.md only (so
+# sl-plan can still create the plan); plan mode adds the resolved plan file.
+GOAL_GUARD_PATHS="$STRATEGY_PATH"
+if [ -n "$GUARD_PLAN_PATH" ]; then
+  GOAL_GUARD_PATHS="$GOAL_GUARD_PATHS
+$GUARD_PLAN_PATH"
+fi
+claude_env+=( "LOOP_GOAL_GUARD_PATHS=$GOAL_GUARD_PATHS" )
 
 claude_cmd=( "$CLAUDE_BIN" -p "$PROMPT" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
 
