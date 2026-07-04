@@ -1009,3 +1009,228 @@ describe("run-record (R9)", () => {
     expectNoRecord(dir)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Goal-drift guard (R1-R3, KTD3, D1) — exit 8 / typed_failure "goal-drift".
+// A run that reaches a finish (the DONE sentinel OR the crash-reconciled open-PR
+// route) with a mutated STRATEGY.md or plan file is completed-but-untrustworthy:
+// the guard snapshots sha256(STRATEGY.md, plan) per attempt after any reset, then
+// re-hashes on every done_reached path BEFORE verification and refuses success on
+// a mismatch. Drift is terminal, not retryable. All paths stub the LOOP_*_BIN
+// seams so no live Claude/GitHub call is made.
+// ---------------------------------------------------------------------------
+describe("goal-drift guard (R1-R3)", () => {
+  const APPEND_SCRIPT = path.join(__dirname, "../scripts/append-run-record.sh")
+
+  // A claude stub that runs a mutation snippet (CWD = target, under `env -i`)
+  // before emitting its transcript, simulating the agent editing a goal file.
+  function claudeMutateStub(
+    name: string,
+    mutate: string,
+    transcript: string,
+    exitCode: number,
+    marker: string,
+  ): string {
+    return writeExec(
+      path.join(work, name),
+      `#!/usr/bin/env bash\nprintf 'RUN\\n' >> '${marker}'\n${mutate}\ncat <<'__T__'\n${transcript}\n__T__\nexit ${exitCode}\n`,
+    )
+  }
+
+  function readRecord(dir: string): any {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
+    expect(files.length).toBe(1)
+    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
+  }
+
+  function commitAll(dir: string, msg: string) {
+    Bun.spawnSync(["bash", "-c", `git add -A && git commit -q -m ${msg}`], { cwd: dir })
+  }
+
+  // Commit a plan doc in the target so a retry's reset would preserve it, and
+  // return its target-relative path for --plan-file.
+  function writeCommittedPlan(target: string): string {
+    const rel = "docs/plans/p.md"
+    const p = path.join(target, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, "## Implementation Units\noriginal plan body\n")
+    commitAll(target, "plan")
+    return rel
+  }
+
+  // Scenario 1: plan mutated then DONE => exit 8, record goal-drift + not-run.
+  test("plan mutated then DONE => exit 8, goal drift, verification not-run", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "printf 'DRIFT\\n' >> docs/plans/p.md",
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    expect(stderr).toContain(planRel) // names the drifted file
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.verification.result).toBe("not-run")
+    expect(rec.goal_drift.change).toBe("modified")
+  })
+
+  // Scenario 2: plan deleted => exit 8 with "deleted" wording, distinct from modified.
+  test("plan deleted then DONE => exit 8 with 'deleted' wording", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub("claude", "rm -f docs/plans/p.md", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr).toContain("deleted")
+    expect(stderr).not.toContain("modified") // the three kinds are distinguished
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("deleted")
+  })
+
+  // Scenario 3: no STRATEGY.md at start or end => guard passes (sentinel equality).
+  test("no STRATEGY.md at start or end => guard passes, run reaches verification", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", `working...\n${SENTINEL}`, 0, marker)
+    const { exitCode, stdout } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/y/pull/1",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain("SUCCESS")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBeNull()
+    expect(rec.goal_drift).toBeNull()
+  })
+
+  // Scenario 4: STRATEGY.md created mid-run => exit 8 with "created" wording.
+  test("STRATEGY.md created mid-run => exit 8 with 'created' wording", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub("claude", "printf 'new goal\\n' > STRATEGY.md", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr).toContain("created")
+    expect(stderr).toContain("STRATEGY.md")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("created")
+  })
+
+  // Scenario 5: crash without DONE, open PR exists, plan mutated => the
+  // crash-reconciled open-PR route still passes through the guard and exits 8.
+  test("crash without DONE + open PR + plan mutated => reconciled route exits 8", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "printf 'DRIFT\\n' >> docs/plans/p.md",
+      "crashed before DONE",
+      1,
+      marker,
+    )
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--max-retries", "2", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/y/pull/9",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.attempts.routed_via_pr).toBe(true)
+    // reconciled on the first crash — claude launched exactly once (no retry loop)
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(1)
+  })
+
+  // Scenario 6: a usage error (exit 2) still writes no record — the guard does
+  // not perturb the pre-flight usage family's no-record symmetry.
+  test("a usage error (exit 2) still writes no record with the guard present", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "abc", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+    if (fs.existsSync(dir)) {
+      expect(fs.readdirSync(dir).filter((f) => f.endsWith(".json"))).toEqual([])
+    }
+  })
+
+  // Scenario 7: the operator wrapper captures a real exit-8 run into the ledger.
+  test("operator wrapper (append-run-record.sh) captures the exit-8 run", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const ledger = path.join(work, "ledger.jsonl")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub("claude", "printf 'DRIFT\\n' >> docs/plans/p.md", `done\n${SENTINEL}`, 0, marker)
+    const loop = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(loop.exitCode).toBe(8)
+    const proc = Bun.spawn(["bash", APPEND_SCRIPT, "--log-dir", dir, "--ledger", ledger], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    await proc.exited
+    const lines = fs.readFileSync(ledger, "utf8").split("\n").filter((l) => l.length > 0)
+    expect(lines.length).toBe(1)
+    const rec = JSON.parse(lines[lines.length - 1])
+    expect(rec.exit_code).toBe(8)
+    expect(rec.typed_failure).toBe("goal-drift")
+  })
+})

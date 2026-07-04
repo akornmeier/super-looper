@@ -34,6 +34,7 @@ readonly EX_NO_VERIFY=4
 readonly EX_CAP=5
 readonly EX_TIMEOUT=6
 readonly EX_DONE_RED=7
+readonly EX_GOAL_DRIFT=8
 # coreutils timeout(1) exits 124 when it terminates a timed-out command.
 readonly TIMEOUT_EXIT_STATUS=124
 
@@ -252,7 +253,7 @@ fi
 # definitions with NO side effects — it creates no directory and no file, so a
 # --dry-run (which exits below without ever calling emit_record) writes nothing.
 # emit_record is the single writer, invoked at every OPERATIONAL terminal path
-# (exit 0/3/4/5/6/7) and never for the pre-flight usage family (exit 2), --help,
+# (exit 0/3/4/5/6/7/8) and never for the pre-flight usage family (exit 2), --help,
 # or --dry-run. See docs/loop-driver.md.
 RUN_ID="loop-$(date +%Y%m%d-%H%M%S)-$$"
 LOG_FILE="$LOG_DIR/$RUN_ID.log"
@@ -297,8 +298,17 @@ emit_record() {
     5) outcome="failure"; typed_failure="cap-exhausted";     verification_result="not-run" ;;
     6) outcome="failure"; typed_failure="timeout";           verification_result="not-run" ;;
     7) outcome="failure"; typed_failure="done-but-red";      verification_result="red" ;;
+    8) outcome="failure"; typed_failure="goal-drift";        verification_result="not-run" ;;
     *) outcome="failure"; typed_failure="unknown";           verification_result="not-run" ;;
   esac
+
+  # Goal-drift detail (R2): on an exit-8 record, name the changed file and the
+  # change kind (modified / deleted / created); null on every other path. The
+  # guard sets goal_drift_file/goal_drift_kind before calling emit_record.
+  local goal_drift_json="null"
+  if [ -n "${goal_drift_file:-}" ]; then
+    goal_drift_json="{ \"file\": $(json_str_or_null "${goal_drift_file:-}"), \"change\": $(json_str_or_null "${goal_drift_kind:-}") }"
+  fi
 
   local route=""
   if [ "${done_reached:-0}" -eq 1 ]; then
@@ -345,6 +355,7 @@ emit_record() {
   "outcome": "$outcome",
   "exit_code": $exit_code,
   "typed_failure": $(json_str_or_null "$typed_failure"),
+  "goal_drift": $goal_drift_json,
   "route": $(json_str_or_null "$route"),
   "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
   "attempts": {
@@ -407,6 +418,17 @@ if [ -n "$PLAN_FILE" ]; then
     fail "$EX_USAGE" "plan file not found or unreadable in the target: $PLAN_FILE"
   fi
 fi
+
+# --- Goal-drift guard: resolve the guarded goal-file paths --------------------
+# The goal guard refuses to report success when a run mutated its own goal.
+# STRATEGY.md in the target is always guarded; the resolved plan file is guarded
+# in plan mode (seed mode guards STRATEGY.md only — R3). An absent file hashes to
+# a stable sentinel so absent-at-start / absent-at-end compares equal (R3). The
+# harness checksum is authoritative (KTD1); a future hook is defense-in-depth.
+readonly GUARD_ABSENT_SENTINEL="absent"
+STRATEGY_PATH="$CT/STRATEGY.md"
+GUARD_PLAN_PATH=""
+if [ -n "$PLAN_FILE" ]; then GUARD_PLAN_PATH="$plan_check"; fi
 
 # --- Verification mode --------------------------------------------------------
 # command mode: a --verify-cmd was supplied. github mode (default): use the
@@ -536,6 +558,29 @@ reset_target() {
   fi
 }
 
+# --- Goal-file hashing (goal-drift guard) -------------------------------------
+# sha256 of a goal file; an ABSENT file hashes to a stable sentinel so an
+# absent-at-start / absent-at-end file compares equal and passes (R3). shasum is
+# the portable fallback where sha256sum is absent (macOS).
+hash_file() {
+  local f="$1"
+  if [ ! -f "$f" ]; then printf '%s' "$GUARD_ABSENT_SENTINEL"; return 0; fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    shasum -a 256 "$f" | awk '{print $1}'
+  fi
+}
+
+# Classify a start/end hash mismatch as the change kind R2 distinguishes:
+# created (absent -> present), deleted (present -> absent), or modified.
+drift_kind_of() {
+  local start="$1" end="$2"
+  if [ "$start" = "$GUARD_ABSENT_SENTINEL" ]; then printf 'created'
+  elif [ "$end" = "$GUARD_ABSENT_SENTINEL" ]; then printf 'deleted'
+  else printf 'modified'; fi
+}
+
 # DONE is the routing signal. Match the LAST non-empty line only, so the literal
 # sentinel echoed mid-transcript (it appears verbatim in lfg's own source) never
 # counts as a finish on its own.
@@ -565,12 +610,24 @@ attempt=0
 done_reached=0
 routed_via_pr=0
 timed_out=0
+# Goal-drift snapshots: sha256 of the guarded goal files at the winning attempt's
+# start (re-hashed on the done_reached path below). Overwritten per attempt.
+strategy_hash_start=""
+plan_hash_start=""
 attempt_log="$(mktemp "${TMPDIR:-/tmp}/loop-attempt.XXXXXX")"
 trap 'rm -f "$attempt_log"' EXIT
 
 while :; do
   attempt=$((attempt + 1))
   timed_out=0
+
+  # Goal-drift snapshot: hash the guarded goal files at attempt start, AFTER any
+  # reset_target (run at the end of the previous iteration) restored the clean
+  # base (KTD3). The winning attempt's snapshot is the one that persists past the
+  # break and is compared on the done_reached path below.
+  strategy_hash_start="$(hash_file "$STRATEGY_PATH")"
+  if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_file "$GUARD_PLAN_PATH")"; fi
+
   log "attempt $attempt: launching headless claude"
 
   # Run the agent in its own process group (set -m) and forward INT/TERM to the
@@ -638,6 +695,35 @@ if [ "$done_reached" -ne 1 ]; then
   echo "loop.sh: FAILED (cap-exhausted) — crashed without DONE after $attempt attempt(s) and no open PR. Log: $LOG_FILE" >&2
   emit_record "$EX_CAP" || true
   exit "$EX_CAP"
+fi
+
+# --- Goal-drift guard (R1-R3, KTD3, D1) ---------------------------------------
+# A finish was reached (DONE sentinel OR crash-reconciled open PR — both converge
+# here). Before trusting it, re-hash the guarded goal files: if STRATEGY.md or the
+# plan file changed during the run, the goal was mutated and success cannot be
+# reported. Drift is TERMINAL, not retryable — a finish reached on a mutated goal
+# is completed-but-untrustworthy, mirroring exit 7's semantics. Mirrors the
+# isolation guard's shape: stderr explanation, emit_record || true, exit.
+goal_drift_file=""
+goal_drift_kind=""
+strategy_hash_end="$(hash_file "$STRATEGY_PATH")"
+if [ "$strategy_hash_start" != "$strategy_hash_end" ]; then
+  goal_drift_file="$STRATEGY_PATH"
+  goal_drift_kind="$(drift_kind_of "$strategy_hash_start" "$strategy_hash_end")"
+elif [ -n "$GUARD_PLAN_PATH" ]; then
+  plan_hash_end="$(hash_file "$GUARD_PLAN_PATH")"
+  if [ "$plan_hash_start" != "$plan_hash_end" ]; then
+    goal_drift_file="$GUARD_PLAN_PATH"
+    goal_drift_kind="$(drift_kind_of "$plan_hash_start" "$plan_hash_end")"
+  fi
+fi
+if [ -n "$goal_drift_file" ]; then
+  echo "loop.sh: FAILED (goal drift) — a goal file changed during the run; refusing to report success." >&2
+  echo "         file: $goal_drift_file" >&2
+  echo "         change: $goal_drift_kind" >&2
+  echo "         Goal changes route through interactive sl-strategy or a human-approved plan revision, never an unattended run. Log: $LOG_FILE" >&2
+  emit_record "$EX_GOAL_DRIFT" || true
+  exit "$EX_GOAL_DRIFT"
 fi
 
 # --- Verification (TARGET-scoped, evaluated AFTER DONE) -----------------------

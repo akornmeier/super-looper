@@ -104,6 +104,33 @@ retrying:
 - Otherwise → reset the target to its **clean base** and retry, up to
   `--max-retries`. After the cap is exhausted, exit non-zero.
 
+## Goal-drift guard
+
+An unattended run must not silently rewrite its own goal. `loop.sh` snapshots the
+sha256 of the run's **goal files** at each attempt's start (after any retry reset
+restores the clean base) and re-hashes them on **every** `done_reached` path —
+both the `DONE` sentinel and the crash-reconciled open-PR route — **before**
+verification. If a hash changed, the run reached a finish on a mutated goal, so
+success cannot be reported: the driver prints a multi-line explanation (the file
+and the change kind), writes a `goal-drift` run-record with `verification: not-run`,
+and exits `8`.
+
+- **Guarded files.** `STRATEGY.md` in the target is always guarded; the resolved
+  `--plan-file` is also guarded in plan mode. Seed mode guards `STRATEGY.md` only.
+- **Absent is a valid state.** A missing file hashes to a sentinel, so a
+  `STRATEGY.md` absent at both start and end passes; created mid-run is drift
+  (`created`), deleted mid-run is drift (`deleted`), and an in-place edit is
+  `modified`.
+- **Drift is terminal, not retryable.** Like DONE-but-red (`exit 7`), a
+  completed-but-untrustworthy run is a hard stop — retries exist for
+  crash-without-`DONE`, not for a finish that moved the goalposts. Goal changes
+  must route through interactive `sl-strategy` or a human-approved plan revision,
+  never an unattended run.
+
+The end-of-run checksum is the authoritative guard: it catches every mutation
+path (`sed -i`, shell redirection, subagent worktree merges) that a tool-level
+interception would miss.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -115,6 +142,7 @@ retrying:
 | `5` | Cap exhausted — crashed without `DONE`, no open PR. |
 | `6` | Timeout — last attempt timed out without `DONE`. |
 | `7` | DONE-but-red — finished, but target verification is red. |
+| `8` | Goal drift — a goal file (`STRATEGY.md` or the plan) changed during the run. |
 
 ## Run record
 
@@ -143,11 +171,16 @@ seed/task text is never inlined.
 | `5` | `cap-exhausted` | `failure` |
 | `6` | `timeout` | `failure` |
 | `7` | `done-but-red` | `failure` |
+| `8` | `goal-drift` | `failure` |
 
-A record is written on every **operational** terminal path (the six exits above),
-including failures. It is **not** written for pre-flight usage errors (`exit 2`),
-`--help`, or `--dry-run` — those validate input or inspect the command rather than
-running, so recording them would pollute the substrate with non-runs.
+A record is written on every **operational** terminal path (the seven exits
+above), including failures. It is **not** written for pre-flight usage errors
+(`exit 2`), `--help`, or `--dry-run` — those validate input or inspect the command
+rather than running, so recording them would pollute the substrate with non-runs.
+
+A goal-drift record (`exit 8`) additionally carries a `goal_drift` object naming
+the changed `file` and the `change` kind (`modified` / `deleted` / `created`); it
+is `null` on every other path.
 
 ## Isolation rule
 
