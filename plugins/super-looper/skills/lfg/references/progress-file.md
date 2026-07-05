@@ -24,12 +24,12 @@ One JSON object. `schema_version` gates the shape; unknown/absent optional field
 ```json
 {
   "schema_version": 1,
-  "run_id": "<loop.sh run identifier>",
+  "run_id": "<progress-file basename without the .progress.json suffix>",
   "attempt": 1,
   "step": 7,
   "plan_path": "docs/plans/2026-07-04-001-....md",
   "branch": "feat/some-branch",
-  "base_ref": "<sha or ref the branch forked from>",
+  "base_ref": "<full 40-hex sha of the fork-point commit>",
   "head_sha": "<HEAD sha at this boundary>",
   "fix_iterations": 0,
   "flaky_dispositions": {},
@@ -47,12 +47,12 @@ One JSON object. `schema_version` gates the shape; unknown/absent optional field
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `schema_version` | integer | Contract version of this file's shape. Current value `1`. Readers reject a version they do not understand. |
-| `run_id` | string | The loop.sh run identifier passed in with the marker. A resume reader binds on this to reject a progress file from a different run. |
-| `attempt` | integer | The current attempt number within the run (loop.sh increments across retries). |
+| `run_id` | string | Run identifier `lfg` derives from the progress-file path: the path's basename with the `.progress.json` suffix removed. A resume reader binds on this to reject a progress file from a different run. |
+| `attempt` | integer | The current attempt number within the run: `1` on the first write, and on a `resume:<path>` entry preserved from the value already in the file (loop.sh increments across retries). |
 | `step` | integer | The **last completed** numbered `SKILL.md` step. Written after that step finishes, so a reader knows the highest boundary reached. |
 | `plan_path` | string | Repo-relative path of the authoritative plan document (from step 1). |
 | `branch` | string | The working branch for this run. A resume reader checks this branch exists before resuming. |
-| `base_ref` | string | The ref/sha the branch forked from. A resume reader requires equality to trust the recorded branch. |
+| `base_ref` | string | The full 40-hex sha of the commit the branch forked from — never a ref name like `main`. loop.sh compares it by exact string equality against a 40-hex sha, so recording a ref name silently kills resume. A resume reader requires equality to trust the recorded branch. |
 | `head_sha` | string | HEAD sha at this boundary. Lets a reader confirm the recorded branch's tip is reachable. |
 | `fix_iterations` | integer | Step-9 fix-iteration counter (0–3). Records how many CI-fix cycles ran, for observability and to power the machine CI-disposition read that replaces the PR-body substring check. |
 | `flaky_dispositions` | object | Per-check map of step-9 flaky-no-fix-path dispositions, keyed by check name. Empty object when none recorded. |
@@ -66,6 +66,7 @@ One JSON object. `schema_version` gates the shape; unknown/absent optional field
 ## Consumers
 
 - **Step 5 boundary** sets `goal_fidelity` from step 4's requirements-completeness result; loop.sh's `emit_record` lifts it into the run-record verbatim (U9).
+- **Step 6 boundary** sets `residuals_pointer` to the PR URL when the existing PR body was updated, or the `docs/residual-review-findings/<...>.md` path when the fallback file was committed; `null` when step 6 was skipped.
 - **Step 9 boundary** sets `ci_disposition`, `fix_iterations`, and `flaky_dispositions` from the CI-watch loop's outcome.
 - **`sl-learn` (step 10)** sets `learning_rejection` when the evaluator rejects a drafted learning; loop.sh's `emit_record` lifts it into the run-record verbatim (R9).
 - **`sl-learn` (step 8)** sets `refresh_due` when a committed learning pushes the corpus past the refresh threshold; loop.sh's `emit_record` lifts it into the run-record verbatim (R13). The signal is advisory — `sl-learn` never dispatches `sl-compound-refresh`.

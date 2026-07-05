@@ -641,12 +641,16 @@ validate_progress_file() {
     and (.head_sha | type == "string" and (length > 0))
   ' "$PROGRESS_FILE" >/dev/null 2>&1 || return 1
 
-  local p_run_id p_attempt p_branch p_base_ref p_head_sha
+  local p_run_id p_attempt p_branch p_base_ref p_head_sha p_step
   p_run_id="$( "$JQ_BIN" -r '.run_id'   "$PROGRESS_FILE" 2>/dev/null )"   || return 1
   p_attempt="$( "$JQ_BIN" -r '.attempt'  "$PROGRESS_FILE" 2>/dev/null )"  || return 1
   p_branch="$( "$JQ_BIN" -r '.branch'   "$PROGRESS_FILE" 2>/dev/null )"   || return 1
   p_base_ref="$( "$JQ_BIN" -r '.base_ref' "$PROGRESS_FILE" 2>/dev/null )" || return 1
   p_head_sha="$( "$JQ_BIN" -r '.head_sha' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+  # step is NOT a binding field (a resume is bound by run_id/base_ref/branch/head);
+  # it is lifted only to detect a resumed attempt that made no progress (R18). An
+  # absent step collapses to empty and never fails validation.
+  p_step="$( "$JQ_BIN" -r '.step // empty' "$PROGRESS_FILE" 2>/dev/null )"  || return 1
 
   # run_id ties the file to THIS run: a file from any other run (or a same-path
   # collision) is rejected. RUN_ID embeds a timestamp and pid, so it is unguessable.
@@ -664,6 +668,8 @@ validate_progress_file() {
   ( cd "$CT" && git cat-file -e "${p_head_sha}^{commit}" ) >/dev/null 2>&1 || return 1
 
   progress_branch="$p_branch"
+  progress_step="$p_step"
+  progress_head_sha="$p_head_sha"
   return 0
 }
 
@@ -674,10 +680,15 @@ validate_progress_file() {
 hash_file() {
   local f="$1"
   if [ ! -f "$f" ]; then printf '%s' "$GUARD_ABSENT_SENTINEL"; return 0; fi
+  # Guard both pipelines: an unreadable-but-present file (e.g. chmod 000 mid-run)
+  # makes sha256sum/shasum fail, which under `set -euo pipefail` would abort the
+  # plain command-substitution assignment at the call sites with no emit_record —
+  # outside the exit-code contract. Fall back to an "unreadable:<path>" sentinel so
+  # the file surfaces as a hash mismatch → typed goal-drift exit (8) with a record.
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$f" | awk '{print $1}'
+    sha256sum "$f" 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
   else
-    shasum -a 256 "$f" | awk '{print $1}'
+    shasum -a 256 "$f" 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
   fi
 }
 
@@ -720,6 +731,12 @@ timed_out=0
 # validates, consumed when building the next attempt's command.
 resume_active=0
 progress_branch=""
+progress_step=""
+progress_head_sha=""
+# One-resume-per-recorded-state (R18): the step+head_sha the last resume was armed
+# on. A resumed attempt that crashes again without advancing past this state gets a
+# cold restart instead of an infinite re-resume (see the resume decision below).
+resume_armed_state=""
 # Goal-drift snapshots: sha256 of the guarded goal files at the winning attempt's
 # start (re-hashed on the done_reached path below). Overwritten per attempt.
 strategy_hash_start=""
@@ -733,10 +750,17 @@ while :; do
 
   # Goal-drift snapshot: hash the guarded goal files at attempt start, AFTER any
   # reset_target (run at the end of the previous iteration) restored the clean
-  # base (KTD3). The winning attempt's snapshot is the one that persists past the
-  # break and is compared on the done_reached path below.
-  strategy_hash_start="$(hash_file "$STRATEGY_PATH")"
-  if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_file "$GUARD_PLAN_PATH")"; fi
+  # base (KTD3). Taken ONLY on a cold attempt: a resumed attempt inherits the prior
+  # attempt's baseline instead of re-snapshotting the surviving (possibly mutated)
+  # tree. Re-baselining on resume would launder a goal mutation made by the crashed
+  # attempt into the resumed attempt's clean baseline, so exit 8 would never fire —
+  # the baseline must span the whole surviving attempt lineage (KTD3/R1). The
+  # winning attempt's snapshot is the one that persists past the break and is
+  # compared on the done_reached path below.
+  if [ "$resume_active" -ne 1 ]; then
+    strategy_hash_start="$(hash_file "$STRATEGY_PATH")"
+    if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_file "$GUARD_PLAN_PATH")"; fi
+  fi
 
   # Build this attempt's command. A resuming relaunch (a validated no-PR retry)
   # appends a resume:<path> marker so lfg re-verifies steps 1..N-1 and continues
@@ -814,13 +838,29 @@ resume:$PROGRESS_FILE"
   # precedence — resume never fires once a PR exists). Choose resume vs cold restart
   # from the run-progress file (D2): a shape-valid file bound to THIS run lets the
   # next attempt resume at the recorded step on the recorded branch WITHOUT a reset,
-  # so the goal-drift snapshot at the loop top then captures the resumed tree. ANY
-  # validation failure scrubs the file and resets to the clean base. Fail toward
-  # cold restart, never toward trusting a stale/poisoned file (R15/R16).
+  # inheriting the prior attempt's goal-drift baseline (the loop-top snapshot is
+  # skipped on resume). ANY validation failure scrubs the file and resets to the
+  # clean base. Fail toward cold restart, never toward trusting a stale/poisoned
+  # file (R15/R16).
   if validate_progress_file; then
-    log "attempt $attempt: valid progress file — resuming at the recorded step on branch '$progress_branch' (no reset)"
-    ( cd "$CT" && git checkout "$progress_branch" ) >>"$LOG_FILE" 2>&1 || true
-    resume_active=1
+    # One-resume-per-recorded-state (R18): arm a resume ONCE per recorded state. If
+    # the just-crashed attempt was itself a resume that made no progress (its file
+    # still carries the step+head_sha armed last time), a re-resume would loop
+    # forever — converge to an honest cold restart instead, matching lfg's "next
+    # retry cold-restarts honestly" postcondition-mismatch promise. Real progress
+    # (an advanced step or a new head_sha) re-arms the resume.
+    armed_state="$progress_step:$progress_head_sha"
+    if [ "$resume_active" -eq 1 ] && [ "$armed_state" = "$resume_armed_state" ]; then
+      log "attempt $attempt: resumed attempt made no progress (state '$armed_state') — scrubbing and cold-restarting"
+      rm -f "$PROGRESS_FILE" 2>/dev/null || true
+      reset_target
+      resume_active=0
+    else
+      log "attempt $attempt: valid progress file — resuming at the recorded step on branch '$progress_branch' (no reset)"
+      ( cd "$CT" && git checkout "$progress_branch" ) >>"$LOG_FILE" 2>&1 || true
+      resume_active=1
+      resume_armed_state="$armed_state"
+    fi
   else
     log "attempt $attempt: no valid progress file — scrubbing it and resetting to clean base before retrying"
     rm -f "$PROGRESS_FILE" 2>/dev/null || true

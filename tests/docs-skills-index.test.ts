@@ -12,7 +12,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { emitSkillsIndex } from "../src/docs/emit-skills-index"
+import { emitSkillsIndex, renderSkillsIndex } from "../src/docs/emit-skills-index"
 
 const REPO_ROOT = path.join(__dirname, "..")
 const CLI = path.join(REPO_ROOT, "scripts/docs/emit-skills-index.ts")
@@ -22,7 +22,11 @@ const INDEX = path.join(DOCS_DIR, "README.md")
 
 function skillNames(): string[] {
   return readdirSync(SKILLS_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(path.join(SKILLS_DIR, entry.name, "SKILL.md")),
+    )
     .map((entry) => entry.name)
     .sort()
 }
@@ -71,6 +75,25 @@ describe("docs/skills index drift gate", () => {
     // A schema-visible frontmatter change without regen fails here until
     // `bun run docs:emit-index`.
     expect(drifted).toEqual([])
+  })
+})
+
+describe("docs/skills index skips non-skill debris", () => {
+  test("a bare directory under skills/ without SKILL.md is excluded, not fatal", () => {
+    // Real checkouts accumulate debris under skills/ (e.g. logs/, .claude/ —
+    // see this branch's .gitignore). Copy the real sources into an isolated
+    // root, drop a bare non-skill directory in, and confirm rendering succeeds
+    // and omits it rather than throwing ENOENT on a missing SKILL.md.
+    const root = mkdtempSync(path.join(tmpdir(), "skills-index-debris-"))
+    const destSkills = path.join(root, "plugins/super-looper/skills")
+    mkdirSync(path.dirname(destSkills), { recursive: true })
+    cpSync(SKILLS_DIR, destSkills, { recursive: true })
+    mkdirSync(path.join(destSkills, "logs"), { recursive: true })
+
+    const rendered = renderSkillsIndex(root)
+    expect(rendered).not.toContain("[`logs`]")
+
+    rmSync(root, { recursive: true, force: true })
   })
 })
 

@@ -83,6 +83,8 @@ When invoking any skill referenced below, resolve its name against the available
 
    Never block DONE on tracker filing failures once residuals have been durably recorded. A `no_sink` outcome is success only when the findings are present in the PR body or in the pushed fallback file.
 
+   **Progress-file write (progress-file runs only).** When a `progress:<path>` marker is in play, record `residuals_pointer` at this step's boundary: the PR URL when the existing PR body was updated, or the committed `docs/residual-review-findings/<branch-or-head-sha>.md` path when the fallback file was written. Leave it `null` when this step was skipped (step 4 reported no actionable residuals).
+
 7. Invoke the `sl-test-browser` skill with `mode:pipeline`.
 
 8. Invoke the `sl-commit-push-pr` skill.
@@ -106,6 +108,8 @@ When invoking any skill referenced below, resolve its name against the available
       ```
 
       If the command exits 0, all checks passed. Break out of the loop and proceed to step 10.
+
+      **Progress-file write — green (progress-file runs only).** When a `progress:<path>` marker is in play, before proceeding record `ci_disposition: "green"` plus the final `fix_iterations` and `flaky_dispositions` to the progress file (atomic tmp file + rename over the target, per `references/progress-file.md`). The escalation rung's green exit records the same before it breaks to step 10.
 
       If it exits non-zero, one or more checks failed. Continue to (2).
 
@@ -173,6 +177,7 @@ When invoking any skill referenced below, resolve its name against the available
      gh pr edit PR_NUMBER --body-file BODY_FILE
      ```
 
+   - **Progress-file write — unresolved (progress-file runs only).** When a `progress:<path>` marker is in play, record `ci_disposition: "unresolved"` plus the final `fix_iterations` and `flaky_dispositions` to the progress file (atomic tmp file + rename over the target, per `references/progress-file.md`).
    - Do NOT continue looping. The autopilot contract is "make residuals durable, then exit." Proceed to step 10.
 
 10. **Learn seam** (only when an open PR exists for the current branch and step 9 reached green)

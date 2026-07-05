@@ -45,7 +45,11 @@ export function readSkills(root: string): SkillEntry[] {
   const skillsDir = path.join(root, SKILLS_DIR)
   return fs
     .readdirSync(skillsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        fs.existsSync(path.join(skillsDir, entry.name, "SKILL.md")),
+    )
     .map((entry) => entry.name)
     .sort()
     .map((name) => {

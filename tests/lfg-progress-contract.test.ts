@@ -209,6 +209,79 @@ describe("lfg step 5 goal-fidelity distillation (U9 / R6)", () => {
   })
 })
 
+// R17: step 9's prose must carry the point-of-effect progress write it is documented
+// to make. Both terminal exits (green break and the `## CI Failures Unresolved` floor)
+// record ci_disposition plus the fix_iterations / flaky_dispositions counters, so grep
+// the step-9 region for both wordings and all three fields.
+describe("lfg step 9 CI-disposition progress write (U7 / R17)", () => {
+  function step9Region(lfg: string): string {
+    return sliceBetween(lfg, "**CI watch and autofix loop**", "10. **Learn seam**")
+  }
+
+  test("records ci_disposition + counters on both the green and unresolved exits", async () => {
+    const lfg = await readRepoFile(LFG)
+    const step9 = step9Region(lfg)
+
+    // The write side of the R17 machine gate lives in step 9's own prose
+    expect(step9).toContain("ci_disposition")
+    expect(step9).toContain("fix_iterations")
+    expect(step9).toContain("flaky_dispositions")
+    // Both terminal dispositions are named at their point of effect
+    expect(step9).toContain('`ci_disposition: "green"`')
+    expect(step9).toContain('`ci_disposition: "unresolved"`')
+    // Gated on the progress marker, atomic tmp+rename, pointing at the reference
+    expect(step9).toContain("progress:<path>")
+    expect(step9).toContain("references/progress-file.md")
+  })
+})
+
+// R14: step 6 is the sole producer of residuals_pointer; without a point-of-effect
+// write the documented field has no writer. Grep the step-6 region for the write
+// instruction and the reference Consumers section for the matching producer.
+describe("lfg step 6 residuals_pointer progress write (U7 / R14)", () => {
+  function step6Region(lfg: string): string {
+    return sliceBetween(lfg, "6. **Autonomous residual handoff**", "7. Invoke the `sl-test-browser`")
+  }
+
+  test("records residuals_pointer at the step-6 boundary, gated on the progress marker", async () => {
+    const lfg = await readRepoFile(LFG)
+    const step6 = step6Region(lfg)
+
+    expect(step6).toContain("residuals_pointer")
+    expect(step6).toContain("progress:<path>")
+    // Both durable sinks are named as the pointer value
+    expect(step6).toContain("docs/residual-review-findings/")
+  })
+
+  test("reference Consumers documents the step-6 residuals producer", async () => {
+    const ref = await readRepoFile(PROGRESS_REF)
+    expect(ref).toContain("**Step 6 boundary** sets `residuals_pointer`")
+  })
+})
+
+// binding-field derivations: run_id and base_ref feed loop.sh's resume validator by
+// exact string match, so the reference must pin how lfg derives each — a ref name in
+// base_ref or a mis-derived run_id silently kills resume forever.
+describe("run-progress binding-field derivations (U7 / R14)", () => {
+  test("pins run_id basename derivation and base_ref as a full 40-hex sha", async () => {
+    const ref = await readRepoFile(PROGRESS_REF)
+
+    // run_id derives from the progress path's basename minus the suffix
+    expect(ref).toContain("basename")
+    expect(ref).toContain(".progress.json")
+    // base_ref is the full 40-hex fork-point sha, never a ref name
+    expect(ref).toContain("40-hex")
+    expect(ref).toContain("never a ref name")
+  })
+
+  test("JSON example encodes the derived values, not a ref name", async () => {
+    const ref = await readRepoFile(PROGRESS_REF)
+    // The base_ref example must not invite a bare ref like "main"
+    expect(ref).not.toContain('"base_ref": "<sha or ref the branch forked from>"')
+    expect(ref).toContain('"base_ref": "<full 40-hex sha of the fork-point commit>"')
+  })
+})
+
 // U9 (R6): sl-product-pulse maps goal_fidelity to the run-record ledger source
 // (it leaves pulse_pending_metrics). Grep the ledger worked-instances section.
 describe("pulse goal_fidelity ledger mapping (U9 / R6)", () => {

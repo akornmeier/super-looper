@@ -300,4 +300,7 @@ question. Size it to plan → implement → verify in one run. See
 `claude`, `gh`, `timeout`, and `jq` binaries (used by `tests/loop-driver.test.ts`
 to exercise every path with stubs — no live Claude or GitHub call). `jq` validates
 the run-progress file before a resume; a missing `jq` is treated as a validation
-failure (cold restart), so it never weakens the guard.
+failure (cold restart), so it never weakens the guard. The suite exercises the
+`LOOP_JQ_BIN` seam directly: pointed at a nonexistent binary with a valid progress
+file present, the run cold-restarts (no resume) and the run-record's progress-file
+lifts read `null`.

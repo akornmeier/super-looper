@@ -67,7 +67,7 @@ canon_path() {
     _b="$(basename "$_p")"
     _p="$_d/$_b"
     if [ -L "$_p" ]; then
-      _link="$(readlink "$_p")"
+      _link="$(readlink "$_p" 2>/dev/null)" || break
       case "$_link" in
         /*) _p="$_link" ;;
         *)  _p="$_d/$_link" ;;
