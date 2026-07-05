@@ -30,7 +30,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 **Step 4 has two modes**
 
 - **Steer each stage:** `/sl-work` → `/sl-code-review` → `/sl-commit-push-pr`. Stay in the driver's seat.
-- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them.
+- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them. Unattended runs lock their goals: set `STRATEGY.md` and the plan *before* launching — a run that edits either mid-run aborts (exit 8, goal drift) rather than shipping the drift. Goal changes go through interactive `/sl-strategy` or a plan revision, then relaunch.
 
 **Right-size it.** Skip brainstorm for small, obvious changes — go straight to `/sl-plan` or `/sl-work`. Use `/sl-debug` for bugs, not the build loop. Save the full chain for ambiguous or cross-cutting features.
 
