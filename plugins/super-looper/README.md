@@ -38,7 +38,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 
 | Component | Count |
 |-----------|-------|
-| Agents | 41 |
+| Agents | 42 |
 | Skills | 39 |
 
 ## Skills
@@ -191,6 +191,7 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 
 | Agent | Description |
 |-------|-------------|
+| `sl-learning-evaluator` | Grade a candidate ship-time learning against an evidence packet — verified / candidate / rejected |
 | `sl-pr-comment-resolver` | Address PR comments and implement fixes |
 | `sl-spec-flow-analyzer` | Analyze user flows and identify gaps in specifications |
 

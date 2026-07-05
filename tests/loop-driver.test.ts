@@ -1573,9 +1573,10 @@ exit 0
   })
 
   // Scenario (a): progress file carries a verdict → run-record includes it verbatim.
+  // learning_rejection (R9) rides the same lift, so the same run covers it.
   test("verdict in progress file → run-record includes it verbatim", async () => {
     const claude = fidelityStub(
-      `{ "schema_version": 1, "step": 5, "goal_fidelity": { "verdict": "partial", "uncovered": ["R2", "R4"] } }`,
+      `{ "schema_version": 1, "step": 5, "goal_fidelity": { "verdict": "partial", "uncovered": ["R2", "R4"] }, "learning_rejection": { "claim": "cache was the root cause", "reason": "diff shows the cache path untouched" } }`,
     )
     const { target, plugin, dir } = runWith(claude)
     const { exitCode } = await runLoop(
@@ -1584,6 +1585,10 @@ exit 0
     )
     expect(exitCode).toBe(0)
     expect(readRecord(dir).goal_fidelity).toEqual({ verdict: "partial", uncovered: ["R2", "R4"] })
+    expect(readRecord(dir).learning_rejection).toEqual({
+      claim: "cache was the root cause",
+      reason: "diff shows the cache path untouched",
+    })
   })
 
   // Scenario (b-i): explicit null verdict → record field is null.
@@ -1608,6 +1613,7 @@ exit 0
     )
     expect(exitCode).toBe(0)
     expect(readRecord(dir).goal_fidelity).toBeNull()
+    expect(readRecord(dir).learning_rejection).toBeNull()
   })
 
   // Scenario (b-iii): no progress file written at all → record null (nothing fabricated).

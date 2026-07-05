@@ -36,6 +36,7 @@ One JSON object. `schema_version` gates the shape; unknown/absent optional field
   "ci_disposition": null,
   "residuals_pointer": null,
   "goal_fidelity": null,
+  "learning_rejection": null,
   "updated_at": "2026-07-04T00:00:00Z"
 }
 ```
@@ -57,11 +58,13 @@ One JSON object. `schema_version` gates the shape; unknown/absent optional field
 | `ci_disposition` | string \| null | Step-9 outcome. `null` before step 9 completes; `"green"` when CI reached green (normal or post-escalation green path); `"unresolved"` when the `## CI Failures Unresolved` floor was composed. This recorded value — not the PR-body section — is the machine gate that step 10 and `sl-learn` read. |
 | `residuals_pointer` | string \| null | Pointer to the durable residual-findings record from step 6 (PR URL, or the `docs/residual-review-findings/<...>.md` fallback path). `null` when no residuals were filed. |
 | `goal_fidelity` | object \| null | Plan-vs-outcome fidelity verdict, written at the step-5 boundary from step 4's requirements-completeness result. Shape: `{"verdict": "met" \| "partial" \| "drifted", "uncovered": [<requirement/unit IDs not fully met>]}`. `met` = every planned requirement and unit addressed (`uncovered: []`); `partial` = some only partially addressed, none entirely unaddressed; `drifted` = one or more entirely unaddressed. `null` when step 4 ran no requirements check (no plan matched). loop.sh's `emit_record` lifts this into the run-record verbatim. |
+| `learning_rejection` | object \| null | Set by `sl-learn` (step 10's learn seam) when the learning evaluator returns `rejected`. Shape: `{"claim": "<the refuted claim>", "reason": "<evaluator rationale>"}`. `null` when no learning was rejected. loop.sh's `emit_record` lifts this into the run-record verbatim, so the rejection survives the terminal scrub. |
 | `updated_at` | string | ISO-8601 timestamp of this write. |
 
 ## Consumers
 
 - **Step 5 boundary** sets `goal_fidelity` from step 4's requirements-completeness result; loop.sh's `emit_record` lifts it into the run-record verbatim (U9).
 - **Step 9 boundary** sets `ci_disposition`, `fix_iterations`, and `flaky_dispositions` from the CI-watch loop's outcome.
+- **`sl-learn` (step 10)** sets `learning_rejection` when the evaluator rejects a drafted learning; loop.sh's `emit_record` lifts it into the run-record verbatim (R9).
 - **Step 10 gate** and **`sl-learn`** read `ci_disposition` as the machine signal for "was CI left red?" — the `## CI Failures Unresolved` PR section is demoted to a human-facing record.
 - **loop.sh (U8)** validates the file's shape plus binding fields (`run_id`, `base_ref`, `branch`) to decide resume vs. cold-restart, and scrubs it at every terminal.

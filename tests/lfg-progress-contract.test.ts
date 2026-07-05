@@ -139,6 +139,7 @@ describe("run-progress reference schema (U7 / R14)", () => {
     "ci_disposition",
     "residuals_pointer",
     "goal_fidelity",
+    "learning_rejection",
     "updated_at",
   ]
 

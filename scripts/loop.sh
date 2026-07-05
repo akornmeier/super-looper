@@ -330,9 +330,14 @@ emit_record() {
   # would always see nothing. A missing jq, an absent file, or an absent/null
   # `goal_fidelity` field each collapse to "null".
   local goal_fidelity_json="null"
+  local learning_rejection_json="null"
   if [ -f "$PROGRESS_FILE" ] && command -v "$JQ_BIN" >/dev/null 2>&1; then
     goal_fidelity_json="$( "$JQ_BIN" -c '.goal_fidelity // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
     [ -n "$goal_fidelity_json" ] || goal_fidelity_json="null"
+    # Learning rejection (R9): same lift, same rules — the sl-learn evaluator's
+    # rejected verdict must survive the scrub into the run-record.
+    learning_rejection_json="$( "$JQ_BIN" -c '.learning_rejection // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
+    [ -n "$learning_rejection_json" ] || learning_rejection_json="null"
   fi
 
   local route=""
@@ -382,6 +387,7 @@ emit_record() {
   "typed_failure": $(json_str_or_null "$typed_failure"),
   "goal_drift": $goal_drift_json,
   "goal_fidelity": $goal_fidelity_json,
+  "learning_rejection": $learning_rejection_json,
   "route": $(json_str_or_null "$route"),
   "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
   "attempts": {

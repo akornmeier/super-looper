@@ -235,6 +235,12 @@ and `null` when no verdict was recorded — no progress file, no requirements ch
 or a null value. The driver never fabricates it; "no data" stays honest as `null`.
 It is read out of the progress file *before* that file is scrubbed at the terminal.
 
+A `learning_rejection` field is lifted the same way: `sl-learn` sets it in the
+progress file when its evaluator rejects a drafted learning
+(`{"claim": "<the refuted claim>", "reason": "<evaluator rationale>"}`), and it is
+`null` when no learning was rejected — so a rejection survives the terminal scrub
+into the ledger.
+
 ## Isolation rule
 
 `loop.sh` is for running the loop on **other** repos. It refuses to run when the

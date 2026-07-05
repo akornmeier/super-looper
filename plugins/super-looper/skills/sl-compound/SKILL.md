@@ -38,6 +38,13 @@ Check `$ARGUMENTS` for a `mode:headless` token. Tokens starting with `mode:` are
 
 Headless mode is intended for automations and skill-to-skill invocation where no human is present to answer questions. The doc itself is identical to what an interactive Full run would produce — classification work (track, category, overlap) follows the same rules and writes nothing extra into the artifact. Once detected, headless mode applies for the entire run.
 
+## Provenance and confidence
+
+The solutions schema carries optional `confidence`, `provenance`, and `evidence` fields — a machine-readable trust label consumers use to weight retrieval (see `references/schema.yaml`). Set them by mode when writing the learning's frontmatter:
+
+- **Interactive and lightweight** (a human is present) → stamp `provenance: interactive-session`. No evaluator gate is required — the human is the reviewer (R12). Leave `confidence` unset; absent is valid and treated as candidate-equivalent by consumers.
+- **Headless** → do **not** set `confidence`, `provenance`, or `evidence`. A headless run drafts the learning but does not grade its own trust; the caller (`sl-learn`) sets these fields after an independent fresh-context evaluator returns a verdict. Omitting them is safe — legacy/absent stays valid.
+
 ## Pre-resolved context
 
 **Git branch (pre-resolved):** !`git rev-parse --abbrev-ref HEAD 2>/dev/null || true`

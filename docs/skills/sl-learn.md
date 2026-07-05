@@ -39,15 +39,19 @@ Compounding knowledge requires someone to notice a problem was solved and write 
 
 Stage 1 (this seam) errs toward proceeding whenever a non-trivial problem *plausibly* occurred, reading in-session signals like a `fix(ci):` commit or review-fix commits. Stage 2 (`sl-compound`'s preconditions) is the real keep/skip authority. A plain feature ship with nothing solved skips without even invoking `sl-compound`.
 
-### 3. Stage exactly the named paths — never `git add -A`
+### 3. Independent evaluator gate — generator ≠ evaluator
+
+The learning is drafted by the same hot context that did the work, and a generator reliably over-praises its own output. So before committing, `sl-learn` dispatches a fresh-context evaluator (`sl-learning-evaluator`) with an evidence packet — branch diff, commit log, CI timeline, and the transcript excerpts backing each claim — and asks it to weigh that evidence *as claims, not truth*. It returns a three-state verdict: **`verified`** (evidence confirms the causal claims → commit `confidence: verified`), **`candidate`** (unconfirmed but uncontradicted → commit `confidence: candidate`), or **`rejected`** (evidence affirmatively refutes a claim → don't commit, revert any `CONCEPTS.md` / instruction-file edits, record the rejection). Only an affirmative refutation blocks the commit — refute-by-default would systematically kill work-phase learnings that have no CI trace — and an evaluator crash or timeout fails toward `candidate`, never silently `verified` and never dropped.
+
+### 4. Stage exactly the named paths — never `git add -A`
 
 The commit stages only the paths `sl-compound`'s report names: the learning file always, `CONCEPTS.md` only when it was created or updated, the instruction file only when an edit was applied. A blanket `git add -A` would sweep unrelated working-tree residue from earlier `lfg` steps into a misleading learning commit.
 
-### 4. Schema validation before commit
+### 5. Schema validation before commit
 
 `sl-compound`'s self-check covers parser-safety, not schema. When the target repo gates `docs/solutions/` frontmatter against a validator, `sl-learn` runs it on the new learning and repairs failures first — otherwise a schema-invalid learning would turn the PR red on the learn commit itself.
 
-### 5. Re-confirm green with the immediate-exit-0 caveat
+### 6. Re-confirm green with the immediate-exit-0 caveat
 
 The learn commit re-triggers CI, and `loop.sh` checks `target_ci_green` only once after DONE. So the seam re-watches to green before returning — and explicitly does not trust an immediate exit-0, because right after a push `--watch` can return against the *prior* commit's already-complete checks. It confirms the PR head shows at least one check, all passing, before handing back to `lfg`.
 
