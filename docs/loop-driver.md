@@ -95,14 +95,87 @@ binary is **required** for a real run — without one, the per-attempt wall-cloc
 cap cannot be enforced and the driver fails fast (see Safety) rather than
 risking a hung, uncapped run.
 
-`lfg` has no resume entry point — re-running it on a half-finished branch would
-re-plan and stack commits. So a crash-**without**-`DONE` reconciles before
-retrying:
+A crash-**without**-`DONE` reconciles before retrying:
 
 - If an **open PR already exists** for the target branch → terminal: route to
-  verification, do **not** re-launch.
-- Otherwise → reset the target to its **clean base** and retry, up to
-  `--max-retries`. After the cap is exhausted, exit non-zero.
+  verification, do **not** re-launch. This reconciliation keeps **precedence** —
+  resume never fires once a PR exists (see Resume below).
+- Otherwise → decide **resume vs. cold restart** from the run-progress file (see
+  Resume), then retry up to `--max-retries`. After the cap is exhausted, exit
+  non-zero.
+
+The cap is checked **before** the resume/reset decision, so resume never extends
+the retry budget — the give-up floor (`exit 5`) is intact.
+
+## Resume
+
+A crashed attempt that got partway through the pipeline records its progress in a
+**run-progress file** — `lfg` writes it at each step boundary to a path `loop.sh`
+owns under `--log-dir`, **outside** the target tree (so a retry's `git clean -fd`
+cannot delete it and `lfg` step 8 cannot sweep it into the PR). On a
+crash-without-`DONE` retry with **no open PR**, the driver validates that file and,
+when it is trustworthy, resumes the failed attempt instead of cold-restarting from
+step 1.
+
+**The resume lattice** (no-PR retry): validate the progress file → **resume** on
+success, or **scrub + cold-restart** on any failure. A stale or forged file must
+never fake a resume point, so validation gates on what each signal *proves*, not on
+mere file presence. All of these binding checks must hold:
+
+- **Shape** — parses as JSON (`jq -e`) with a `schema_version` the driver
+  understands and every binding field present as the right type.
+- **`run_id`** — equals THIS run's id (embeds a timestamp and pid, so it is
+  unguessable); a file from any other run is rejected.
+- **`attempt`** — a non-negative integer at or below the just-finished attempt.
+- **`base_ref`** — equals the run's clean base (the branch forked from *our* base).
+- **`branch`** — the recorded branch exists in the target (`refs/heads` scope
+  only, never a bare sha masquerading as a branch).
+- **`head_sha`** — the recorded HEAD sha is reachable as a commit in the target.
+
+On **success**, the driver skips `reset_target`, checks out the recorded branch,
+and relaunches `lfg` with a `resume:<path>` marker (alongside the normal markers).
+`lfg`'s resume entry mode re-verifies the postconditions of the completed steps
+(branch present, plan gate passes, expected commits reachable) and continues at the
+next step; if a postcondition fails, it records the discrepancy and exits **without**
+`DONE`, so the next retry cold-restarts honestly. **Any validation failure** —
+missing, corrupt, wrong `run_id`, mismatched `base_ref`, absent branch, unreachable
+`head_sha` — **scrubs** the file and resets the target to its clean base before the
+cold restart. The driver always **fails toward cold restart, never toward trusting
+the file**.
+
+Resume is scoped to **steps 1–7 only**: it fires only *pre-PR*. Once a PR exists,
+open-PR crash reconciliation is authoritative and resume does not run (post-PR
+resume would need a cross-attempt fix-iteration cap to bound CI-fix looping —
+deferred). The progress file is **scrubbed on every terminal path** (all run-record
+exits, success and failure alike) and before every cold restart, so stale state can
+never seed a later run.
+
+## Goal-drift guard
+
+An unattended run must not silently rewrite its own goal. `loop.sh` snapshots the
+sha256 of the run's **goal files** at each attempt's start (after any retry reset
+restores the clean base) and re-hashes them on **every** `done_reached` path —
+both the `DONE` sentinel and the crash-reconciled open-PR route — **before**
+verification. If a hash changed, the run reached a finish on a mutated goal, so
+success cannot be reported: the driver prints a multi-line explanation (the file
+and the change kind), writes a `goal-drift` run-record with `verification: not-run`,
+and exits `8`.
+
+- **Guarded files.** `STRATEGY.md` in the target is always guarded; the resolved
+  `--plan-file` is also guarded in plan mode. Seed mode guards `STRATEGY.md` only.
+- **Absent is a valid state.** A missing file hashes to a sentinel, so a
+  `STRATEGY.md` absent at both start and end passes; created mid-run is drift
+  (`created`), deleted mid-run is drift (`deleted`), and an in-place edit is
+  `modified`.
+- **Drift is terminal, not retryable.** Like DONE-but-red (`exit 7`), a
+  completed-but-untrustworthy run is a hard stop — retries exist for
+  crash-without-`DONE`, not for a finish that moved the goalposts. Goal changes
+  must route through interactive `sl-strategy` or a human-approved plan revision,
+  never an unattended run.
+
+The end-of-run checksum is the authoritative guard: it catches every mutation
+path (`sed -i`, shell redirection, subagent worktree merges) that a tool-level
+interception would miss.
 
 ## Exit codes
 
@@ -115,6 +188,7 @@ retrying:
 | `5` | Cap exhausted — crashed without `DONE`, no open PR. |
 | `6` | Timeout — last attempt timed out without `DONE`. |
 | `7` | DONE-but-red — finished, but target verification is red. |
+| `8` | Goal drift — a goal file (`STRATEGY.md` or the plan) changed during the run. |
 
 ## Run record
 
@@ -143,11 +217,36 @@ seed/task text is never inlined.
 | `5` | `cap-exhausted` | `failure` |
 | `6` | `timeout` | `failure` |
 | `7` | `done-but-red` | `failure` |
+| `8` | `goal-drift` | `failure` |
 
-A record is written on every **operational** terminal path (the six exits above),
-including failures. It is **not** written for pre-flight usage errors (`exit 2`),
-`--help`, or `--dry-run` — those validate input or inspect the command rather than
-running, so recording them would pollute the substrate with non-runs.
+A record is written on every **operational** terminal path (the seven exits
+above), including failures. It is **not** written for pre-flight usage errors
+(`exit 2`), `--help`, or `--dry-run` — those validate input or inspect the command
+rather than running, so recording them would pollute the substrate with non-runs.
+
+A goal-drift record (`exit 8`) additionally carries a `goal_drift` object naming
+the changed `file` and the `change` kind (`modified` / `deleted` / `created`); it
+is `null` on every other path.
+
+Every record also carries a `goal_fidelity` field: the lfg step-5 plan-vs-outcome
+verdict, lifted verbatim from the run-progress file when lfg recorded one
+(`{"verdict": "met" | "partial" | "drifted", "uncovered": [<requirement IDs>]}`),
+and `null` when no verdict was recorded — no progress file, no requirements check,
+or a null value. The driver never fabricates it; "no data" stays honest as `null`.
+It is read out of the progress file *before* that file is scrubbed at the terminal.
+
+A `learning_rejection` field is lifted the same way: `sl-learn` sets it in the
+progress file when its evaluator rejects a drafted learning
+(`{"claim": "<the refuted claim>", "reason": "<evaluator rationale>"}`), and it is
+`null` when no learning was rejected — so a rejection survives the terminal scrub
+into the ledger.
+
+A `refresh_due` field is lifted the same way: `sl-learn` sets it in the progress
+file when a committed learning grows `docs/solutions/` past the refresh threshold
+since the last `sl-compound-refresh` run
+(`{"since_refresh": <count>, "threshold": <n>}`), and it is `null` otherwise. The
+nudge is advisory — `sl-learn` records it and annotates the PR body, but never
+dispatches the refresh (a human-approved maintenance pass).
 
 ## Isolation rule
 
@@ -197,6 +296,11 @@ question. Size it to plan → implement → verify in one run. See
 
 ## Advanced / testing seams
 
-`LOOP_CLAUDE_BIN`, `LOOP_GH_BIN`, and `LOOP_TIMEOUT_BIN` override the `claude`,
-`gh`, and `timeout` binaries (used by `tests/loop-driver.test.ts` to exercise
-every path with stubs — no live Claude or GitHub call).
+`LOOP_CLAUDE_BIN`, `LOOP_GH_BIN`, `LOOP_TIMEOUT_BIN`, and `LOOP_JQ_BIN` override the
+`claude`, `gh`, `timeout`, and `jq` binaries (used by `tests/loop-driver.test.ts`
+to exercise every path with stubs — no live Claude or GitHub call). `jq` validates
+the run-progress file before a resume; a missing `jq` is treated as a validation
+failure (cold restart), so it never weakens the guard. The suite exercises the
+`LOOP_JQ_BIN` seam directly: pointed at a nonexistent binary with a valid progress
+file present, the run cold-restarts (no resume) and the run-record's progress-file
+lifts read `null`.

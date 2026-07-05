@@ -44,6 +44,12 @@ The structured, index-not-copy record the Loop driver writes on every operationa
 ### Run-record ledger
 The committed, append-only corpus — one Run-record per line — that accumulates Run-records across runs so a downstream reader can aggregate them over a window. It survives a clean checkout and travels to a fresh or cloud checkout, unlike machine-local config; its absence is a valid "no runs yet" state, not an error.
 
+### Goal guard
+The paired mechanism that refuses to let an unattended run change its own goal and still report success. The authoritative half is a checksum in the Loop driver (`loop.sh`): it snapshots the sha256 of `STRATEGY.md` and the active plan at the start of each cold attempt and re-hashes on every done-reached path before verification, exiting 8 with `typed_failure: "goal-drift"` on any mismatch — catching every mutation path, including Bash writes and subagent worktree merges that bypass tool interception. The baseline is scoped to the [Attempt lineage](#attempt-lineage), not the single attempt: a resumed attempt inherits the prior cold baseline rather than re-snapshotting the surviving tree, so a mutation made by a crashed attempt cannot be laundered into a clean baseline. The defense-in-depth half is the plugin's PreToolUse hook, which denies a Write/Edit to the exact goal-file paths only inside an unattended session (armed via `LOOP_GOAL_GUARD_PATHS`); it fails fast and teaches the boundary mid-run but is never the sole guard. Shares the honesty principle of the [Give-up floor](#give-up-floor): a run that drifted from its goal must abort rather than ship the drift as success.
+
+### Attempt lineage
+The chain of attempts within one run that shares surviving working-tree state — a cold attempt plus every resumed attempt that skipped the reset because a validated progress record carried the state forward. Invariants captured "per attempt" are actually scoped per lineage: any baseline, snapshot, or budget that assumes a reset ran must be captured where the reset happens (the cold attempt) and inherited across resumes, or a skip-reset path silently narrows what the invariant measures.
+
 ## Skill orchestration
 
 ### Model tier

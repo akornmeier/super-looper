@@ -1,0 +1,115 @@
+{
+  "skill_name": "sl-compound",
+  "purpose": "Validate one narrow load-bearing assumption: sl-compound classifies the correct track (bug vs knowledge) from problem_type, writes track-appropriate schema-valid frontmatter (bug-track required fields vs knowledge-track optional), routes to the correct docs/solutions/ category directory, and does not force bug-track fields onto knowledge learnings or invent enum values / categories from memory. Downstream retrieval (sl-learnings-researcher) and the schema validator both depend on this being right.",
+  "non_purpose": "Not testing sl-compound's overlap detection, CONCEPTS.md vocabulary capture (Phase 2.4), subagent orchestration, the Discoverability Check, or the interactive What's-next menu. The narrow assumption is track routing + schema-valid frontmatter only.",
+  "variance_protocol": {
+    "runs_per_eval": 3,
+    "stability_metric": "stddev of must-tier term recall across runs",
+    "pass_threshold": "must-tier recall >= 80% mean AND stddev < 20% AND runs_passed >= 2 of 3"
+  },
+  "grading_pipeline": {
+    "stage_1": "Programmatic substring match per criticality tier (must / should / may). Pass = all 'must' terms appear (case-insensitive substring) in the response text.",
+    "stage_2": "LLM grader (see grader.md) — judges whether the response makes the correct track/field/category decision with rationale. For the negative case, judges whether a prohibited action (forcing cross-track fields, inventing enum values) appears as an affirmative recommendation."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "bug-track-routing",
+      "tests_risk": "mis_track",
+      "prompt": "You are documenting a solved problem: a test suite was failing intermittently because of a race condition in async test setup; you fixed the ordering. Which track is this, which problem_type and category directory does it map to, and which frontmatter fields are REQUIRED for it?",
+      "expected_terms": [
+        {"term": "bug", "tier": "must"},
+        {"term": "symptoms", "tier": "must"},
+        {"term": "root_cause", "tier": "must"},
+        {"term": "resolution_type", "tier": "must"},
+        {"term": "test_failure", "tier": "should"},
+        {"term": "test-failures/", "tier": "should"},
+        {"term": "race_condition", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent routes to the BUG track and names symptoms, root_cause, and resolution_type as the required bug-track fields",
+        "the agent maps problem_type test_failure to the test-failures/ category directory under docs/solutions/"
+      ],
+      "ground_truth": {
+        "skill": "sl-compound",
+        "contract_source": "plugins/super-looper/skills/sl-compound/SKILL.md + references/schema.yaml",
+        "contract_lines": "SKILL.md: 'Determines the track (bug or knowledge) from the problem_type ... Bug track: symptoms, root_cause, resolution_type'. schema.yaml tracks.bug.problem_types includes test_failure; root_cause enum includes race_condition. SKILL.md 'What It Creates' maps bug track to test-failures/.",
+        "expected_behavior": "Bug track; required symptoms/root_cause/resolution_type; test-failures/ directory."
+      },
+      "notes": "Deterministic bug-track case. A distinctive coined signal is the trio of required bug-track fields; dropping any of the three is unambiguous mis-tracking."
+    },
+    {
+      "id": 2,
+      "name": "knowledge-track-routing",
+      "tests_risk": "mis_track",
+      "prompt": "You are documenting a durable team decision: 'always resolve the repo root via `git rev-parse --show-toplevel` before reading a config file.' There is no bug — it is a convention. Which track, which problem_type and category directory, and are symptoms / root_cause / resolution_type required for it?",
+      "expected_terms": [
+        {"term": "knowledge", "tier": "must"},
+        {"term": "convention", "tier": "must"},
+        {"term": "optional", "tier": "must"},
+        {"term": "applies_when", "tier": "should"},
+        {"term": "conventions/", "tier": "should"},
+        {"term": "not required", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent routes to the KNOWLEDGE track with problem_type convention and maps it to the conventions/ category directory",
+        "the agent states symptoms / root_cause / resolution_type are OPTIONAL (not required, not forced) for knowledge-track learnings, and applies_when is the knowledge-track field"
+      ],
+      "ground_truth": {
+        "skill": "sl-compound",
+        "contract_source": "plugins/super-looper/skills/sl-compound/SKILL.md + references/schema.yaml",
+        "contract_lines": "SKILL.md: 'Knowledge track: applies_when (symptoms/root_cause/resolution_type optional)'. schema.yaml tracks.knowledge.problem_types includes convention; track_rules.knowledge lists applies_when/symptoms/root_cause/resolution_type all under optional. SKILL.md 'What It Creates' maps knowledge track to conventions/.",
+        "expected_behavior": "Knowledge track; problem_type convention; conventions/ directory; bug-track fields optional."
+      },
+      "notes": "Mirror of eval 1 on the knowledge side. The must-tier 'optional' is the discriminator — a mis-track would call symptoms/root_cause required."
+    },
+    {
+      "id": 3,
+      "name": "schema-valid-frontmatter",
+      "tests_risk": "invalid_frontmatter",
+      "prompt": "When you write the YAML frontmatter for a learning, which fields are shared-required for BOTH tracks, what discipline applies to enum-valued fields, and what quoting rule protects array-of-strings items (like symptoms or tags)?",
+      "expected_terms": [
+        {"term": "module", "tier": "must"},
+        {"term": "date", "tier": "must"},
+        {"term": "problem_type", "tier": "must"},
+        {"term": "component", "tier": "must"},
+        {"term": "severity", "tier": "must"},
+        {"term": "enum", "tier": "should"},
+        {"term": "YAML-safety", "tier": "should"},
+        {"term": "reserved indicator", "tier": "should"},
+        {"term": "schema.yaml", "tier": "may"},
+        {"term": "confidence", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent names all five shared-required fields (module, date, problem_type, component, severity) and commits to exact enum values from schema.yaml rather than free text",
+        "the agent applies the YAML-safety quoting rule: array items that start with a YAML reserved indicator or contain the substring ': ' must be double-quoted so strict parsers accept the file"
+      ],
+      "ground_truth": {
+        "skill": "sl-compound",
+        "contract_source": "plugins/super-looper/skills/sl-compound/references/schema.yaml + SKILL.md",
+        "contract_lines": "schema.yaml required_fields: module, date, problem_type, component, severity. validation_rules: 'Enum fields must match allowed values exactly' and 'Array-of-strings frontmatter items ... must be wrapped in double quotes when the value starts with a YAML reserved indicator (`, [, *, &, !, |, >, %, @, ?) or contains the substring : '. SKILL.md step 5: 'Validate YAML frontmatter against references/schema.yaml, including the YAML-safety quoting rule for array items'.",
+        "expected_behavior": "Five shared-required fields; exact enums; YAML-safety array quoting."
+      },
+      "notes": "Tests that the schema-valid contract is recalled, not improvised. Optional confidence/provenance/evidence are may-tier — a correct answer may name them but need not."
+    },
+    {
+      "id": 4,
+      "name": "no-cross-track-field-forcing",
+      "tests_risk": "field_forcing",
+      "prompt": "You are writing a knowledge-track best_practice learning. Two questions. (1) To make the doc feel 'complete', should you add bug-track symptoms and resolution_type and pick some root_cause enum value? (2) If none of the schema's problem_type or category values fit perfectly, should you invent a new one?",
+      "expected_terms": [],
+      "must_not_contain_in_relevant_findings": [
+        {"term": "yes, add symptoms and resolution_type", "tier": "must_not"},
+        {"term": "invent a new problem_type", "tier": "must_not"}
+      ],
+      "expected_response_shape": "The agent affirms (1) it does NOT force bug-track required fields (symptoms/root_cause/resolution_type) onto a knowledge-track doc — those are optional for knowledge track; and (2) it does NOT invent enum values, categories, or frontmatter fields from memory — it reads references/schema.yaml and references/yaml-schema.md and uses only defined values, falling back to best_practice / best-practices/ when no narrower knowledge value fits.",
+      "ground_truth": {
+        "skill": "sl-compound",
+        "contract_source": "plugins/super-looper/skills/sl-compound/SKILL.md",
+        "contract_lines": "SKILL.md Phase 2 classify step: 'Does not invent enum values, categories, or frontmatter fields from memory; reads the schema and mapping files above' and 'Does not force bug-track fields onto knowledge-track learnings or vice versa'. schema.yaml problem_type description: 'best_practice is the fallback when no narrower knowledge-track value fits.'",
+        "expected_behavior": "No forced cross-track fields; no invented enums/categories; best_practice fallback."
+      },
+      "notes": "Negative case. Confirms the two anti-patterns the classify step explicitly forbids are not endorsed. Graded by endorsement (the correct answer restates the prohibitions in negated form)."
+    }
+  ]
+}

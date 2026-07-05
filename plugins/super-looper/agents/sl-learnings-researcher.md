@@ -126,6 +126,7 @@ Extract these fields from the YAML frontmatter:
 - **symptoms** — observable behaviors or friction (present on bug-track entries and sometimes on knowledge-track entries)
 - **root_cause** — underlying cause (present on bug-track entries; optional on knowledge-track entries)
 - **severity** — critical, high, medium, low
+- **confidence** — trust label: `verified` (an evaluator confirmed the learning's claims against evidence) or `candidate` (unconfirmed but uncontradicted). Absent means legacy and is treated as **candidate-equivalent**.
 
 Some non-bug entries may have looser frontmatter shapes (they do not require `symptoms` or `root_cause`). Do not discard these entries for missing bug-shaped fields — use whatever fields are present for matching.
 
@@ -151,6 +152,8 @@ Match frontmatter fields against the keywords extracted in Step 1:
 
 - No overlapping tags, symptoms, concepts, or modules
 - Unrelated `problem_type` and no cross-cutting applicability
+
+**Confidence weighting (tie-breaker within relevance).** Relevance decides which learnings surface; `confidence` decides their order among comparably-relevant matches. Rank `verified` learnings above `candidate` ones — a verified learning had its claims confirmed against evidence by an evaluator, so it is safer to act on than an unconfirmed candidate. Treat an **absent** `confidence` field as candidate-equivalent (legacy docs predate the label; do not down-rank them below explicit candidates). Confidence never overrides relevance — a highly relevant candidate still outranks a marginally relevant verified entry — it only breaks ties among similarly relevant learnings and tells the caller how much to trust each one.
 
 ### Step 6: Full Read of Relevant Files
 
@@ -207,6 +210,7 @@ Structure findings as follows:
 - **Relevance**: [why this matters for the caller's work]
 - **Key Insight**: [the decision, pattern, or pitfall to carry forward]
 - **Severity**: [severity level, when present in frontmatter; omit the line otherwise]
+- **Confidence**: [`verified` or `candidate` from frontmatter; when the field is absent, write `candidate (legacy — unlabeled)`. Surface it so the caller knows how much to trust the entry.]
 
 #### 2. [Title]
 ...

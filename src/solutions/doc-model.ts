@@ -45,6 +45,12 @@ export const FIELD_DESCRIPTIONS = {
   optional: {
     related_components: "Other components involved",
     tags: "Search keywords, lowercase and hyphen-separated",
+    confidence:
+      "Trust label — verified (an evaluator confirmed the learning against evidence) or candidate (unconfirmed). Absent means legacy and is treated as candidate-equivalent by consumers.",
+    provenance:
+      "How the learning was captured — loop-run (an autonomous loop) or interactive-session (a human was present).",
+    evidence:
+      "Pointer to supporting evidence for the learning's claims, such as a PR URL or a commit sha.",
   },
 } as const
 

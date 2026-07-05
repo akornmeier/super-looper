@@ -34,6 +34,7 @@ readonly EX_NO_VERIFY=4
 readonly EX_CAP=5
 readonly EX_TIMEOUT=6
 readonly EX_DONE_RED=7
+readonly EX_GOAL_DRIFT=8
 # coreutils timeout(1) exits 124 when it terminates a timed-out command.
 readonly TIMEOUT_EXIT_STATUS=124
 
@@ -44,6 +45,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 # an `env -i` allowlist, so these are passed as argv paths, not environment.
 CLAUDE_BIN="${LOOP_CLAUDE_BIN:-claude}"
 GH_BIN="${LOOP_GH_BIN:-gh}"
+# jq validates the run-progress file's shape before a resume (U8). A missing jq is
+# treated as a validation failure (cold restart), so this never weakens the guard.
+JQ_BIN="${LOOP_JQ_BIN:-jq}"
 
 # --- Headless invocation form -------------------------------------------------
 # SINGLE SOURCE of the prompt that routes the headless session into lfg. The
@@ -252,11 +256,21 @@ fi
 # definitions with NO side effects — it creates no directory and no file, so a
 # --dry-run (which exits below without ever calling emit_record) writes nothing.
 # emit_record is the single writer, invoked at every OPERATIONAL terminal path
-# (exit 0/3/4/5/6/7) and never for the pre-flight usage family (exit 2), --help,
+# (exit 0/3/4/5/6/7/8) and never for the pre-flight usage family (exit 2), --help,
 # or --dry-run. See docs/loop-driver.md.
 RUN_ID="loop-$(date +%Y%m%d-%H%M%S)-$$"
 LOG_FILE="$LOG_DIR/$RUN_ID.log"
 RECORD_FILE="$LOG_DIR/$RUN_ID.json"
+# Run-progress file (KTD5): loop.sh owns this path, under its log dir and OUTSIDE
+# the target tree — so reset_target's `git clean -fd` cannot delete it and lfg
+# step 8 cannot sweep it into the PR. lfg writes it at each step boundary; loop.sh
+# validates it on a no-PR retry to resume (U8) and scrubs it at every terminal.
+PROGRESS_FILE="$LOG_DIR/$RUN_ID.progress.json"
+# Name it for lfg via a progress:<path> marker (same literal-prefix convention as
+# plan:). Present in BOTH plan and seed mode; lfg writes the file at each step
+# boundary and re-reads it on a resume relaunch. No marker (interactive) = no writes.
+PROMPT="$PROMPT
+progress:$PROGRESS_FILE"
 RUN_STARTED_EPOCH="$(date +%s)"
 RUN_STARTED_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 readonly RECORD_SCHEMA_VERSION=1
@@ -279,6 +293,14 @@ json_str_or_null() {
   if [ -z "${1:-}" ]; then printf 'null'; else printf '"%s"' "$(json_escape "$1")"; fi
 }
 
+# jq -c of one run-progress-file field, collapsing every failure mode (jq error,
+# unparseable file, absent/null field, empty output) to the literal string "null".
+lift_progress_field() {
+  local v
+  v="$( "$JQ_BIN" -c ".$1 // null" "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
+  [ -n "$v" ] && printf '%s' "$v" || printf 'null'
+}
+
 emit_record() {
   # emit_record <exit-code> — write the structured run-record to RECORD_FILE.
   # Invoked best-effort ("emit_record ... || true") at each terminal site, so a
@@ -297,8 +319,33 @@ emit_record() {
     5) outcome="failure"; typed_failure="cap-exhausted";     verification_result="not-run" ;;
     6) outcome="failure"; typed_failure="timeout";           verification_result="not-run" ;;
     7) outcome="failure"; typed_failure="done-but-red";      verification_result="red" ;;
+    8) outcome="failure"; typed_failure="goal-drift";        verification_result="not-run" ;;
     *) outcome="failure"; typed_failure="unknown";           verification_result="not-run" ;;
   esac
+
+  # Goal-drift detail (R2): on an exit-8 record, name the changed file and the
+  # change kind (modified / deleted / created); null on every other path. The
+  # guard sets goal_drift_file/goal_drift_kind before calling emit_record.
+  local goal_drift_json="null"
+  if [ -n "${goal_drift_file:-}" ]; then
+    goal_drift_json="{ \"file\": $(json_str_or_null "${goal_drift_file:-}"), \"change\": $(json_str_or_null "${goal_drift_kind:-}") }"
+  fi
+
+  # Progress-file lifts: goal_fidelity (R6), learning_rejection (R9), and
+  # refresh_due (R13) are copied VERBATIM from the run-progress file when it
+  # exists and carries them; null otherwise — nothing is fabricated, so "no
+  # data" stays honest. Read them HERE, before the scrub at the end of this
+  # function (U8's `rm -f "$PROGRESS_FILE"`); a read after the scrub would
+  # always see nothing. A missing jq, an absent file, or an absent/null field
+  # each collapse to "null".
+  local goal_fidelity_json="null"
+  local learning_rejection_json="null"
+  local refresh_due_json="null"
+  if [ -f "$PROGRESS_FILE" ] && command -v "$JQ_BIN" >/dev/null 2>&1; then
+    goal_fidelity_json="$(lift_progress_field goal_fidelity)"
+    learning_rejection_json="$(lift_progress_field learning_rejection)"
+    refresh_due_json="$(lift_progress_field refresh_due)"
+  fi
 
   local route=""
   if [ "${done_reached:-0}" -eq 1 ]; then
@@ -345,6 +392,10 @@ emit_record() {
   "outcome": "$outcome",
   "exit_code": $exit_code,
   "typed_failure": $(json_str_or_null "$typed_failure"),
+  "goal_drift": $goal_drift_json,
+  "goal_fidelity": $goal_fidelity_json,
+  "learning_rejection": $learning_rejection_json,
+  "refresh_due": $refresh_due_json,
   "route": $(json_str_or_null "$route"),
   "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
   "attempts": {
@@ -374,6 +425,13 @@ emit_record() {
   }
 }
 EOF
+
+  # Scrub the run-progress file at every terminal (R16). emit_record is the single
+  # writer invoked at every operational exit (0/3/4/5/6/7/8), so this one site
+  # covers success and every failure; cold restarts scrub separately (they are not
+  # terminals). Stale state must never seed a later run. rm -f is a no-op when lfg
+  # never wrote the file (pre-launch refusals, interactive runs).
+  rm -f "$PROGRESS_FILE" 2>/dev/null || true
 }
 
 # --- Canonicalize + isolation guard (self-edit hazard) ------------------------
@@ -408,6 +466,17 @@ if [ -n "$PLAN_FILE" ]; then
   fi
 fi
 
+# --- Goal-drift guard: resolve the guarded goal-file paths --------------------
+# The goal guard refuses to report success when a run mutated its own goal.
+# STRATEGY.md in the target is always guarded; the resolved plan file is guarded
+# in plan mode (seed mode guards STRATEGY.md only — R3). An absent file hashes to
+# a stable sentinel so absent-at-start / absent-at-end compares equal (R3). The
+# harness checksum is authoritative (KTD1); a future hook is defense-in-depth.
+readonly GUARD_ABSENT_SENTINEL="absent"
+STRATEGY_PATH="$CT/STRATEGY.md"
+GUARD_PLAN_PATH=""
+if [ -n "$PLAN_FILE" ]; then GUARD_PLAN_PATH="$plan_check"; fi
+
 # --- Verification mode --------------------------------------------------------
 # command mode: a --verify-cmd was supplied. github mode (default): use the
 # target's own GitHub CI. A run with neither a remote nor a --verify-cmd has no
@@ -438,6 +507,17 @@ fi
 claude_env=( env -i "HOME=$HOME" "PATH=$PATH" )
 if [ -n "${GH_TOKEN:-}" ]; then claude_env+=( "GH_TOKEN=$GH_TOKEN" ); fi
 if [ -n "${GITHUB_TOKEN:-}" ]; then claude_env+=( "GITHUB_TOKEN=$GITHUB_TOKEN" ); fi
+# Arm the plugin's goal-guard hook (defense-in-depth for the checksum guard
+# above): forward the exact resolved goal-file paths so a mid-run Write/Edit to
+# STRATEGY.md or the active plan is denied fast. NEWLINE-separated because a
+# resolved path may contain a colon. Seed mode carries STRATEGY.md only (so
+# sl-plan can still create the plan); plan mode adds the resolved plan file.
+GOAL_GUARD_PATHS="$STRATEGY_PATH"
+if [ -n "$GUARD_PLAN_PATH" ]; then
+  GOAL_GUARD_PATHS="$GOAL_GUARD_PATHS
+$GUARD_PLAN_PATH"
+fi
+claude_env+=( "LOOP_GOAL_GUARD_PATHS=$GOAL_GUARD_PATHS" )
 
 claude_cmd=( "$CLAUDE_BIN" -p "$PROMPT" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
 
@@ -536,6 +616,91 @@ reset_target() {
   fi
 }
 
+# --- Resume validation (poisoned-file guard for a no-PR retry, R15) -----------
+# Return 0 ONLY for a run-progress file that is shape-valid AND bound to THIS run;
+# set `progress_branch` on success. A stale or forged file must never fake a
+# resume point, so gate on what each signal PROVES (the quiescence-gate learning),
+# not on mere file presence: jq -e for shape, then run_id / attempt / base_ref /
+# branch-exists / head_sha-reachable bindings. ANY failure returns non-zero so the
+# caller scrubs and cold-restarts — fail toward cold restart, never toward trust.
+# Every fallible step is guarded with `|| return 1`, so the result is independent
+# of `set -e` semantics inside the calling `if`.
+validate_progress_file() {
+  [ -f "$PROGRESS_FILE" ] || return 1
+  command -v "$JQ_BIN" >/dev/null 2>&1 || return 1
+
+  # Shape: valid JSON, a schema_version we understand, and every binding field
+  # present as the right type. jq -e exits non-zero on a false/null result or on
+  # invalid JSON, so a corrupt or truncated file fails here.
+  "$JQ_BIN" -e '
+    (.schema_version == 1)
+    and (.run_id   | type == "string")
+    and (.attempt  | type == "number")
+    and (.branch   | type == "string" and (length > 0))
+    and (.base_ref | type == "string" and (length > 0))
+    and (.head_sha | type == "string" and (length > 0))
+  ' "$PROGRESS_FILE" >/dev/null 2>&1 || return 1
+
+  local p_run_id p_attempt p_branch p_base_ref p_head_sha p_step
+  p_run_id="$( "$JQ_BIN" -r '.run_id'   "$PROGRESS_FILE" 2>/dev/null )"   || return 1
+  p_attempt="$( "$JQ_BIN" -r '.attempt'  "$PROGRESS_FILE" 2>/dev/null )"  || return 1
+  p_branch="$( "$JQ_BIN" -r '.branch'   "$PROGRESS_FILE" 2>/dev/null )"   || return 1
+  p_base_ref="$( "$JQ_BIN" -r '.base_ref' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+  p_head_sha="$( "$JQ_BIN" -r '.head_sha' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+  # step is NOT a binding field (a resume is bound by run_id/base_ref/branch/head);
+  # it is lifted only to detect a resumed attempt that made no progress (R18). An
+  # absent step collapses to empty and never fails validation.
+  p_step="$( "$JQ_BIN" -r '.step // empty' "$PROGRESS_FILE" 2>/dev/null )"  || return 1
+
+  # run_id ties the file to THIS run: a file from any other run (or a same-path
+  # collision) is rejected. RUN_ID embeds a timestamp and pid, so it is unguessable.
+  [ "$p_run_id" = "$RUN_ID" ] || return 1
+  # attempt: a non-negative integer at or below the just-finished attempt — the
+  # file was written by an attempt that already ran in this run.
+  case "$p_attempt" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$p_attempt" -le "$attempt" ] || return 1
+  # base_ref must equal the run's clean base (the branch forked from OUR base).
+  [ "$p_base_ref" = "$BASE_REF" ] || return 1
+  # The recorded branch must exist in the target (refs/heads scope only — never a
+  # bare sha or HEAD masquerading as a branch).
+  ( cd "$CT" && git rev-parse --verify --quiet "refs/heads/$p_branch" ) >/dev/null 2>&1 || return 1
+  # The recorded HEAD sha must be reachable as a commit in the target.
+  ( cd "$CT" && git cat-file -e "${p_head_sha}^{commit}" ) >/dev/null 2>&1 || return 1
+
+  progress_branch="$p_branch"
+  progress_step="$p_step"
+  progress_head_sha="$p_head_sha"
+  return 0
+}
+
+# --- Goal-file hashing (goal-drift guard) -------------------------------------
+# sha256 of a goal file; an ABSENT file hashes to a stable sentinel so an
+# absent-at-start / absent-at-end file compares equal and passes (R3). shasum is
+# the portable fallback where sha256sum is absent (macOS).
+hash_file() {
+  local f="$1"
+  if [ ! -f "$f" ]; then printf '%s' "$GUARD_ABSENT_SENTINEL"; return 0; fi
+  # Guard both pipelines: an unreadable-but-present file (e.g. chmod 000 mid-run)
+  # makes sha256sum/shasum fail, which under `set -euo pipefail` would abort the
+  # plain command-substitution assignment at the call sites with no emit_record —
+  # outside the exit-code contract. Fall back to an "unreadable:<path>" sentinel so
+  # the file surfaces as a hash mismatch → typed goal-drift exit (8) with a record.
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
+  else
+    shasum -a 256 "$f" 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
+  fi
+}
+
+# Classify a start/end hash mismatch as the change kind R2 distinguishes:
+# created (absent -> present), deleted (present -> absent), or modified.
+drift_kind_of() {
+  local start="$1" end="$2"
+  if [ "$start" = "$GUARD_ABSENT_SENTINEL" ]; then printf 'created'
+  elif [ "$end" = "$GUARD_ABSENT_SENTINEL" ]; then printf 'deleted'
+  else printf 'modified'; fi
+}
+
 # DONE is the routing signal. Match the LAST non-empty line only, so the literal
 # sentinel echoed mid-transcript (it appears verbatim in lfg's own source) never
 # counts as a finish on its own.
@@ -557,20 +722,61 @@ if [ -z "$BASE_REF" ] && [ "$MAX_RETRIES" -gt 0 ]; then
   log "warning: target has no base commit — a retry cannot fully reset it to a clean base."
 fi
 
-full_cmd=()
-if [ "${#run_wrapper[@]}" -gt 0 ]; then full_cmd+=( "${run_wrapper[@]}" ); fi
-full_cmd+=( "${claude_env[@]}" "${claude_cmd[@]}" )
-
 attempt=0
 done_reached=0
 routed_via_pr=0
 timed_out=0
+# Resume state (U8): resume_active=1 relaunches lfg with a resume:<path> marker on
+# the recorded branch (no reset); set at the loop tail when the progress file
+# validates, consumed when building the next attempt's command.
+resume_active=0
+progress_branch=""
+progress_step=""
+progress_head_sha=""
+# One-resume-per-recorded-state (R18): the step+head_sha the last resume was armed
+# on. A resumed attempt that crashes again without advancing past this state gets a
+# cold restart instead of an infinite re-resume (see the resume decision below).
+resume_armed_state=""
+# Goal-drift snapshots: sha256 of the guarded goal files at the winning attempt's
+# start (re-hashed on the done_reached path below). Overwritten per attempt.
+strategy_hash_start=""
+plan_hash_start=""
 attempt_log="$(mktemp "${TMPDIR:-/tmp}/loop-attempt.XXXXXX")"
 trap 'rm -f "$attempt_log"' EXIT
 
 while :; do
   attempt=$((attempt + 1))
   timed_out=0
+
+  # Goal-drift snapshot: hash the guarded goal files at attempt start, AFTER any
+  # reset_target (run at the end of the previous iteration) restored the clean
+  # base (KTD3). Taken ONLY on a cold attempt: a resumed attempt inherits the prior
+  # attempt's baseline instead of re-snapshotting the surviving (possibly mutated)
+  # tree. Re-baselining on resume would launder a goal mutation made by the crashed
+  # attempt into the resumed attempt's clean baseline, so exit 8 would never fire —
+  # the baseline must span the whole surviving attempt lineage (KTD3/R1). The
+  # winning attempt's snapshot is the one that persists past the break and is
+  # compared on the done_reached path below.
+  if [ "$resume_active" -ne 1 ]; then
+    strategy_hash_start="$(hash_file "$STRATEGY_PATH")"
+    if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_file "$GUARD_PLAN_PATH")"; fi
+  fi
+
+  # Build this attempt's command. A resuming relaunch (a validated no-PR retry)
+  # appends a resume:<path> marker so lfg re-verifies steps 1..N-1 and continues
+  # at the recorded step; a cold attempt uses the base prompt (the progress:<path>
+  # marker is already in PROMPT for both). Rebuilt per attempt because only the
+  # prompt differs — env, plugin-dir, model, flags, and wrapper are identical.
+  attempt_prompt="$PROMPT"
+  if [ "$resume_active" -eq 1 ]; then
+    attempt_prompt="$PROMPT
+resume:$PROGRESS_FILE"
+  fi
+  attempt_claude_cmd=( "$CLAUDE_BIN" -p "$attempt_prompt" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
+  full_cmd=()
+  if [ "${#run_wrapper[@]}" -gt 0 ]; then full_cmd+=( "${run_wrapper[@]}" ); fi
+  full_cmd+=( "${claude_env[@]}" "${attempt_claude_cmd[@]}" )
+
   log "attempt $attempt: launching headless claude"
 
   # Run the agent in its own process group (set -m) and forward INT/TERM to the
@@ -608,7 +814,9 @@ while :; do
 
   # Reconcile before retrying: an already-open PR for the target branch is
   # terminal — route to verification rather than re-run lfg on a half-finished
-  # branch (lfg has no resume entry point).
+  # branch. This reconciliation keeps PRECEDENCE over resume: it breaks out here,
+  # before the resume/reset decision below, so resume never fires once a PR exists
+  # (resume is scoped to pre-PR steps 1-7, KTD6).
   if target_open_pr; then
     log "attempt $attempt: an open PR already exists for the target — routing to verification (no re-launch)"
     routed_via_pr=1
@@ -620,12 +828,45 @@ while :; do
   # This attempt neither reached DONE nor reconciled to an open PR.
   if [ "$timed_out" -eq 1 ]; then attempt_results+=("timeout"); else attempt_results+=("crash"); fi
 
+  # Give-up floor FIRST (KTD6): the cap is checked before the resume/reset
+  # decision, so resume never extends the retry budget — exit 5 stays the floor.
   if [ "$attempt" -gt "$MAX_RETRIES" ]; then
     break
   fi
 
-  log "attempt $attempt: resetting target to clean base and retrying"
-  reset_target
+  # No open PR reached here (the reconciliation above broke out first, keeping its
+  # precedence — resume never fires once a PR exists). Choose resume vs cold restart
+  # from the run-progress file (D2): a shape-valid file bound to THIS run lets the
+  # next attempt resume at the recorded step on the recorded branch WITHOUT a reset,
+  # inheriting the prior attempt's goal-drift baseline (the loop-top snapshot is
+  # skipped on resume). ANY validation failure scrubs the file and resets to the
+  # clean base. Fail toward cold restart, never toward trusting a stale/poisoned
+  # file (R15/R16).
+  if validate_progress_file; then
+    # One-resume-per-recorded-state (R18): arm a resume ONCE per recorded state. If
+    # the just-crashed attempt was itself a resume that made no progress (its file
+    # still carries the step+head_sha armed last time), a re-resume would loop
+    # forever — converge to an honest cold restart instead, matching lfg's "next
+    # retry cold-restarts honestly" postcondition-mismatch promise. Real progress
+    # (an advanced step or a new head_sha) re-arms the resume.
+    armed_state="$progress_step:$progress_head_sha"
+    if [ "$resume_active" -eq 1 ] && [ "$armed_state" = "$resume_armed_state" ]; then
+      log "attempt $attempt: resumed attempt made no progress (state '$armed_state') — scrubbing and cold-restarting"
+      rm -f "$PROGRESS_FILE" 2>/dev/null || true
+      reset_target
+      resume_active=0
+    else
+      log "attempt $attempt: valid progress file — resuming at the recorded step on branch '$progress_branch' (no reset)"
+      ( cd "$CT" && git checkout "$progress_branch" ) >>"$LOG_FILE" 2>&1 || true
+      resume_active=1
+      resume_armed_state="$armed_state"
+    fi
+  else
+    log "attempt $attempt: no valid progress file — scrubbing it and resetting to clean base before retrying"
+    rm -f "$PROGRESS_FILE" 2>/dev/null || true
+    reset_target
+    resume_active=0
+  fi
 done
 
 # --- Failure: never reached a finish ------------------------------------------
@@ -638,6 +879,35 @@ if [ "$done_reached" -ne 1 ]; then
   echo "loop.sh: FAILED (cap-exhausted) — crashed without DONE after $attempt attempt(s) and no open PR. Log: $LOG_FILE" >&2
   emit_record "$EX_CAP" || true
   exit "$EX_CAP"
+fi
+
+# --- Goal-drift guard (R1-R3, KTD3, D1) ---------------------------------------
+# A finish was reached (DONE sentinel OR crash-reconciled open PR — both converge
+# here). Before trusting it, re-hash the guarded goal files: if STRATEGY.md or the
+# plan file changed during the run, the goal was mutated and success cannot be
+# reported. Drift is TERMINAL, not retryable — a finish reached on a mutated goal
+# is completed-but-untrustworthy, mirroring exit 7's semantics. Mirrors the
+# isolation guard's shape: stderr explanation, emit_record || true, exit.
+goal_drift_file=""
+goal_drift_kind=""
+strategy_hash_end="$(hash_file "$STRATEGY_PATH")"
+if [ "$strategy_hash_start" != "$strategy_hash_end" ]; then
+  goal_drift_file="$STRATEGY_PATH"
+  goal_drift_kind="$(drift_kind_of "$strategy_hash_start" "$strategy_hash_end")"
+elif [ -n "$GUARD_PLAN_PATH" ]; then
+  plan_hash_end="$(hash_file "$GUARD_PLAN_PATH")"
+  if [ "$plan_hash_start" != "$plan_hash_end" ]; then
+    goal_drift_file="$GUARD_PLAN_PATH"
+    goal_drift_kind="$(drift_kind_of "$plan_hash_start" "$plan_hash_end")"
+  fi
+fi
+if [ -n "$goal_drift_file" ]; then
+  echo "loop.sh: FAILED (goal drift) — a goal file changed during the run; refusing to report success." >&2
+  echo "         file: $goal_drift_file" >&2
+  echo "         change: $goal_drift_kind" >&2
+  echo "         Goal changes route through interactive sl-strategy or a human-approved plan revision, never an unattended run. Log: $LOG_FILE" >&2
+  emit_record "$EX_GOAL_DRIFT" || true
+  exit "$EX_GOAL_DRIFT"
 fi
 
 # --- Verification (TARGET-scoped, evaluated AFTER DONE) -----------------------

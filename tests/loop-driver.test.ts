@@ -98,6 +98,15 @@ function printargsStub(argsMarker: string, cwdMarker: string): string {
   )
 }
 
+// The single run-record JSON in a log dir. Excludes `.progress.json`: a leftover
+// progress file must fail the count assertion (scrub regression), never be
+// misread as the record.
+function readRecord(dir: string): any {
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".progress.json"))
+  expect(files.length).toBe(1)
+  return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
+}
+
 function mkdirInWork(name: string): string {
   const p = path.join(work, name)
   fs.mkdirSync(p, { recursive: true })
@@ -782,11 +791,6 @@ describe("run-record (R9)", () => {
   function recordsDir(): string {
     return path.join(work, "records")
   }
-  function readRecord(dir: string): any {
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
-    expect(files.length).toBe(1)
-    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
-  }
   function expectNoRecord(dir: string) {
     if (!fs.existsSync(dir)) return // dir never created => no record written
     expect(fs.readdirSync(dir).filter((f) => f.endsWith(".json"))).toEqual([])
@@ -1007,5 +1011,888 @@ describe("run-record (R9)", () => {
     const { exitCode } = await runLoop(["--log-dir", dir, "--help"])
     expect(exitCode).toBe(0)
     expectNoRecord(dir)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Goal-drift guard (R1-R3, KTD3, D1) — exit 8 / typed_failure "goal-drift".
+// A run that reaches a finish (the DONE sentinel OR the crash-reconciled open-PR
+// route) with a mutated STRATEGY.md or plan file is completed-but-untrustworthy:
+// the guard snapshots sha256(STRATEGY.md, plan) per attempt after any reset, then
+// re-hashes on every done_reached path BEFORE verification and refuses success on
+// a mismatch. Drift is terminal, not retryable. All paths stub the LOOP_*_BIN
+// seams so no live Claude/GitHub call is made.
+// ---------------------------------------------------------------------------
+describe("goal-drift guard (R1-R3)", () => {
+  const APPEND_SCRIPT = path.join(__dirname, "../scripts/append-run-record.sh")
+
+  // A claude stub that runs a mutation snippet (CWD = target, under `env -i`)
+  // before emitting its transcript, simulating the agent editing a goal file.
+  function claudeMutateStub(
+    name: string,
+    mutate: string,
+    transcript: string,
+    exitCode: number,
+    marker: string,
+  ): string {
+    return writeExec(
+      path.join(work, name),
+      `#!/usr/bin/env bash\nprintf 'RUN\\n' >> '${marker}'\n${mutate}\ncat <<'__T__'\n${transcript}\n__T__\nexit ${exitCode}\n`,
+    )
+  }
+
+  function commitAll(dir: string, msg: string) {
+    Bun.spawnSync(["bash", "-c", `git add -A && git commit -q -m ${msg}`], { cwd: dir })
+  }
+
+  // Commit a plan doc in the target so a retry's reset would preserve it, and
+  // return its target-relative path for --plan-file.
+  function writeCommittedPlan(target: string): string {
+    const rel = "docs/plans/p.md"
+    const p = path.join(target, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, "## Implementation Units\noriginal plan body\n")
+    commitAll(target, "plan")
+    return rel
+  }
+
+  // Scenario 1: plan mutated then DONE => exit 8, record goal-drift + not-run.
+  test("plan mutated then DONE => exit 8, goal drift, verification not-run", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "printf 'DRIFT\\n' >> docs/plans/p.md",
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    expect(stderr).toContain(planRel) // names the drifted file
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.verification.result).toBe("not-run")
+    expect(rec.goal_drift.change).toBe("modified")
+  })
+
+  // Scenario 2: plan deleted => exit 8 with "deleted" wording, distinct from modified.
+  test("plan deleted then DONE => exit 8 with 'deleted' wording", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub("claude", "rm -f docs/plans/p.md", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr).toContain("deleted")
+    expect(stderr).not.toContain("modified") // the three kinds are distinguished
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("deleted")
+  })
+
+  // Scenario 3: no STRATEGY.md at start or end => guard passes (sentinel equality).
+  test("no STRATEGY.md at start or end => guard passes, run reaches verification", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeStub("claude", `working...\n${SENTINEL}`, 0, marker)
+    const { exitCode, stdout } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/y/pull/1",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(0)
+    expect(stdout).toContain("SUCCESS")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBeNull()
+    expect(rec.goal_drift).toBeNull()
+  })
+
+  // Scenario 4: STRATEGY.md created mid-run => exit 8 with "created" wording.
+  test("STRATEGY.md created mid-run => exit 8 with 'created' wording", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub("claude", "printf 'new goal\\n' > STRATEGY.md", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr).toContain("created")
+    expect(stderr).toContain("STRATEGY.md")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("created")
+  })
+
+  // Scenario 5: crash without DONE, open PR exists, plan mutated => the
+  // crash-reconciled open-PR route still passes through the guard and exits 8.
+  test("crash without DONE + open PR + plan mutated => reconciled route exits 8", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "printf 'DRIFT\\n' >> docs/plans/p.md",
+      "crashed before DONE",
+      1,
+      marker,
+    )
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--max-retries", "2", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/y/pull/9",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.attempts.routed_via_pr).toBe(true)
+    // reconciled on the first crash — claude launched exactly once (no retry loop)
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(1)
+  })
+
+  // Scenario 6: a usage error (exit 2) still writes no record — the guard does
+  // not perturb the pre-flight usage family's no-record symmetry.
+  test("a usage error (exit 2) still writes no record with the guard present", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "abc", "--log-dir", dir],
+      stubs(),
+    )
+    expect(exitCode).toBe(2)
+    if (fs.existsSync(dir)) {
+      expect(fs.readdirSync(dir).filter((f) => f.endsWith(".json"))).toEqual([])
+    }
+  })
+
+  // Scenario 7: the operator wrapper captures a real exit-8 run into the ledger.
+  test("operator wrapper (append-run-record.sh) captures the exit-8 run", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const ledger = path.join(work, "ledger.jsonl")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub("claude", "printf 'DRIFT\\n' >> docs/plans/p.md", `done\n${SENTINEL}`, 0, marker)
+    const loop = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(loop.exitCode).toBe(8)
+    const proc = Bun.spawn(["bash", APPEND_SCRIPT, "--log-dir", dir, "--ledger", ledger], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    await proc.exited
+    const lines = fs.readFileSync(ledger, "utf8").split("\n").filter((l) => l.length > 0)
+    expect(lines.length).toBe(1)
+    const rec = JSON.parse(lines[lines.length - 1])
+    expect(rec.exit_code).toBe(8)
+    expect(rec.typed_failure).toBe("goal-drift")
+  })
+
+  // Scenario 8: a goal file made unreadable (chmod 000) AFTER the attempt-start
+  // snapshot must not crash the guard. The re-hash pipeline is guarded, so an
+  // unreadable-but-present file degrades to an "unreadable:<path>" sentinel and
+  // surfaces as a hash mismatch → exit 8 WITH a run-record, not a bare `set -e`
+  // crash (exit 1) with no record. (Non-root chmod 000 is honored on macOS.)
+  test("goal file unreadable after snapshot => exit 8 with a run-record (not a bare crash)", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    // Commit a readable STRATEGY.md so the attempt-start snapshot hashes it.
+    fs.writeFileSync(path.join(target, "STRATEGY.md"), "original goal\n")
+    commitAll(target, "strategy")
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    // chmod 000 the goal file after the snapshot, before emitting DONE.
+    const claude = claudeMutateStub("claude", "chmod 000 STRATEGY.md", `done\n${SENTINEL}`, 0, marker)
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.exit_code).toBe(8)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Resume consumption (U8 / R15, R16, R18) — on a no-PR retry, loop.sh validates
+// the run-progress file (jq -e shape + binding fields) and, when it ties to THIS
+// run, skips reset_target, checks out the recorded branch, and relaunches with a
+// resume:<path> marker. ANY validation failure scrubs the file and cold-restarts
+// (fail toward cold restart, never toward trusting a stale/poisoned file). The
+// file is scrubbed at every terminal. Resume never fires once a PR exists
+// (reconciliation precedence, KTD6) and never extends the give-up floor (exit 5).
+// All paths stub the LOOP_*_BIN seams; the progress file is written by the claude
+// stub (parsing the progress: path from its own args, since it runs under env -i).
+// ---------------------------------------------------------------------------
+describe("resume consumption (U8 / R15,R16,R18)", () => {
+  // A claude stub that models a headless lfg crashing mid-run after writing a
+  // run-progress file. On its FIRST launch (no resume: marker) it creates a
+  // working branch + commit, drops an UNTRACKED canary (which reset_target's
+  // `git clean -fd` would delete — the reset detector), writes the progress file
+  // per `poison`, and crashes without DONE. On a RESUME launch (resume: marker
+  // present) it records whether the canary survived, then either finishes with
+  // DONE or crashes again (alwaysCrash, for the give-up-floor scenario).
+  function resumeStub(opts: {
+    name?: string
+    marker: string
+    promptLog: string
+    canaryLog: string
+    branch?: string
+    poison?:
+      | "corrupt"
+      | "wrong-run-id"
+      | "missing-branch"
+      | "wrong-base-ref"
+      | "unreachable-head"
+      | "attempt-too-high"
+    alwaysCrash?: boolean
+  }): string {
+    const branch = opts.branch ?? "feat/resume-branch"
+    const name = opts.name ?? "claude"
+
+    // The progress-file body, keyed by poison mode. run_id/base/head are shell
+    // vars the stub computes at runtime; branch is baked in.
+    let writeProgress: string
+    if (opts.poison === "corrupt") {
+      writeProgress = `printf 'not json {{{ %s\\n' "$run_id" > "$progress_path"`
+    } else {
+      const runIdExpr = opts.poison === "wrong-run-id" ? "WRONG-RUN-ID-abc" : "$run_id"
+      const branchField = opts.poison === "missing-branch" ? "feat/does-not-exist" : branch
+      const attemptField = opts.poison === "attempt-too-high" ? "9" : "1"
+      // A well-formed 40-hex that is not THIS run's clean base.
+      const baseRefField =
+        opts.poison === "wrong-base-ref" ? "0000000000000000000000000000000000000000" : "$base"
+      // A well-formed 40-hex commit that is not reachable in the target.
+      const headShaField =
+        opts.poison === "unreachable-head" ? "ffffffffffffffffffffffffffffffffffffffff" : "$head"
+      writeProgress = `cat > "$progress_path" <<PJSON
+{
+  "schema_version": 1,
+  "run_id": "${runIdExpr}",
+  "attempt": ${attemptField},
+  "step": 5,
+  "plan_path": "docs/plans/p.md",
+  "branch": "${branchField}",
+  "base_ref": "${baseRefField}",
+  "head_sha": "${headShaField}",
+  "fix_iterations": 0,
+  "flaky_dispositions": {},
+  "ci_disposition": null,
+  "residuals_pointer": null,
+  "goal_fidelity": null,
+  "updated_at": "2026-07-04T00:00:00Z"
+}
+PJSON`
+    }
+
+    const resumeTail = opts.alwaysCrash
+      ? `printf 'resumed but crashed again\\n'\nexit 1`
+      : `printf 'resumed and finished\\n${SENTINEL}\\n'\nexit 0`
+
+    return writeExec(
+      path.join(work, name),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+printf -- '----\\n' >> '${opts.promptLog}'
+printf '%s\\n' "$prompt" >> '${opts.promptLog}'
+printf 'RUN\\n' >> '${opts.marker}'
+
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+run_id="$(basename "$progress_path" .progress.json)"
+
+is_resume=0
+case "$prompt" in *resume:*) is_resume=1 ;; esac
+
+if [ "$is_resume" = "1" ]; then
+  if [ -f resume-canary.txt ]; then printf 'CANARY_PRESENT\\n' >> '${opts.canaryLog}'; else printf 'CANARY_ABSENT\\n' >> '${opts.canaryLog}'; fi
+  ${resumeTail}
+fi
+
+base="$(git rev-parse HEAD)"
+git checkout -q -b ${branch} 2>/dev/null || git checkout -q ${branch}
+printf 'work\\n' > work.txt
+git add work.txt
+git -c user.email=t@t.t -c user.name=t commit -q -m work
+head="$(git rev-parse HEAD)"
+printf 'canary\\n' > resume-canary.txt
+
+${writeProgress}
+
+printf 'crashed before DONE\\n'
+exit 1
+`,
+    )
+  }
+
+  function progressFilesIn(dir: string): string[] {
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".progress.json"))
+  }
+  // Scenario (a): crash at step 5 with a valid progress file → second attempt
+  // skips reset (canary preserved) and its prompt carries the resume marker.
+  test("valid progress file → second attempt resumes (no reset, resume marker present)", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false) // command-mode verify, no remote needed
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "2", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } }, // no PR → retry path
+    )
+    expect(exitCode).toBe(0)
+    // Two launches: the crash, then the resume.
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(2)
+    // The reset was skipped — the untracked canary survived into the resume launch.
+    expect(fs.readFileSync(canaryLog, "utf8")).toContain("CANARY_PRESENT")
+    // The second launch's prompt carries the resume marker; the first does not.
+    const chunks = fs.readFileSync(promptLog, "utf8").split("----\n").filter((c) => c.trim().length > 0)
+    expect(chunks.length).toBe(2)
+    expect(chunks[0]).not.toContain("resume:")
+    expect(chunks[1]).toContain("resume:")
+    // Scrubbed at the success terminal.
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b): corrupt JSON → cold restart, file scrubbed, no resume marker.
+  test("corrupt progress file → cold restart, scrubbed, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "corrupt" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    // Never resumes → both attempts crash → cap exhausted.
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b'): wrong run_id → the poisoned-file guard rejects it (a stale
+  // file from another run must never fake a resume point).
+  test("wrong run_id → cold restart, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "wrong-run-id" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b''): recorded branch does not exist → cold restart.
+  test("missing recorded branch → cold restart, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "missing-branch" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b'''): base_ref mismatch → the file records a DIFFERENT clean base
+  // (forged/stale), so it did not fork from OUR base → cold restart, scrubbed.
+  test("base_ref mismatch → cold restart, scrubbed, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "wrong-base-ref" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b''''): well-formed but unreachable head_sha (a 40-hex not in the
+  // target) → the reachability binding fails → cold restart, scrubbed.
+  test("unreachable head_sha → cold restart, scrubbed, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "unreachable-head" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (b'''''): recorded attempt above the just-finished attempt (a file no
+  // attempt in this run could have written) → cold restart, scrubbed.
+  test("attempt above current → cold restart, scrubbed, no resume marker", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, poison: "attempt-too-high" })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (c): open PR + valid progress file → verification-only reconciliation
+  // route; resume does NOT fire (reconciliation precedence, KTD6).
+  test("open PR + valid progress file → reconcile only, resume never fires", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true) // remote → github verify mode
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "3", "--log-dir", dir],
+      {
+        env: {
+          ...env,
+          LOOP_CLAUDE_BIN: claude,
+          STUB_GH_PR_STATE: "OPEN",
+          STUB_GH_PR_URL: "https://github.com/x/throwaway/pull/9",
+          STUB_GH_CHECK_BUCKETS: "pass",
+        },
+      },
+    )
+    expect(exitCode).toBe(0)
+    // Reconciled on the first crash — exactly one launch, no resume relaunch.
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(1)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    // Scrubbed at the success terminal.
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (d): a successful run leaves no progress file behind (scrub-at-terminal).
+  test("successful run → progress file gone at exit", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    // A stub that writes a progress file then finishes with DONE on its first launch.
+    const claude = writeExec(
+      path.join(work, "claude"),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+printf '{ "schema_version": 1, "step": 7 }\\n' > "$progress_path"
+printf 'done\\n${SENTINEL}\\n'
+exit 0
+`,
+    )
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { LOOP_GH_BIN: ghStub(), LOOP_TIMEOUT_BIN: timeoutStub(), LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(0)
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // Scenario (e): retries exhausted while the file stays valid → exit 5 (the
+  // give-up floor is NOT extended by resume), file scrubbed, run-record emitted.
+  test("retries exhausted with a valid file → exit 5, scrubbed, record emitted", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, alwaysCrash: true })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    // max-retries=1 → one cold attempt + one resume attempt, then the cap: 2 launches.
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(2)
+    // The second attempt DID resume (the give-up floor still caps it at exit 5).
+    expect(fs.readFileSync(canaryLog, "utf8")).toContain("CANARY_PRESENT")
+    // Scrubbed at the cap terminal; the run-record is still emitted.
+    expect(progressFilesIn(dir)).toEqual([])
+    const rec = readRecord(dir)
+    expect(rec.exit_code).toBe(5)
+    expect(rec.typed_failure).toBe("cap-exhausted")
+  })
+
+  // Finding #11: a resumed attempt that crashes again WITHOUT advancing the
+  // progress file (same step + head_sha) must not re-resume forever — the driver
+  // converges to an honest cold restart, matching lfg's "next retry cold-restarts
+  // honestly" postcondition-mismatch promise. attempt 1 (cold) crashes with a valid
+  // file; attempt 2 resumes and crashes again unchanged; attempt 3 MUST be cold.
+  test("resumed attempt that makes no progress converges to a cold restart", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const canaryLog = path.join(work, "canary.log")
+    const { marker, env } = stubs()
+    const claude = resumeStub({ marker, promptLog, canaryLog, alwaysCrash: true })
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "2", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(5)
+    // Three launches: cold → resume → cold restart (the convergence).
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(3)
+    const chunks = fs.readFileSync(promptLog, "utf8").split("----\n").filter((c) => c.trim().length > 0)
+    expect(chunks.length).toBe(3)
+    expect(chunks[0]).not.toContain("resume:") // attempt 1: cold
+    expect(chunks[1]).toContain("resume:") // attempt 2: resumed the recorded state
+    expect(chunks[2]).not.toContain("resume:") // attempt 3: cold restart (no re-resume)
+    // The give-up floor still caps it and the progress file is scrubbed at exit.
+    expect(progressFilesIn(dir)).toEqual([])
+  })
+
+  // A claude stub for the crash-then-resume goal-drift scenario (finding #2): on
+  // its FIRST (cold) launch it appends to the committed STRATEGY.md, commits on a
+  // working branch, writes a valid progress file, and crashes without DONE; on a
+  // RESUME launch it finishes with DONE. Without the cold-only snapshot rule,
+  // attempt 2's loop-top re-snapshot would re-baseline the already-mutated goal and
+  // launder the drift to exit 0.
+  function resumeGoalDriftStub(opts: { marker: string; branch?: string }): string {
+    const branch = opts.branch ?? "feat/resume-drift"
+    return writeExec(
+      path.join(work, "claude"),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+printf 'RUN\\n' >> '${opts.marker}'
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+run_id="$(basename "$progress_path" .progress.json)"
+case "$prompt" in
+  *resume:*)
+    printf 'resumed and finished\\n${SENTINEL}\\n'
+    exit 0
+    ;;
+esac
+base="$(git rev-parse HEAD)"
+git checkout -q -b ${branch} 2>/dev/null || git checkout -q ${branch}
+printf 'DRIFT\\n' >> STRATEGY.md
+git add -A
+git -c user.email=t@t.t -c user.name=t commit -q -m drift
+head="$(git rev-parse HEAD)"
+cat > "$progress_path" <<PJSON
+{
+  "schema_version": 1,
+  "run_id": "$run_id",
+  "attempt": 1,
+  "step": 5,
+  "branch": "${branch}",
+  "base_ref": "$base",
+  "head_sha": "$head",
+  "goal_fidelity": null
+}
+PJSON
+printf 'crashed before DONE\\n'
+exit 1
+`,
+    )
+  }
+
+  // Finding #2: a goal mutation made by a crashed attempt must NOT be laundered by
+  // the resumed attempt's clean baseline. attempt 1 mutates STRATEGY.md and crashes;
+  // attempt 2 resumes and reaches DONE → the guard compares attempt 1's pre-mutation
+  // baseline (inherited, not re-snapshotted) against the mutated tree → exit 8.
+  test("crash mutates STRATEGY.md then resume reaches DONE => exit 8 (drift not laundered)", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    // Commit STRATEGY.md so the attempt-1 loop-top snapshot hashes a clean goal.
+    fs.writeFileSync(path.join(target, "STRATEGY.md"), "original goal\n")
+    Bun.spawnSync(["bash", "-c", "git add -A && git commit -q -m strategy"], { cwd: target })
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = resumeGoalDriftStub({ marker })
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "2", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    // Two launches: the crash (attempt 1) then the resume (attempt 2).
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n").length).toBe(2)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// LOOP_JQ_BIN seam (U8) — the jq binary is injectable so tests can exercise the
+// missing-jq path. With no usable jq, validate_progress_file fails (cold restart,
+// no resume) and emit_record's progress-file lifts collapse to null. This is the
+// test the docs claim exercises the seam.
+// ---------------------------------------------------------------------------
+describe("LOOP_JQ_BIN seam (U8)", () => {
+  // A claude stub that writes a progress file carrying a REAL goal_fidelity verdict
+  // then crashes without DONE — so both the resume-validation and the record-lift
+  // jq paths would fire if jq were available.
+  function jqSeamStub(marker: string, promptLog: string): string {
+    return writeExec(
+      path.join(work, "claude"),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+printf -- '----\\n' >> '${promptLog}'
+printf '%s\\n' "$prompt" >> '${promptLog}'
+printf 'RUN\\n' >> '${marker}'
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+run_id="$(basename "$progress_path" .progress.json)"
+base="$(git rev-parse HEAD)"
+git checkout -q -b feat/jq-seam 2>/dev/null || git checkout -q feat/jq-seam
+printf 'work\\n' > work.txt
+git add work.txt
+git -c user.email=t@t.t -c user.name=t commit -q -m work
+head="$(git rev-parse HEAD)"
+cat > "$progress_path" <<PJSON
+{
+  "schema_version": 1,
+  "run_id": "$run_id",
+  "attempt": 1,
+  "step": 5,
+  "branch": "feat/jq-seam",
+  "base_ref": "$base",
+  "head_sha": "$head",
+  "goal_fidelity": { "verdict": "partial", "uncovered": ["R2"] }
+}
+PJSON
+printf 'crashed before DONE\\n'
+exit 1
+`,
+    )
+  }
+
+  test("LOOP_JQ_BIN at a nonexistent binary => cold restart (no resume) and null lifts", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const promptLog = path.join(work, "prompts.log")
+    const marker = path.join(work, "claude-runs.log")
+    const claude = jqSeamStub(marker, promptLog)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--max-retries", "1", "--log-dir", dir, "--verify-cmd", "true"],
+      {
+        env: {
+          LOOP_GH_BIN: ghStub(),
+          LOOP_TIMEOUT_BIN: timeoutStub(),
+          LOOP_CLAUDE_BIN: claude,
+          LOOP_JQ_BIN: path.join(work, "no-such-jq"),
+        },
+      },
+    )
+    // jq missing → the progress file cannot be validated → never resumes → the two
+    // crashes exhaust the cap.
+    expect(exitCode).toBe(5)
+    expect(fs.readFileSync(promptLog, "utf8")).not.toContain("resume:")
+    // The record's progress-file lifts collapse to null with jq unavailable, even
+    // though the file carried a real verdict.
+    expect(readRecord(dir).goal_fidelity).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Goal-fidelity in the run-record (R6, U9) — emit_record lifts the lfg step-5
+// verdict from the run-progress file VERBATIM, read BEFORE the file is scrubbed at
+// the terminal. When no verdict was recorded (null / absent field / no progress
+// file), the run-record field is null — nothing is fabricated, "no data" stays
+// honest. All paths stub the LOOP_*_BIN seams; jq is real (as in resume tests).
+// ---------------------------------------------------------------------------
+describe("goal-fidelity run-record (U9 / R6)", () => {
+  // A claude stub that writes the given progress-file body (a JSON literal) then
+  // finishes with DONE — modeling a headless lfg that recorded step-5 fidelity.
+  function fidelityStub(progressBody: string): string {
+    return writeExec(
+      path.join(work, "claude"),
+      `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *progress:*) prompt="$a" ;; esac
+done
+progress_path="$(printf '%s\\n' "$prompt" | grep -oE 'progress:[^[:space:]]+' | head -1)"
+progress_path="\${progress_path#progress:}"
+cat > "$progress_path" <<'PJSON'
+${progressBody}
+PJSON
+printf 'done\\n${SENTINEL}\\n'
+exit 0
+`,
+    )
+  }
+
+  function runWith(claude: string) {
+    const target = mkdirInWork("target")
+    gitInit(target, false)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    return { target, plugin, dir, claude }
+  }
+
+  const envFor = (claude: string) => ({
+    LOOP_GH_BIN: ghStub(),
+    LOOP_TIMEOUT_BIN: timeoutStub(),
+    LOOP_CLAUDE_BIN: claude,
+  })
+
+  // Scenario (a): progress file carries a verdict → run-record includes it verbatim.
+  // learning_rejection (R9) rides the same lift, so the same run covers it.
+  test("verdict in progress file → run-record includes it verbatim", async () => {
+    const claude = fidelityStub(
+      `{ "schema_version": 1, "step": 5, "goal_fidelity": { "verdict": "partial", "uncovered": ["R2", "R4"] }, "learning_rejection": { "claim": "cache was the root cause", "reason": "diff shows the cache path untouched" } }`,
+    )
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toEqual({ verdict: "partial", uncovered: ["R2", "R4"] })
+    expect(readRecord(dir).learning_rejection).toEqual({
+      claim: "cache was the root cause",
+      reason: "diff shows the cache path untouched",
+    })
+  })
+
+  // Scenario (b-i): explicit null verdict → record field is null.
+  test("explicit null verdict → run-record field is null", async () => {
+    const claude = fidelityStub(`{ "schema_version": 1, "step": 5, "goal_fidelity": null }`)
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toBeNull()
+  })
+
+  // Scenario (b-ii): the field is absent from the progress file → record null.
+  test("absent verdict field → run-record field is null", async () => {
+    const claude = fidelityStub(`{ "schema_version": 1, "step": 5 }`)
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toBeNull()
+    expect(readRecord(dir).learning_rejection).toBeNull()
+  })
+
+  // Scenario (b-iii): no progress file written at all → record null (nothing fabricated).
+  test("no progress file → run-record field is null (nothing fabricated)", async () => {
+    const claude = claudeStub("claude", `done\n${SENTINEL}`, 0, path.join(work, "fidelity-runs.log"))
+    const { target, plugin, dir } = runWith(claude)
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--seed", "x", "--log-dir", dir, "--verify-cmd", "true"],
+      { env: envFor(claude) },
+    )
+    expect(exitCode).toBe(0)
+    expect(readRecord(dir).goal_fidelity).toBeNull()
   })
 })

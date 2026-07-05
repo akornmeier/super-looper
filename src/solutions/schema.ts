@@ -99,6 +99,14 @@ export const RESOLUTION_TYPES = [
 
 export const SEVERITIES = ["critical", "high", "medium", "low"] as const;
 
+// Machine-readable trust label for a learning. Absent = legacy, treated as
+// candidate-equivalent by consumers (no migration for existing docs).
+export const CONFIDENCE_LEVELS = ["verified", "candidate"] as const;
+
+// How the learning was captured. loop-run = autonomous loop; interactive-session
+// = a human was present.
+export const PROVENANCE_TYPES = ["loop-run", "interactive-session"] as const;
+
 // Derived union types — free, no duplication.
 export type Component = (typeof COMPONENTS)[number];
 export type RootCause = (typeof ROOT_CAUSES)[number];
@@ -112,6 +120,9 @@ const shared = {
   severity: z.enum(SEVERITIES),
   related_components: z.array(z.string()).optional(),
   tags: z.array(z.string()).max(8).optional(),
+  confidence: z.enum(CONFIDENCE_LEVELS).optional(),
+  provenance: z.enum(PROVENANCE_TYPES).optional(),
+  evidence: z.string().optional(),
 };
 
 export const bugSchema = z.object({

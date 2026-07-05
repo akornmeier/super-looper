@@ -11,4 +11,13 @@ todos/
 __pycache__/
 *.pyc
 
+# Session-data / run debris generated when super-looper skills run against this
+# repo checkout (R19). logs/ and __pycache__/ above already cover most; the
+# skills-level .claude/ dir is not otherwise ignored and trips the sl-prefix test.
+/plugins/super-looper/logs/
+/plugins/super-looper/skills/logs/
+/plugins/super-looper/skills/sl-resolve-pr-feedback/logs/
+/plugins/super-looper/skills/sl-sessions/scripts/__pycache__/
+/plugins/super-looper/skills/.claude/
+
 .super-looper/*.local.yaml

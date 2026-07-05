@@ -30,7 +30,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 **Step 4 has two modes**
 
 - **Steer each stage:** `/sl-work` → `/sl-code-review` → `/sl-commit-push-pr`. Stay in the driver's seat.
-- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them.
+- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them. Unattended runs lock their goals: set `STRATEGY.md` and the plan *before* launching — a run that edits either mid-run aborts (exit 8, goal drift) rather than shipping the drift. Goal changes go through interactive `/sl-strategy` or a plan revision, then relaunch.
 
 **Right-size it.** Skip brainstorm for small, obvious changes — go straight to `/sl-plan` or `/sl-work`. Use `/sl-debug` for bugs, not the build loop. Save the full chain for ambiguous or cross-cutting features.
 
@@ -38,8 +38,8 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 
 | Component | Count |
 |-----------|-------|
-| Agents | 43 |
-| Skills | 40 |
+| Agents | 42 |
+| Skills | 39 |
 
 ## Skills
 
@@ -62,7 +62,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-compound-refresh`](../../docs/skills/sl-compound-refresh.md) | Refresh stale or drifting learnings and decide whether to keep, update, replace, or archive them |
 | [`/sl-optimize`](../../docs/skills/sl-optimize.md) | Run iterative optimization loops with parallel experiments, measurement gates, and LLM-as-judge quality scoring |
 | [`/sl-product-pulse`](../../docs/skills/sl-product-pulse.md) | Generate a single-page, time-windowed report on usage, performance, errors, and followups. Saves reports to `docs/pulse-reports/` as a browseable timeline of what users experienced |
-| `/lfg` | Autopilot: run the entire loop end-to-end — plan, work, review, commit, open a PR, then watch CI and take bounded passes at fixing failures, recording anything it can't resolve. The hands-off path; `scripts/loop.sh` wraps it for unattended runs |
+| [`/lfg`](../../docs/skills/lfg.md) | Autopilot: run the entire loop end-to-end — plan, work, review, commit, open a PR, then watch CI and take bounded passes at fixing failures, recording anything it can't resolve. The hands-off path; `scripts/loop.sh` wraps it for unattended runs |
 
 ### Research & Context
 
@@ -87,7 +87,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 |-------|-------------|
 | [`/sl-demo-reel`](../../docs/skills/sl-demo-reel.md) | Capture a visual demo reel (GIF demos, terminal recordings, screenshots) for PRs with project-type-aware tier selection |
 | [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact the current session into a clean handoff doc a fresh agent can pick up — references artifacts by path, used at the plan→work seam to carry planning context into a clean run (e.g. `loop.sh --handoff-file`) |
-| `sl-learn` | Capture a ship-time learning at the close of an autopilot run — invoke `sl-compound` headless against the hot session context, commit the resulting `docs/solutions/` learning into the run's PR, and re-confirm CI green. Triggered by `lfg` after CI green and before `DONE`; skips when no open PR exists or CI is unresolved |
+| [`sl-learn`](../../docs/skills/sl-learn.md) | Capture a ship-time learning at the close of an autopilot run — invoke `sl-compound` headless against the hot session context, commit the resulting `docs/solutions/` learning into the run's PR, and re-confirm CI green. Triggered by `lfg` after CI green and before `DONE`; skips when no open PR exists or CI is unresolved |
 | [`/sl-promote`](../../docs/skills/sl-promote.md) | Draft user-facing announcement copy for a shipped feature (X post, changelog blurb, LinkedIn, email); voice-matched via the Spiral CLI when installed, a lite layer of editorial & social expertise without it |
 | [`/sl-report-bug`](../../docs/skills/sl-report-bug.md) | Report a bug in the super-looper plugin |
 | [`/sl-resolve-pr-feedback`](../../docs/skills/sl-resolve-pr-feedback.md) | Resolve PR review feedback in parallel |
@@ -101,8 +101,8 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 
 | Skill | Description |
 |-------|-------------|
-| `sl-agent-native-architecture` | Build AI agents using prompt-native architecture |
-| `sl-dhh-rails-style` | Write Ruby/Rails code in DHH's 37signals style |
+| [`sl-agent-native-architecture`](../../docs/skills/sl-agent-native-architecture.md) | Build AI agents using prompt-native architecture |
+| [`sl-dhh-rails-style`](../../docs/skills/sl-dhh-rails-style.md) | Write Ruby/Rails code in DHH's 37signals style |
 | [`sl-frontend-design`](../../docs/skills/sl-frontend-design.md) | Create production-grade frontend interfaces |
 | [`sl-polish`](../../docs/skills/sl-polish.md) | Conversational UX polish — start a dev server, open the feature in a browser, and iterate together; auto-detects 8 frameworks. Manual invocation only |
 
@@ -123,7 +123,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 
 | Skill | Description |
 |-------|-------------|
-| `sl-dogfood-beta` | Diff-scoped browser QA of the active branch: builds an exhaustive test matrix of every change, drives the app with agent-browser, then auto-fixes issues, adds regression tests, and commits each fix until green |
+| [`sl-dogfood-beta`](../../docs/skills/sl-dogfood-beta.md) | Diff-scoped browser QA of the active branch: builds an exhaustive test matrix of every change, drives the app with agent-browser, then auto-fixes issues, adds regression tests, and commits each fix until green |
 
 ## Agents
 
@@ -184,7 +184,6 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 
 | Agent | Description |
 |-------|-------------|
-| `sl-design-implementation-reviewer` | Verify UI implementations match Figma designs |
 | `sl-design-iterator` | Iteratively refine UI through systematic design iterations |
 | `sl-figma-design-sync` | Synchronize web implementations with Figma designs |
 
@@ -192,14 +191,9 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 
 | Agent | Description |
 |-------|-------------|
+| `sl-learning-evaluator` | Grade a candidate ship-time learning against an evidence packet — verified / candidate / rejected |
 | `sl-pr-comment-resolver` | Address PR comments and implement fixes |
 | `sl-spec-flow-analyzer` | Analyze user flows and identify gaps in specifications |
-
-### Docs
-
-| Agent | Description |
-|-------|-------------|
-| `sl-ankane-readme-writer` | Create READMEs following Ankane-style template for Ruby gems |
 
 ## Installation
 

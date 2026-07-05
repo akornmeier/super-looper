@@ -14,6 +14,10 @@ Captures problem solutions while context is fresh, creating structured documenta
 
 **Why "compound"?** Each documented solution compounds your team's knowledge. The first time you solve a problem takes research. Document it, and the next occurrence takes minutes. Knowledge compounds.
 
+## Learning-to-eval rule
+
+When a learning documents a gap in a super-looper skill — a case the skill mis-handled, a missing guardrail, or a drifted contract, and it **identifies a skill gap** rather than a one-off application bug — the fix PR that closes the gap must **include or update a behavioral eval** for that skill under `plugins/super-looper/skills/<skill>/evals/` (the `sl-sessions/evals/` three-file shape). The eval is how the next regression is caught; a fix that lands without one leaves self-improvement unmeasured. This rule binds the follow-up fix PR, not the `sl-compound` run itself — `sl-compound` records the learning; the PR that acts on it carries the eval.
+
 ## Usage
 
 ```bash
@@ -37,6 +41,13 @@ Check `$ARGUMENTS` for a `mode:headless` token. Tokens starting with `mode:` are
 | **Headless** | `mode:headless` in arguments | No blocking questions. Run **Full mode without session history**. Apply the Discoverability Check edit silently if a gap exists. Skip Phase 3 specialized reviews. End with a structured terminal report — no "What's next?" menu. |
 
 Headless mode is intended for automations and skill-to-skill invocation where no human is present to answer questions. The doc itself is identical to what an interactive Full run would produce — classification work (track, category, overlap) follows the same rules and writes nothing extra into the artifact. Once detected, headless mode applies for the entire run.
+
+## Provenance and confidence
+
+The solutions schema carries optional `confidence`, `provenance`, and `evidence` fields — a machine-readable trust label consumers use to weight retrieval (see `references/schema.yaml`). Set them by mode when writing the learning's frontmatter:
+
+- **Interactive and lightweight** (a human is present) → stamp `provenance: interactive-session`. No evaluator gate is required — the human is the reviewer (R12). Leave `confidence` unset; absent is valid and treated as candidate-equivalent by consumers.
+- **Headless** → do **not** set `confidence`, `provenance`, or `evidence`. A headless run drafts the learning but does not grade its own trust; the caller (`sl-learn`) sets these fields after an independent fresh-context evaluator returns a verdict. Omitting them is safe — legacy/absent stays valid.
 
 ## Pre-resolved context
 

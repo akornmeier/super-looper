@@ -312,6 +312,81 @@ describe("validateFrontmatter", () => {
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.field === "module")).toBe(true)
   })
+
+  test("a bug-track doc with confidence/provenance/evidence passes", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: build_error",
+          "component: build_tooling",
+          "severity: high",
+          "symptoms:",
+          "  - boom",
+          "root_cause: type_error",
+          "resolution_type: code_fix",
+          "confidence: verified",
+          "provenance: loop-run",
+          "evidence: https://github.com/acme/repo/pull/42",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  test("a knowledge-track doc with confidence/provenance/evidence passes", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+          "confidence: verified",
+          "provenance: loop-run",
+          "evidence: a1b2c3d",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  test("an invalid confidence enum fails naming confidence", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+          "confidence: high",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.field === "confidence")).toBe(true)
+  })
+
+  test("a legacy doc without confidence/provenance/evidence stays valid", () => {
+    const result = validateFrontmatter(
+      withFields(
+        [
+          "module: x",
+          "date: 2026-06-16",
+          "problem_type: best_practice",
+          "component: tooling",
+          "severity: low",
+        ].join("\n"),
+      ),
+    )
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
 })
 
 // --- CLI: scripts/solutions/validate-frontmatter.ts -------------------------

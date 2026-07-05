@@ -292,7 +292,7 @@ grep -E '^description:' skills/*/SKILL.md
 
 ## Adding Components
 
-- **New skill:** Create `skills/<name>/SKILL.md` with required YAML frontmatter (`name`, `description`). Reference files go in `skills/<name>/references/`. Add the skill to the appropriate category table in `README.md` and update the skill count.
+- **New skill:** Create `skills/<name>/SKILL.md` with required YAML frontmatter (`name`, `description`). Reference files go in `skills/<name>/references/`. Add the skill to the appropriate category table in `README.md` and update the skill count. Create a curated `docs/skills/<name>.md` page, then run `bun run docs:emit-index` to regenerate the index — both are test-enforced (`tests/docs-skills-index.test.ts`).
 - **New agent:** Create `agents/sl-<name>.md` with frontmatter (the `sl-` prefix is required). Add the agent to the appropriate topical section of `README.md` (Review, Document Review, Research, Design, Workflow, Docs) and update the agent count.
 
 ### Adding a New Plugin to This Repo
@@ -319,7 +319,7 @@ When modifying a skill that has a `-beta` counterpart (or vice versa), always ch
 
 ## Skill Documentation
 
-Many skills have a user-facing doc at `docs/skills/<skill>.md` (repo-root `docs/`, not under `plugins/`) that explains the skill's high-level purpose, novel mechanics, and chain position — separate from the runtime SKILL.md. The `docs/skills/README.md` index lists all documented skills grouped by category.
+Every skill directory has a curated user-facing doc at `docs/skills/<skill>.md` (repo-root `docs/`, not under `plugins/`) that explains the skill's high-level purpose, novel mechanics, and chain position — separate from the runtime SKILL.md. A coverage test (`tests/docs-skills-index.test.ts`) requires one page per skill directory. The `docs/skills/README.md` index is generated — flat and frontmatter-derived, never hand-edited; run `bun run docs:emit-index` to regenerate it after any SKILL.md frontmatter change (a drift test enforces this). The pages themselves stay hand-written prose (purpose, novel mechanics), not SKILL.md dumps.
 
 When modifying such a skill, **state your skill-doc sync decision explicitly** before committing — e.g., "doc updated — added new framing for surprise-me mode" or "doc not updated — change is internal to Phase 2, doesn't surface at doc level." **Most changes don't warrant an update**: internal phase refactors, prompt-tuning, and mechanic-level bug fixes typically don't surface at the doc's level of abstraction.
 
@@ -330,7 +330,7 @@ Update the skill doc when:
 - A new mechanic emerged that belongs in "What Makes It Novel"
 - The doc's quick example, FAQ, or use cases would mislead a reader
 
-Edit just the parts that became inaccurate; don't rewrite to match SKILL.md. Skills without a doc need no check — creating one is a deliberate decision, not a reflexive one. When adding a doc for a skill that didn't have one, also link it from the skill's row in `plugins/super-looper/README.md` and add it to the appropriate category in `docs/skills/README.md`.
+Edit just the parts that became inaccurate; don't rewrite to match SKILL.md. Every skill directory must have a curated page — the coverage test fails otherwise, so creating one is an obligation, not an optional decision. When adding a new skill's doc, link it from the skill's row in `plugins/super-looper/README.md` and run `bun run docs:emit-index` to regenerate the index (never hand-edit `docs/skills/README.md`).
 
 ## Documented Solutions
 
