@@ -14,6 +14,10 @@ Captures problem solutions while context is fresh, creating structured documenta
 
 **Why "compound"?** Each documented solution compounds your team's knowledge. The first time you solve a problem takes research. Document it, and the next occurrence takes minutes. Knowledge compounds.
 
+## Learning-to-eval rule
+
+When a learning documents a gap in a super-looper skill — a case the skill mis-handled, a missing guardrail, or a drifted contract, and it **identifies a skill gap** rather than a one-off application bug — the fix PR that closes the gap must **include or update a behavioral eval** for that skill under `plugins/super-looper/skills/<skill>/evals/` (the `sl-sessions/evals/` three-file shape). The eval is how the next regression is caught; a fix that lands without one leaves self-improvement unmeasured. This rule binds the follow-up fix PR, not the `sl-compound` run itself — `sl-compound` records the learning; the PR that acts on it carries the eval.
+
 ## Usage
 
 ```bash

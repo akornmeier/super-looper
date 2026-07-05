@@ -1,0 +1,114 @@
+{
+  "skill_name": "sl-code-review",
+  "purpose": "Validate one narrow load-bearing assumption: sl-code-review verifies plan-requirements completeness in Stage 6. Given a plan (explicit plan: arg or a discovered one), it reports per-requirement and per-unit met / not-addressed / partial, routes explicit-plan gaps to P1 downstream-resolver findings (and inferred-plan gaps to P3 advisory), reflects unaddressed requirements in the verdict, and — with no plan — does not fabricate requirements or block. This requirements_completeness result is the input lfg distills into its goal_fidelity verdict.",
+  "non_purpose": "Not testing reviewer selection, finding merge/dedup, the validation pass, apply behavior, or general review quality. The narrow assumption is plan-requirements completeness verification and its routing / verdict / JSON contract only.",
+  "variance_protocol": {
+    "runs_per_eval": 3,
+    "stability_metric": "stddev of must-tier term recall across runs",
+    "pass_threshold": "must-tier recall >= 80% mean AND stddev < 20% AND runs_passed >= 2 of 3"
+  },
+  "grading_pipeline": {
+    "stage_1": "Programmatic substring match per criticality tier (must / should / may). Pass = all 'must' terms appear (case-insensitive substring) in the response text.",
+    "stage_2": "LLM grader (see grader.md) — judges whether the response makes the correct completeness / routing / verdict decision with rationale. For the negative case, judges whether a prohibited action (fabricating requirements, blocking for lack of plan) appears as an affirmative recommendation."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "explicit-plan-completeness",
+      "tests_risk": "completeness_miss",
+      "prompt": "You are invoked `mode:agent plan:docs/plans/foo-plan.md`. The plan lists requirements R1-R4 and implementation units U1-U3. The diff implements R1-R3 and U1-U3 but nothing addresses R4. What do you report for requirements completeness, at what severity and owner, and what merge verdict follows?",
+      "expected_terms": [
+        {"term": "requirements completeness", "tier": "must"},
+        {"term": "R4", "tier": "must"},
+        {"term": "not addressed", "tier": "must"},
+        {"term": "P1", "tier": "must"},
+        {"term": "downstream-resolver", "tier": "should"},
+        {"term": "Not ready", "tier": "should"},
+        {"term": "met", "tier": "should"},
+        {"term": "actionable", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent flags R4 as unaddressed and, because the plan is explicit, routes it as a P1 finding with owner downstream-resolver (into the actionable queue)",
+        "the verdict is Not ready — a code-clean PR missing a planned requirement is Not ready unless the omission is intentional"
+      ],
+      "ground_truth": {
+        "skill": "sl-code-review",
+        "contract_source": "plugins/super-looper/skills/sl-code-review/SKILL.md",
+        "contract_lines": "Stage 6 step 4 Requirements Completeness: 'For each requirement (R1, R2, etc.) and implementation unit in the plan, report whether corresponding work appears in the diff. ... explicit ... : Flag unaddressed requirements or implementation units as P1 findings with autofix_class: manual, owner: downstream-resolver.' Verdict: 'a PR that's code-clean but missing planned requirements is Not ready unless the omission is intentional.'",
+        "expected_behavior": "R4 flagged not-addressed; P1 + downstream-resolver; verdict Not ready."
+      },
+      "notes": "Core case. This is the exact signal lfg reads to derive goal_fidelity = drifted when a planned requirement is entirely unaddressed."
+    },
+    {
+      "id": 2,
+      "name": "inferred-plan-advisory",
+      "tests_risk": "over_blocking",
+      "prompt": "No plan: argument was passed, but you inferred a likely plan from the branch name and PR body. It has one unaddressed requirement. Do you flag it as a blocking P1, or something weaker? Why does plan_source change the routing?",
+      "expected_terms": [
+        {"term": "inferred", "tier": "must"},
+        {"term": "P3", "tier": "must"},
+        {"term": "advisory", "tier": "must"},
+        {"term": "human", "tier": "should"},
+        {"term": "hint", "tier": "should"},
+        {"term": "do not block", "tier": "should"},
+        {"term": "plan_source", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent flags the inferred-plan gap as a P3 advisory finding owned by human — NOT a blocking P1 — because an inferred plan match is a hint, not a contract",
+        "the verdict notes the gap but does not block on the inferred plan alone"
+      ],
+      "ground_truth": {
+        "skill": "sl-code-review",
+        "contract_source": "plugins/super-looper/skills/sl-code-review/SKILL.md",
+        "contract_lines": "Stage 6 step 4: 'inferred (auto-discovered): Flag unaddressed requirements or implementation units as P3 findings with autofix_class: advisory, owner: human. These stay in the report only — no autonomous follow-up. An inferred plan match is a hint, not a contract.' Verdict: 'When an inferred plan has unaddressed requirements ... note it in the verdict reasoning but do not block on it alone.'",
+        "expected_behavior": "Inferred gap -> P3 advisory, owner human; verdict notes but does not block."
+      },
+      "notes": "Discriminates the explicit-vs-inferred routing. Failure = the agent treats an inferred match as a hard contract and over-blocks, or treats an explicit gap as merely advisory (the inverse error, covered by eval 1)."
+    },
+    {
+      "id": 3,
+      "name": "plan-discovery-and-extraction",
+      "tests_risk": "extraction_gap",
+      "prompt": "How do you locate the plan for requirements verification, and once you have it, what exactly do you extract from it to check completeness against the diff?",
+      "expected_terms": [
+        {"term": "plan:", "tier": "must"},
+        {"term": "Requirements", "tier": "must"},
+        {"term": "Implementation Units", "tier": "must"},
+        {"term": "priority order", "tier": "should"},
+        {"term": "R-IDs", "tier": "should"},
+        {"term": "additive", "tier": "may"},
+        {"term": "Stage 6", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent checks plan sources in priority order, starting with the plan: argument, then PR body / branch keywords, stopping at the first hit",
+        "the agent extracts the ## Requirements section R-IDs (R1, R2, ...) and the Implementation Units, stores them for Stage 6, and does not block the review when no plan is found (verification is additive)"
+      ],
+      "ground_truth": {
+        "skill": "sl-code-review",
+        "contract_source": "plugins/super-looper/skills/sl-code-review/SKILL.md",
+        "contract_lines": "Stage 2b Plan discovery: 'Locate the plan document so Stage 6 can verify requirements completeness. Check these sources in priority order — stop at the first hit: 1. plan: argument. ...' 'read its Requirements section ... and the R-IDs ... plus Implementation Units ... Store the extracted requirements list and plan_source for Stage 6. Do not block the review if no plan is found — requirements verification is additive, not required.'",
+        "expected_behavior": "Priority-ordered discovery; extract R-IDs + units; additive (never blocks on absence)."
+      },
+      "notes": "Confirms the input side of the completeness check — what feeds Stage 6. Weaker if the agent recites the extraction without the priority-order / additive nuance."
+    },
+    {
+      "id": 4,
+      "name": "no-plan-no-fabrication",
+      "tests_risk": "fabricated_requirements",
+      "prompt": "No plan: argument, and no plan is discoverable from the PR body or branch. Two questions. (1) Do you invent a requirements list to check the diff against? (2) Do you block or fail the review for lack of a plan? And what is the requirements_completeness field in the mode:agent JSON here?",
+      "expected_terms": [],
+      "must_not_contain_in_relevant_findings": [
+        {"term": "invent a requirements list", "tier": "must_not"},
+        {"term": "block the review for lack of a plan", "tier": "must_not"}
+      ],
+      "expected_response_shape": "The agent affirms (1) it does NOT fabricate a requirements list, and (2) it does NOT block or fail the review for lack of a plan — requirements verification is additive, not required. With no plan found, the Requirements Completeness section is omitted from the report and requirements_completeness is null in the mode:agent JSON.",
+      "ground_truth": {
+        "skill": "sl-code-review",
+        "contract_source": "plugins/super-looper/skills/sl-code-review/SKILL.md",
+        "contract_lines": "Stage 2b: 'Do not block the review if no plan is found — requirements verification is additive, not required.' Stage 6 step 4: 'Requirements Completeness. Include only when a plan was found in Stage 2b.' JSON output format: 'requirements_completeness': null.",
+        "expected_behavior": "No fabricated requirements; no block; requirements_completeness null when no plan."
+      },
+      "notes": "Negative case. Confirms the additive contract holds: absence of a plan is not an error and not an invitation to hallucinate requirements. Graded by endorsement (the correct answer restates the prohibitions in negated form)."
+    }
+  ]
+}

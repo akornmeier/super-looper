@@ -88,6 +88,8 @@ Behavioral changes to a plugin agent or skill (anything under `plugins/*/agents/
 
 - **Mechanical changes do not have this restriction.** Skill scripts (e.g., `extract-metadata.py`), the release tooling, and anything `bun test` exercises always run the current source. The caching issue only affects LLM-driven agent or skill prose behavior dispatched through the plugin loader.
 
+- **Learning-to-eval rule.** When a learning (captured via `sl-compound` into `docs/solutions/`) identifies a skill gap — a case a plugin skill mis-handled, or a guardrail it was missing — the PR that fixes the gap must include or update a behavioral eval for that skill under `plugins/super-looper/skills/<skill>/evals/`. The eval suites clone the `sl-sessions/evals/` three-file shape (`evals.json` + `grader.md` + `README.md`) and run through the skill-creator workflow, not `bun test` (`bun test` checks only their shape). This is how self-improvement stays measurable: a fix that lands without an eval leaves the next regression uncaught.
+
 ## Commit Conventions
 
 - **Prefix is based on intent, not file type.** Use conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, etc.) but classify by what the change does, not the file extension. Files under `plugins/*/skills/`, `plugins/*/agents/`, and `.claude-plugin/` are product code even though they are Markdown or JSON. Reserve `docs:` for files whose sole purpose is documentation (`README.md`, `docs/`, `CHANGELOG.md`).
