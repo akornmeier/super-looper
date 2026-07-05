@@ -241,6 +241,13 @@ progress file when its evaluator rejects a drafted learning
 `null` when no learning was rejected — so a rejection survives the terminal scrub
 into the ledger.
 
+A `refresh_due` field is lifted the same way: `sl-learn` sets it in the progress
+file when a committed learning grows `docs/solutions/` past the refresh threshold
+since the last `sl-compound-refresh` run
+(`{"since_refresh": <count>, "threshold": <n>}`), and it is `null` otherwise. The
+nudge is advisory — `sl-learn` records it and annotates the PR body, but never
+dispatches the refresh (a human-approved maintenance pass).
+
 ## Isolation rule
 
 `loop.sh` is for running the loop on **other** repos. It refuses to run when the

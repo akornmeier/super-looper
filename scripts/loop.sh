@@ -331,6 +331,7 @@ emit_record() {
   # `goal_fidelity` field each collapse to "null".
   local goal_fidelity_json="null"
   local learning_rejection_json="null"
+  local refresh_due_json="null"
   if [ -f "$PROGRESS_FILE" ] && command -v "$JQ_BIN" >/dev/null 2>&1; then
     goal_fidelity_json="$( "$JQ_BIN" -c '.goal_fidelity // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
     [ -n "$goal_fidelity_json" ] || goal_fidelity_json="null"
@@ -338,6 +339,11 @@ emit_record() {
     # rejected verdict must survive the scrub into the run-record.
     learning_rejection_json="$( "$JQ_BIN" -c '.learning_rejection // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
     [ -n "$learning_rejection_json" ] || learning_rejection_json="null"
+    # Refresh-due (R13): same lift — sl-learn's advisory "corpus grew past the
+    # refresh threshold" nudge survives the scrub into the run-record. sl-learn
+    # only signals; it never dispatches sl-compound-refresh.
+    refresh_due_json="$( "$JQ_BIN" -c '.refresh_due // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
+    [ -n "$refresh_due_json" ] || refresh_due_json="null"
   fi
 
   local route=""
@@ -388,6 +394,7 @@ emit_record() {
   "goal_drift": $goal_drift_json,
   "goal_fidelity": $goal_fidelity_json,
   "learning_rejection": $learning_rejection_json,
+  "refresh_due": $refresh_due_json,
   "route": $(json_str_or_null "$route"),
   "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
   "attempts": {

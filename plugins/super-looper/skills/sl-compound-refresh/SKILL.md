@@ -202,6 +202,14 @@ Three guidelines that are easy to get wrong:
 2. **Age alone is not a stale signal.** A 2-year-old learning that still matches current code is fine. Only use age as a prompt to inspect more carefully.
 3. **Check for successors before deleting.** Before recommending Replace or Delete, look for newer learnings, pattern docs, PRs, or issues covering the same problem space. If successor evidence exists, prefer Replace over Delete so readers are directed to the newer guidance.
 
+### Staleness Pass (age criteria)
+
+Run an explicit staleness pass over the in-scope learnings — this operationalizes the "age is a prompt to inspect" guideline above with a concrete trigger and keeps the corpus bounded:
+
+- **Age threshold (default 90 days).** Flag every learning whose `date` (or `last_refreshed`, when present) is older than 90 days for a staleness review — read it closely against current code rather than skimming. Age alone never triggers an action; it triggers the review.
+- **Contradiction against current code.** A flagged entry that contradicts how the code works today routes to the matching maintenance action — **consolidate** (a newer doc covers the same ground more broadly), **update** (references drifted but the core solution holds), or **delete** (only when the auto-delete criteria are all met). This sharpens the existing consolidation mandate with age as an explicit input.
+- **Flag for review, not auto-delete.** The staleness pass surfaces candidates; it never deletes on age. Deletion still requires the full auto-delete criteria (implementation gone + problem domain gone + citations absent or decorative). In interactive mode, an age-flagged entry whose right action is ambiguous is asked about; in headless mode it is marked stale — never silently removed.
+
 ## Phase 1.5: Investigate Pattern Docs
 
 After reviewing the underlying learning docs, investigate any relevant pattern docs under `docs/solutions/patterns/`.
@@ -541,6 +549,7 @@ Skipped: V
 Marked stale: S
 
 CONCEPTS.md: <scanned, no qualifying terms | created with N entries (M seeded) | updated — N added, N refined, N reconciled, N scrubbed | repo-wide map created with N entries>
+Corpus-map: last-refreshed stamped <YYYY-MM-DD> (docs/solutions/README.md)
 ```
 
 Then for EVERY file processed, list:
@@ -576,7 +585,20 @@ If all writes succeed, the Recommended section is empty. If no writes succeed (e
 
 ## Phase 5: Commit Changes
 
-After all actions are executed and the report is generated, handle committing the changes. Skip this phase if no files were modified (all Keep, or all writes failed).
+After all actions are executed and the report is generated, handle committing the changes.
+
+### Stamp the corpus-map header
+
+On **every completed refresh run**, before committing, update the corpus-map header at `docs/solutions/README.md` with the run date. This is the one write to `README.md` the refresh makes — the header is corpus-index metadata, not a learning doc to classify, so it stays outside the Scope Selection exclusion. Create the header if absent; otherwise overwrite the `last-refreshed:` value and leave all other README content intact:
+
+```
+# Documented Solutions
+
+<!-- corpus-map (maintained by sl-compound-refresh) -->
+last-refreshed: <YYYY-MM-DD>
+```
+
+Why it is unconditional: `sl-learn`'s refresh-due signal reads this stamp to count learnings added since the last refresh (default threshold: 10 new learnings) and nudge an operator when the corpus has grown. A run that skipped the stamp would leave the counter reading from an older date, making the corpus look perpetually refresh-due. Because the stamp always changes at least one line, this phase runs even when every doc was a Keep — commit at least the stamp bump. If the stamp write itself fails (e.g., read-only permissions), record the recommended stamp in the report and continue.
 
 ### Detect git context
 

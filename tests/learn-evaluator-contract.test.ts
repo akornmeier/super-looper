@@ -17,6 +17,8 @@ function readRepoFile(relativePath: string): string {
 
 const SL_LEARN = "plugins/super-looper/skills/sl-learn/SKILL.md"
 const SL_COMPOUND = "plugins/super-looper/skills/sl-compound/SKILL.md"
+const SL_COMPOUND_REFRESH =
+  "plugins/super-looper/skills/sl-compound-refresh/SKILL.md"
 const EVALUATOR = "plugins/super-looper/agents/sl-learning-evaluator.md"
 const RESEARCHER = "plugins/super-looper/agents/sl-learnings-researcher.md"
 
@@ -121,6 +123,66 @@ describe("sl-learnings-researcher confidence weighting (U11 / R11)", () => {
     expect(researcher).toContain("candidate-equivalent")
     // Confidence is surfaced in the per-finding output
     expect(researcher).toContain("**Confidence**")
+  })
+})
+
+// --- U12 / R13: bounded refresh governance (threshold signal + staleness pass) -
+// sl-learn signals refresh-due past a corpus-growth threshold and NEVER dispatches
+// the refresh; sl-compound-refresh gains an age/staleness pass that flags, not
+// deletes. Source-grep contract on the prose (LLM behavior can't be unit tested).
+
+describe("sl-learn refresh-due signal (U12 / R13)", () => {
+  test("carries the default-10 threshold and growth-since-last-refresh counting", () => {
+    const learn = readRepoFile(SL_LEARN)
+
+    // Reads the corpus-map header sl-compound-refresh stamps
+    expect(learn).toContain("corpus-map header")
+    expect(learn).toContain("last-refreshed")
+
+    // Counts growth since the last refresh, thresholded at a default of 10
+    expect(learn).toMatch(/growth since the last refresh/i)
+    expect(learn).toMatch(/default 10/i)
+    expect(learn).toMatch(/at least 10 new learnings/i)
+
+    // The signal lands in the PR body and the run/progress state
+    expect(learn).toContain("refresh-due")
+    expect(learn).toContain("refresh_due")
+  })
+
+  test("never auto-dispatches the refresh (bounded autonomy)", () => {
+    const learn = readRepoFile(SL_LEARN)
+
+    // The no-auto-dispatch constraint is explicit
+    expect(learn).toMatch(/never (load or )?dispatch/i)
+    expect(learn).toContain("sl-compound-refresh")
+    expect(learn).toMatch(/bounded autonomy/i)
+  })
+})
+
+describe("sl-compound-refresh staleness pass (U12 / R13)", () => {
+  test("names the default-90-day age threshold and flags for review, not auto-delete", () => {
+    const refresh = readRepoFile(SL_COMPOUND_REFRESH)
+
+    // Explicit staleness pass keyed on a 90-day default age threshold
+    expect(refresh).toMatch(/staleness pass/i)
+    expect(refresh).toContain("90 days")
+    expect(refresh).toMatch(/age threshold/i)
+
+    // Flag-for-review behavior: never auto-delete on age
+    expect(refresh).toMatch(/flag for review/i)
+    expect(refresh).toMatch(/never (deletes on age|silently removed)/i)
+
+    // Age routes to consolidate/update/delete — sharpens the consolidation mandate
+    expect(refresh).toContain("consolidate")
+  })
+
+  test("stamps a corpus-map run date sl-learn can read", () => {
+    const refresh = readRepoFile(SL_COMPOUND_REFRESH)
+
+    // The corpus-map header the refresh maintains, matching what sl-learn reads
+    expect(refresh).toContain("corpus-map")
+    expect(refresh).toContain("last-refreshed")
+    expect(refresh).toContain("docs/solutions/README.md")
   })
 })
 
