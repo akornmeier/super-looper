@@ -98,6 +98,15 @@ function printargsStub(argsMarker: string, cwdMarker: string): string {
   )
 }
 
+// The single run-record JSON in a log dir. Excludes `.progress.json`: a leftover
+// progress file must fail the count assertion (scrub regression), never be
+// misread as the record.
+function readRecord(dir: string): any {
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".progress.json"))
+  expect(files.length).toBe(1)
+  return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
+}
+
 function mkdirInWork(name: string): string {
   const p = path.join(work, name)
   fs.mkdirSync(p, { recursive: true })
@@ -782,11 +791,6 @@ describe("run-record (R9)", () => {
   function recordsDir(): string {
     return path.join(work, "records")
   }
-  function readRecord(dir: string): any {
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
-    expect(files.length).toBe(1)
-    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
-  }
   function expectNoRecord(dir: string) {
     if (!fs.existsSync(dir)) return // dir never created => no record written
     expect(fs.readdirSync(dir).filter((f) => f.endsWith(".json"))).toEqual([])
@@ -1035,12 +1039,6 @@ describe("goal-drift guard (R1-R3)", () => {
       path.join(work, name),
       `#!/usr/bin/env bash\nprintf 'RUN\\n' >> '${marker}'\n${mutate}\ncat <<'__T__'\n${transcript}\n__T__\nexit ${exitCode}\n`,
     )
-  }
-
-  function readRecord(dir: string): any {
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
-    expect(files.length).toBe(1)
-    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
   }
 
   function commitAll(dir: string, msg: string) {
@@ -1341,12 +1339,6 @@ exit 1
     if (!fs.existsSync(dir)) return []
     return fs.readdirSync(dir).filter((f) => f.endsWith(".progress.json"))
   }
-  function readRecord(dir: string): any {
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".progress.json"))
-    expect(files.length).toBe(1)
-    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
-  }
-
   // Scenario (a): crash at step 5 with a valid progress file → second attempt
   // skips reset (canary preserved) and its prompt carries the resume marker.
   test("valid progress file → second attempt resumes (no reset, resume marker present)", async () => {
@@ -1531,12 +1523,6 @@ exit 0
 // honest. All paths stub the LOOP_*_BIN seams; jq is real (as in resume tests).
 // ---------------------------------------------------------------------------
 describe("goal-fidelity run-record (U9 / R6)", () => {
-  function readRecord(dir: string): any {
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".progress.json"))
-    expect(files.length).toBe(1)
-    return JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"))
-  }
-
   // A claude stub that writes the given progress-file body (a JSON literal) then
   // finishes with DONE — modeling a headless lfg that recorded step-5 fidelity.
   function fidelityStub(progressBody: string): string {

@@ -293,6 +293,14 @@ json_str_or_null() {
   if [ -z "${1:-}" ]; then printf 'null'; else printf '"%s"' "$(json_escape "$1")"; fi
 }
 
+# jq -c of one run-progress-file field, collapsing every failure mode (jq error,
+# unparseable file, absent/null field, empty output) to the literal string "null".
+lift_progress_field() {
+  local v
+  v="$( "$JQ_BIN" -c ".$1 // null" "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
+  [ -n "$v" ] && printf '%s' "$v" || printf 'null'
+}
+
 emit_record() {
   # emit_record <exit-code> — write the structured run-record to RECORD_FILE.
   # Invoked best-effort ("emit_record ... || true") at each terminal site, so a
@@ -323,27 +331,20 @@ emit_record() {
     goal_drift_json="{ \"file\": $(json_str_or_null "${goal_drift_file:-}"), \"change\": $(json_str_or_null "${goal_drift_kind:-}") }"
   fi
 
-  # Goal-fidelity (R6): lift the lfg step-5 verdict from the run-progress file
-  # VERBATIM when the file exists and carries one; null otherwise — nothing is
-  # fabricated, so "no data" stays honest. Read it HERE, before the scrub at the
-  # end of this function (U8's `rm -f "$PROGRESS_FILE"`); a read after the scrub
-  # would always see nothing. A missing jq, an absent file, or an absent/null
-  # `goal_fidelity` field each collapse to "null".
+  # Progress-file lifts: goal_fidelity (R6), learning_rejection (R9), and
+  # refresh_due (R13) are copied VERBATIM from the run-progress file when it
+  # exists and carries them; null otherwise — nothing is fabricated, so "no
+  # data" stays honest. Read them HERE, before the scrub at the end of this
+  # function (U8's `rm -f "$PROGRESS_FILE"`); a read after the scrub would
+  # always see nothing. A missing jq, an absent file, or an absent/null field
+  # each collapse to "null".
   local goal_fidelity_json="null"
   local learning_rejection_json="null"
   local refresh_due_json="null"
   if [ -f "$PROGRESS_FILE" ] && command -v "$JQ_BIN" >/dev/null 2>&1; then
-    goal_fidelity_json="$( "$JQ_BIN" -c '.goal_fidelity // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
-    [ -n "$goal_fidelity_json" ] || goal_fidelity_json="null"
-    # Learning rejection (R9): same lift, same rules — the sl-learn evaluator's
-    # rejected verdict must survive the scrub into the run-record.
-    learning_rejection_json="$( "$JQ_BIN" -c '.learning_rejection // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
-    [ -n "$learning_rejection_json" ] || learning_rejection_json="null"
-    # Refresh-due (R13): same lift — sl-learn's advisory "corpus grew past the
-    # refresh threshold" nudge survives the scrub into the run-record. sl-learn
-    # only signals; it never dispatches sl-compound-refresh.
-    refresh_due_json="$( "$JQ_BIN" -c '.refresh_due // null' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
-    [ -n "$refresh_due_json" ] || refresh_due_json="null"
+    goal_fidelity_json="$(lift_progress_field goal_fidelity)"
+    learning_rejection_json="$(lift_progress_field learning_rejection)"
+    refresh_due_json="$(lift_progress_field refresh_due)"
   fi
 
   local route=""
