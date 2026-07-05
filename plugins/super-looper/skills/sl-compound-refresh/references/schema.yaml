@@ -217,6 +217,24 @@ optional_fields:
     max_items: 8
     description: "Search keywords, lowercase and hyphen-separated"
 
+  confidence:
+    type: enum
+    values:
+      - verified
+      - candidate
+    description: "Trust label — verified (an evaluator confirmed the learning against evidence) or candidate (unconfirmed). Absent means legacy and is treated as candidate-equivalent by consumers."
+
+  provenance:
+    type: enum
+    values:
+      - loop-run
+      - interactive-session
+    description: "How the learning was captured — loop-run (an autonomous loop) or interactive-session (a human was present)."
+
+  evidence:
+    type: string
+    description: "Pointer to supporting evidence for the learning's claims, such as a PR URL or a commit sha."
+
 # --- Fields optional for bug track only -------------------------------------
 bug_optional_fields:
   framework_version:

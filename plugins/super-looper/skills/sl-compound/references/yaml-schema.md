@@ -49,6 +49,9 @@ No additional required fields beyond the shared ones. All fields below are optio
 
 - **related_components**: Other components involved
 - **tags**: Search keywords, lowercase and hyphen-separated (max 8)
+- **confidence**: One of `verified`, `candidate`. Trust label — verified (an evaluator confirmed the learning against evidence) or candidate (unconfirmed). Absent means legacy and is treated as candidate-equivalent by consumers.
+- **provenance**: One of `loop-run`, `interactive-session`. How the learning was captured — loop-run (an autonomous loop) or interactive-session (a human was present).
+- **evidence**: Pointer to supporting evidence for the learning's claims, such as a PR URL or a commit sha.
 
 ## Optional Fields (bug track only)
 

@@ -14,6 +14,8 @@ import {
   ROOT_CAUSES,
   RESOLUTION_TYPES,
   SEVERITIES,
+  CONFIDENCE_LEVELS,
+  PROVENANCE_TYPES,
 } from "./schema"
 import {
   CATEGORY_MAP,
@@ -116,6 +118,9 @@ No additional required fields beyond the shared ones. All fields below are optio
 
 - **related_components**: ${F.optional.related_components}
 - **tags**: ${F.optional.tags} (max 8)
+- **confidence**: One of ${codeList(CONFIDENCE_LEVELS)}. ${F.optional.confidence}
+- **provenance**: One of ${codeList(PROVENANCE_TYPES)}. ${F.optional.provenance}
+- **evidence**: ${F.optional.evidence}
 
 ## Optional Fields (bug track only)
 
@@ -287,6 +292,22 @@ optional_fields:
     type: array[string]
     max_items: 8
     description: ${q(F.optional.tags)}
+
+  confidence:
+    type: enum
+    values:
+${yamlList(CONFIDENCE_LEVELS, "      ")}
+    description: ${q(F.optional.confidence)}
+
+  provenance:
+    type: enum
+    values:
+${yamlList(PROVENANCE_TYPES, "      ")}
+    description: ${q(F.optional.provenance)}
+
+  evidence:
+    type: string
+    description: ${q(F.optional.evidence)}
 
 # --- Fields optional for bug track only -------------------------------------
 bug_optional_fields:
