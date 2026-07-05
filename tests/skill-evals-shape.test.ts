@@ -74,12 +74,16 @@ describe("skill eval-suite shape", () => {
 
       // variance_protocol pins runs_per_eval (>= 3 per the plan).
       const variance = parsed.variance_protocol as { runs_per_eval?: number }
+      // typeof null === "object", so guard null first for a clear failure.
+      expect(variance).not.toBeNull()
       expect(typeof variance).toBe("object")
       expect(typeof variance.runs_per_eval).toBe("number")
       expect(variance.runs_per_eval as number).toBeGreaterThanOrEqual(3)
 
       // grading_pipeline names two stages (two-stage grader).
       const pipeline = parsed.grading_pipeline as Record<string, unknown>
+      // typeof null === "object", so guard null first for a clear failure.
+      expect(pipeline).not.toBeNull()
       expect(typeof pipeline).toBe("object")
       expect("stage_1" in pipeline).toBe(true)
       expect("stage_2" in pipeline).toBe(true)
