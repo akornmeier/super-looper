@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.4.1...super-looper-v0.5.0) (2026-07-05)
+
+
+### Features
+
+* **evals:** behavioral eval suites for the four load-bearing skills ([61393d7](https://github.com/akornmeier/super-looper/commit/61393d7968bcff4d8f98252dd785673b529115a5))
+* goal guard, loop resume, learning gate, hygiene, and evals ([2bcd93d](https://github.com/akornmeier/super-looper/commit/2bcd93d327037772b1c75073732b7269b907851d))
+* **hooks:** plugin goal-guard hook — deny goal-file writes in unattended runs ([7f03775](https://github.com/akornmeier/super-looper/commit/7f037758e79154dfae4261865425f5c30721102b))
+* **learn:** evaluator gate separates generator from evaluator on the learning path ([2b643f2](https://github.com/akornmeier/super-looper/commit/2b643f2705494f2bc834f762eab075f0ddb8d9fa))
+* **learn:** refresh-due threshold signal and corpus staleness pass ([dc45641](https://github.com/akornmeier/super-looper/commit/dc45641844b8b86ad1835517980ba102a9a917a0))
+* **lfg:** run-progress file written at every step boundary ([29d7da2](https://github.com/akornmeier/super-looper/commit/29d7da2013e82ae6de057996caf371e4bf8e09ee))
+* **lfg:** write the goal-change protocol as a grep-tested contract ([0897804](https://github.com/akornmeier/super-looper/commit/0897804f58e9bc4a654bc690a335f5667f5367b6))
+* **loop:** instrument goal_fidelity from review verdict to run-record ledger ([6ae382b](https://github.com/akornmeier/super-looper/commit/6ae382b6237647223e41cf6fd258be50c028cb29))
+* **loop:** resume retries from the recorded step instead of cold-restarting ([5d2038f](https://github.com/akornmeier/super-looper/commit/5d2038f59a1cbdf8a1cee85e514d48321aa35a28))
+* **solutions:** add confidence, provenance, and evidence trust fields ([665300c](https://github.com/akornmeier/super-looper/commit/665300ccef35ccaaaac6cfb5951f60964ef62c93))
+
+
+### Bug Fixes
+
+* **agents:** retire two unwired agents and enforce fleet color conventions ([feb08d3](https://github.com/akornmeier/super-looper/commit/feb08d3142f272de56f84559c18649bf5ef6b8e3))
+* **docs:** generate docs/skills index from frontmatter with integrity tests ([ba112b7](https://github.com/akornmeier/super-looper/commit/ba112b71d5815209cbae9e4776089f01ada01a06))
+* **release:** clean stale packaging artifacts and close version-drift validator gap ([ab9795f](https://github.com/akornmeier/super-looper/commit/ab9795f2eec2ba2602c0a428bfca989a56e8beef))
+* **review:** apply review findings ([61ce166](https://github.com/akornmeier/super-looper/commit/61ce16649fb7c672a6e15ef6e3408f47d454e06a))
+
 ## [0.4.1](https://github.com/akornmeier/super-looper/compare/super-looper-v0.4.0...super-looper-v0.4.1) (2026-06-26)
 
 
