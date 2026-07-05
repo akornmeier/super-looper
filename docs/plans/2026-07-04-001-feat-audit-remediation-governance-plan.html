@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feat: Audit remediation — goal governance, learning gate, loop resume, hygiene, evals</title>
+<style>
+:root{
+  --bg:#fbfaf8; --surface:#ffffff; --ink:#1c1e21; --muted:#5b6068; --line:#e3e0da;
+  --accent:#0f6f5c; --accent-soft:#e7f2ef; --accent-text:#0b5445;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7a4a05;
+  --info:#274f8f; --info-soft:#e9eff9; --info-text:#1f4077;
+  --danger:#a33232; --danger-soft:#faecec; --danger-text:#8a2626;
+  --chip:#f1efe9; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181b; --surface:#1e2126; --ink:#e8e6e1; --muted:#a3a8b0; --line:#33373d;
+    --accent:#4cc2a8; --accent-soft:#1c332e; --accent-text:#7fd6c2;
+    --warn:#e0a44a; --warn-soft:#332a1a; --warn-text:#eec27f;
+    --info:#7ea7e8; --info-soft:#1d2735; --info-text:#a5c2ee;
+    --danger:#e08585; --danger-soft:#33201f; --danger-text:#eaa7a7;
+    --chip:#282c33;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Avenir Next","Segoe UI",system-ui,sans-serif}
+.page{max-width:920px;margin-inline:auto;padding:2.5rem 1.5rem 4rem}
+p,li,dd{max-width:70ch}
+h1{font-size:1.7rem;line-height:1.25;margin:.2rem 0 .6rem}
+h2{font-size:1.25rem;margin:2.6rem 0 .8rem;padding-top:1.2rem;border-top:1px solid var(--line)}
+h3{font-size:1.02rem;margin:1.4rem 0 .5rem}
+code{font-family:var(--mono);font-size:.86em;background:var(--chip);padding:.08em .35em;border-radius:4px}
+a{color:var(--info)}
+.eyebrow{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600}
+header.doc-head{margin-bottom:1.4rem}
+dl.meta{display:flex;flex-wrap:wrap;gap:.4rem 2rem;margin:.8rem 0 0;padding:0}
+dl.meta div{display:flex;gap:.45rem}
+dl.meta dt{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0;align-self:center}
+dl.meta dd{margin:0;font-size:.9rem}
+.stats{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.2rem 0 0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.5rem .9rem;text-align:center}
+.stat b{display:block;font-size:1.25rem;color:var(--accent-text)}
+.stat span{font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+nav.toc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.9rem 1.2rem;margin:1.6rem 0}
+nav.toc ul{margin:.3rem 0 0;padding-left:1.1rem;columns:2;column-gap:2rem}
+nav.toc li{margin:.15rem 0;font-size:.9rem}
+table{border-collapse:collapse;width:100%;margin:.7rem 0 1.2rem;font-size:.9rem;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{border-top:1px solid var(--line);padding:.5rem .7rem;text-align:left;vertical-align:top}
+thead th{border-top:none;background:var(--chip);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+td:first-child{white-space:nowrap;font-family:var(--mono);font-size:.82rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:1rem 1.2rem;margin:.8rem 0}
+.card h3{margin-top:0}
+.ktd .eyebrow{color:var(--accent-text)}
+article.unit{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:1rem 1.2rem;margin:1rem 0}
+article.unit>h3{display:flex;align-items:center;gap:.6rem;margin:0 0 .6rem}
+.idchip{font-family:var(--mono);font-size:.78rem;font-weight:700;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:.15rem .6rem}
+.phasechip{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-left:auto}
+article.unit dl.strip{display:grid;grid-template-columns:max-content 1fr;gap:.25rem .9rem;margin:.4rem 0 .6rem;font-size:.9rem}
+article.unit dl.strip dt{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;padding-top:.15rem}
+article.unit dl.strip dd{margin:0}
+details{border-top:1px dashed var(--line);padding:.45rem 0 0;margin-top:.45rem}
+summary{cursor:pointer;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+details ul{margin:.4rem 0 .3rem}
+.callout{border-radius:10px;padding:.6rem .9rem;margin:.6rem 0;font-size:.9rem}
+.callout .eyebrow{display:block;margin-bottom:.15rem}
+.callout.exec{background:var(--warn-soft)}
+.callout.exec .eyebrow{color:var(--warn-text)}
+.callout.scope-in{background:var(--accent-soft)}
+.callout.scope-in .eyebrow{color:var(--accent-text)}
+.callout.scope-def{background:var(--info-soft)}
+.callout.scope-def .eyebrow{color:var(--info-text)}
+.callout.scope-out{background:var(--danger-soft)}
+.callout.scope-out .eyebrow{color:var(--danger-text)}
+.risk{border-radius:10px;padding:.6rem .9rem;margin:.6rem 0;background:var(--warn-soft)}
+.risk .eyebrow{color:var(--warn-text)}
+.risk.mit{background:var(--accent-soft)}
+.risk.mit .eyebrow{color:var(--accent-text)}
+ul.subnav{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem;padding:0;margin:.6rem 0 1rem}
+ul.subnav a{font-family:var(--mono);font-size:.76rem;text-decoration:none;background:var(--chip);color:var(--ink);border-radius:999px;padding:.2rem .65rem}
+figure{margin:1.2rem 0;overflow-x:auto}
+figure svg{max-width:100%;height:auto;display:block}
+figcaption{font-size:.8rem;color:var(--muted);margin-top:.3rem}
+footer.composition-signal{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+.svgbox{fill:var(--surface);stroke:var(--muted);stroke-width:1.2}
+.svgdec{fill:var(--warn-soft);stroke:var(--warn);stroke-width:1.2}
+.svgterm{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
+.svgbad{fill:var(--danger-soft);stroke:var(--danger);stroke-width:1.2}
+.svgt{font:12px var(--mono);fill:var(--ink)}
+.svgl{font:11px var(--mono);fill:var(--muted);paint-order:stroke fill;stroke:var(--bg);stroke-width:3px}
+.svga{stroke:var(--muted);stroke-width:1.3;fill:none;marker-end:url(#arr)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="doc-head">
+  <span class="eyebrow">Implementation plan · super-looper</span>
+  <h1>feat: Audit remediation — goal governance, learning gate, loop resume, hygiene, evals</h1>
+  <dl class="meta">
+    <div><dt>Type</dt><dd>feat</dd></div>
+    <div><dt>Date</dt><dd><time datetime="2026-07-04">2026-07-04</time></dd></div>
+    <div><dt>Depth</dt><dd>Deep, phased</dd></div>
+  </dl>
+  <div class="stats">
+    <div class="stat"><b>25</b><span>Requirements</span></div>
+    <div class="stat"><b>13</b><span>Units</span></div>
+    <div class="stat"><b>5</b><span>Phases</span></div>
+    <div class="stat"><b>3</b><span>Strategy tracks</span></div>
+  </div>
+</header>
+
+<nav class="toc">
+  <span class="eyebrow">Contents</span>
+  <ul>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#problem-frame">Problem Frame</a></li>
+    <li><a href="#requirements">Requirements</a></li>
+    <li><a href="#ktd">Key Technical Decisions</a></li>
+    <li><a href="#htd">High-Level Technical Design</a></li>
+    <li><a href="#units">Implementation Units</a></li>
+    <li><a href="#acceptance">Acceptance Examples</a></li>
+    <li><a href="#scope">Scope Boundaries</a></li>
+    <li><a href="#risks">Risks &amp; Dependencies</a></li>
+    <li><a href="#sources">Sources &amp; Research</a></li>
+  </ul>
+</nav>
+
+<section id="summary">
+<h2>Summary</h2>
+<p>Remediate the July 2026 audit findings across all three strategy tracks: a hard goal-drift guard in the loop driver (new exit code 8) backed by the plugin's first hook, a three-state evaluator gate on learning capture with confidence/provenance in the solutions schema, a run-progress file that lets retries resume instead of cold-restarting, a mechanical hygiene batch (manifests, dead CI, unwired agents, doc mirror, monolithic skills, beta twin), and behavioral eval suites for the four core skills. Every unit lands with contract-test verification under <code>bun test</code>.</p>
+</section>
+
+<section id="problem-frame">
+<h2>Problem Frame</h2>
+<p>An audit against current Anthropic guidance (context engineering, long-running-agent harnesses, agent skills, memory) found the loop mechanics strongly aligned but the governance layer soft. "Goals change only with human approval" is enforced by convention and the PR merge gate — nothing stops an unattended run from editing <code>STRATEGY.md</code> or the plan mid-run, and the <code>goal_fidelity</code> metric is uninstrumented. Learnings are written by the same agent that did the work; Anthropic's harness guidance is explicit that generators reliably over-praise their own output, so unverified learnings enter <code>docs/solutions/</code> as truth. Retries cold-restart from step 1 because lfg has no resume entry point, and lfg step 10 / sl-learn detect CI state via a fragile PR-body substring. Hygiene drift accumulated: stale manifest keywords, a dead docs workflow, two never-dispatched agents, a hand-maintained skills mirror with eight broken links, four monolithic skills, and a beta twin past its trial window. No behavioral evals exist for the load-bearing skills, so self-improvement is asserted rather than measured.</p>
+</section>
+
+<section id="requirements">
+<h2>Requirements</h2>
+
+<h3>Goal governance</h3>
+<table>
+<thead><tr><th>ID</th><th>Requirement</th><th>Covered by</th></tr></thead>
+<tbody>
+<tr id="r1"><td>R1.</td><td>loop.sh refuses to report success when <code>STRATEGY.md</code> or the plan file changed during a run: checksums snapshot at attempt start, re-verified on every <code>done_reached</code> path (DONE sentinel and the crash-reconciled open-PR route); mismatch exits 8 with run-record <code>typed_failure: "goal-drift"</code>.</td><td>U4</td></tr>
+<tr id="r2"><td>R2.</td><td>Drift reporting distinguishes modified vs deleted vs created-mid-run, in stderr and the run-record.</td><td>U4</td></tr>
+<tr id="r3"><td>R3.</td><td><code>STRATEGY.md</code> absent at start and end passes (sentinel hash); created mid-run is drift. Seed mode (no <code>--plan-file</code>) guards <code>STRATEGY.md</code> only.</td><td>U4</td></tr>
+<tr id="r4"><td>R4.</td><td>The plugin ships <code>hooks/hooks.json</code>: a PreToolUse deny on Write/Edit to paths named in <code>LOOP_GOAL_GUARD_PATHS</code>; the hook no-ops when the variable is unset; loop.sh forwards the variable with exact resolved paths through its <code>env -i</code> allowlist.</td><td>U5</td></tr>
+<tr id="r5"><td>R5.</td><td>The goal-change protocol is a written contract: autopilot never edits <code>STRATEGY.md</code> or the active plan; goal changes route through interactive <code>sl-strategy</code> or a human-approved plan revision. A source-grep contract test enforces the prose.</td><td>U6</td></tr>
+<tr id="r6"><td>R6.</td><td><code>goal_fidelity</code> is instrumented: each lfg run records a plan-vs-outcome verdict that reaches the run-record ledger; the metric leaves <code>pulse_pending_metrics</code>.</td><td>U9</td></tr>
+</tbody>
+</table>
+
+<h3>Learning quality</h3>
+<table>
+<thead><tr><th>ID</th><th>Requirement</th><th>Covered by</th></tr></thead>
+<tbody>
+<tr id="r7"><td>R7.</td><td>The solutions schema gains optional <code>confidence</code> (<code>verified</code> | <code>candidate</code>), <code>provenance</code> (<code>loop-run</code> | <code>interactive-session</code>), and <code>evidence</code> (pointer string) fields through the single-source pipeline (schema → doc-model → both render templates → emitted references). Legacy docs without the fields stay valid.</td><td>U10</td></tr>
+<tr id="r8"><td>R8.</td><td>sl-learn dispatches a fresh-context evaluator with an evidence packet (branch diff, commit log, CI timeline, transcript excerpts supporting the learning's claims). Verdict is three-state: verified / candidate / rejected.</td><td>U11</td></tr>
+<tr id="r9"><td>R9.</td><td>Rejected learnings are not committed; the rejection is recorded in the run-record, and sl-compound side effects (CONCEPTS.md, instruction-file edits) are reverted.</td><td>U11</td></tr>
+<tr id="r10"><td>R10.</td><td>Evaluator crash or timeout fails toward <code>candidate</code> — the learning commits labeled candidate, never silently verified and never dropped.</td><td>U11</td></tr>
+<tr id="r11"><td>R11.</td><td>sl-learnings-researcher ranks verified learnings above candidate ones and surfaces the confidence label in its output.</td><td>U11</td></tr>
+<tr id="r12"><td>R12.</td><td>Interactive <code>/sl-compound</code> marks <code>provenance: interactive-session</code> with no evaluator required (a human is present).</td><td>U11</td></tr>
+<tr id="r13"><td>R13.</td><td>sl-learn signals refresh-due when the corpus grew past the threshold since the last refresh; sl-compound-refresh gains an age/staleness review pass. Neither auto-dispatches a refresh.</td><td>U12</td></tr>
+</tbody>
+</table>
+
+<h3>Loop resume and context grounding</h3>
+<table>
+<thead><tr><th>ID</th><th>Requirement</th><th>Covered by</th></tr></thead>
+<tbody>
+<tr id="r14"><td>R14.</td><td>lfg writes a run-progress file at every step boundary (atomic tmp+rename) to a loop.sh-provided path outside the target tree, carrying step, plan path, branch, base ref, HEAD sha, step-9 fix-iteration counter and flaky dispositions, and residuals.</td><td>U7</td></tr>
+<tr id="r15"><td>R15.</td><td>On retry with no open PR, loop.sh validates the progress file (shape plus binding fields); valid → skip <code>reset_target</code>, check out the recorded branch, relaunch with a resume marker; invalid or missing → scrub and cold-restart. Resume covers steps 1–7 only; open-PR crash reconciliation stays authoritative.</td><td>U8</td></tr>
+<tr id="r16"><td>R16.</td><td>The progress file is scrubbed on every terminal path so stale state cannot seed a later run.</td><td>U8</td></tr>
+<tr id="r17"><td>R17.</td><td>lfg step 10 and sl-learn read the step-9 CI disposition from recorded progress state, replacing the <code>## CI Failures Unresolved</code> PR-body substring check as the machine signal (the PR-body section remains as the human-facing record).</td><td>U7</td></tr>
+<tr id="r18"><td>R18.</td><td>lfg gains a resume entry mode that re-verifies steps 1..N-1 postconditions (branch exists, plan gate passes, expected commits present) before continuing at step N, falling back to an honest no-DONE exit when they fail.</td><td>U8</td></tr>
+</tbody>
+</table>
+
+<h3>Hygiene</h3>
+<table>
+<thead><tr><th>ID</th><th>Requirement</th><th>Covered by</th></tr></thead>
+<tbody>
+<tr id="r19"><td>R19.</td><td>Manifest and CI cleanup: stale <code>plugin.json</code> keywords/description fixed; dead <code>deploy-docs.yml</code> removed; <code>coding_tutor</code> residue removed from <code>release-preview.yml</code>; <code>package.json</code> marked private dev-harness; stray <code>logs/</code> and <code>__pycache__</code> removed from the distributable and ignored; release-owned version fields untouched; <code>release:validate</code> closes its <code>plugin.json $.version</code> gap.</td><td>U1</td></tr>
+<tr id="r20"><td>R20.</td><td>The two unwired agents (<code>sl-ankane-readme-writer</code>, <code>sl-design-implementation-reviewer</code>) are retired, release metadata counts re-synced, and a fleet color validation test (on-palette + per-fleet distinctness) is added.</td><td>U2</td></tr>
+<tr id="r21"><td>R21.</td><td><code>docs/skills/</code> integrity: a generated index (frontmatter-derived, drift-tested) plus coverage and link-integrity contract tests; curated prose pages remain authoritative per plugin AGENTS.md; the seven undocumented skills get pages.</td><td>U3</td></tr>
+<tr id="r22"><td>R22.</td><td>The four monolithic skills (<code>sl-test-browser</code>, <code>sl-agent-native-audit</code>, <code>sl-frontend-design</code>, <code>sl-test-xcode</code>) move to progressive disclosure: load stubs in SKILL.md, detail in <code>references/</code>.</td><td>U2b</td></tr>
+<tr id="r23"><td>R23.</td><td><code>sl-work-beta</code> is promoted or retired, with every caller moved in the same change.</td><td>U2b</td></tr>
+</tbody>
+</table>
+
+<h3>Eval-driven improvement</h3>
+<ul>
+<li id="r24">R24. Behavioral eval suites (three or more scenarios each, one narrow load-bearing assumption per suite) exist for lfg, sl-work, sl-compound, and sl-code-review, following the <code>sl-sessions/evals/</code> structure and the skill-creator run workflow.</li>
+<li id="r25">R25. The learning→eval rule is written contract: when a learning identifies a skill gap, the fix PR includes or updates an eval.</li>
+</ul>
+</section>
+
+<section id="ktd">
+<h2>Key Technical Decisions</h2>
+
+<div class="card ktd"><span class="eyebrow">KTD1 · Guard authority</span>
+<p><strong>The checksum guard in loop.sh is authoritative; the hook is defense-in-depth.</strong> PreToolUse on Write/Edit misses Bash writes (<code>sed -i</code>, redirection) and worktree merges (subagent edits merge back via <code>git merge</code>, bypassing tool interception). Only an end-of-run hash comparison catches every mutation path. The hook's value is failing fast and teaching the agent the boundary mid-run.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD2 · Hook activation</span>
+<p><strong>The hook is env-gated via <code>LOOP_GOAL_GUARD_PATHS</code>, set only by loop.sh.</strong> Plugin hooks fire in every session that loads the plugin; an always-on deny would break <code>sl-strategy</code> (whose job is writing STRATEGY.md) and interactive plan editing. The variable carries exact resolved paths — never <code>docs/plans/**</code>, since seed-mode runs must let sl-plan create a plan.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD3 · Drift is terminal, not retryable</span>
+<p><strong>Drift detected at a <code>done_reached</code> path exits 8 immediately.</strong> Retries exist for crash-without-DONE; a run that reached DONE with a mutated goal is a completed-but-untrustworthy run, matching the exit-7 (done-but-red) semantics. Checksums re-snapshot per attempt after <code>reset_target</code> restores the committed base.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD4 · Three-state learning verdict</span>
+<p><strong>Evaluator verdicts are verified / candidate / rejected, not pass/fail.</strong> Refute-by-default on diff+CI evidence alone would systematically reject work-phase learnings (debugging detours with no CI trace) — the class sl-learn exists to capture. Only affirmative refutation blocks a commit; unconfirmable learnings commit as <code>candidate</code> with lower retrieval weight. User-confirmed 2026-07-04.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD5 · Progress file lives outside the target tree</span>
+<p><strong>loop.sh owns the progress-file path (under its log directory) and passes it to lfg via a prompt marker.</strong> In-target placement fails twice: <code>reset_target</code>'s <code>git clean -fd</code> deletes it on retry, and lfg step 8 "commit remaining changes" would sweep it into the PR. Matches the AGENTS.md scratch-space rule for cross-invocation state.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD6 · Resume scope is steps 1–7</span>
+<p><strong>Open-PR crash reconciliation keeps precedence; resume never fires once a PR exists.</strong> Post-PR resume would need the step-9 fix-iteration cap carried across attempts to avoid unbounded CI-fix looping — deferred. The counters are still recorded (R14) for observability and to power R17's substring-check replacement.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD7 · New exit path follows the run-record contract</span>
+<p><strong>Exit 8 extends the readonly block, the <code>emit_record</code> case map, the docs exit-code and typed_failure tables, and the operator wrapper capture in the same change.</strong> "The exit code is the API" — every terminal emits a run-record; failure records are the completion-rate denominator.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD8 · Generated index, curated pages</span>
+<p><strong>Only the <code>docs/skills/README.md</code> index is generated from frontmatter; per-skill pages stay hand-curated.</strong> Plugin AGENTS.md deliberately defines the mirror as high-level prose, not a SKILL.md mirror — full generation would be a convention change. Drift is killed where it is mechanical (coverage, links, descriptions) and left human where it is editorial.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD9 · Retire, don't merge, the reviewer fleets</span>
+<p><strong>Only the two genuinely unwired agents are removed.</strong> The wiring sweep showed the standalone analysts are all dispatched (sl-plan deepening, sl-compound validation) and the persona/analyst boundary is already documented in <code>persona-catalog.md</code>. A fleet merge would be scope without evidence of harm.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD10 · Schema fields are optional</span>
+<p><strong><code>confidence</code>/<code>provenance</code>/<code>evidence</code> join the shared block as optional fields.</strong> The six existing docs stay valid (absent = legacy); retrieval treats absent as candidate-equivalent. Avoids a migration commit and the partial-validator hazard.</p></div>
+
+<div class="card ktd"><span class="eyebrow">KTD11 · Evals go through the skill-creator workflow</span>
+<p><strong>Eval suites follow the <code>sl-sessions/evals/</code> three-file structure and run via the skill-creator iteration workflow</strong> — the AGENTS.md-mandated path for behavioral validation (plugin prose caches at session start; editing the cache is banned). Each suite tests one narrow load-bearing assumption, not general skill quality.</p></div>
+</section>
+
+<section id="htd">
+<h2>High-Level Technical Design</h2>
+
+<figure>
+<svg viewBox="0 0 880 300" role="img" aria-label="Goal-guard placement in the loop.sh terminal lattice">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/></marker></defs>
+<rect x="20" y="30" width="170" height="46" rx="8" class="svgbox"/>
+<text x="105" y="49" text-anchor="middle" class="svgt">attempt start</text>
+<text x="105" y="65" text-anchor="middle" class="svgl">snapshot sha256(STRATEGY.md, plan)</text>
+<rect x="20" y="130" width="170" height="40" rx="8" class="svgbox"/>
+<text x="105" y="154" text-anchor="middle" class="svgt">run lfg attempt</text>
+<polygon points="330,110 430,150 330,190 230,150" class="svgdec"/>
+<text x="330" y="147" text-anchor="middle" class="svgt">done_reached?</text>
+<text x="330" y="163" text-anchor="middle" class="svgl">DONE or open-PR-reconciled</text>
+<polygon points="560,110 660,150 560,190 460,150" class="svgdec"/>
+<text x="560" y="147" text-anchor="middle" class="svgt">hashes match?</text>
+<text x="560" y="163" text-anchor="middle" class="svgl">goal guard re-hash</text>
+<rect x="710" y="60" width="150" height="46" rx="8" class="svgterm"/>
+<text x="785" y="79" text-anchor="middle" class="svgt">verification</text>
+<text x="785" y="95" text-anchor="middle" class="svgl">target_ci_green → 0 / 7</text>
+<rect x="710" y="200" width="150" height="46" rx="8" class="svgbad"/>
+<text x="785" y="219" text-anchor="middle" class="svgt">exit 8 goal-drift</text>
+<text x="785" y="235" text-anchor="middle" class="svgl">emit_record, verification not-run</text>
+<rect x="230" y="230" width="200" height="40" rx="8" class="svgbox"/>
+<text x="330" y="254" text-anchor="middle" class="svgt">retry / resume lattice (D2)</text>
+<line x1="105" y1="76" x2="105" y2="130" class="svga"/>
+<line x1="190" y1="150" x2="230" y2="150" class="svga"/>
+<line x1="430" y1="150" x2="460" y2="150" class="svga"/>
+<text x="445" y="140" text-anchor="middle" class="svgl">yes</text>
+<line x1="330" y1="190" x2="330" y2="230" class="svga"/>
+<text x="345" y="215" class="svgl">no</text>
+<path d="M 620 126 Q 700 90 710 88" class="svga"/>
+<text x="668" y="98" text-anchor="middle" class="svgl">yes</text>
+<path d="M 620 174 Q 700 210 710 216" class="svga"/>
+<text x="668" y="207" text-anchor="middle" class="svgl">no</text>
+</svg>
+<figcaption>D1 — Goal guard sits between done_reached and verification; both DONE and the crash-reconciled open-PR route pass through it (R1).</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 880 320" role="img" aria-label="Retry and resume decision tree">
+<rect x="20" y="30" width="190" height="40" rx="8" class="svgbox"/>
+<text x="115" y="54" text-anchor="middle" class="svgt">attempt ends without DONE</text>
+<polygon points="330,30 420,70 330,110 240,70" class="svgdec"/>
+<text x="330" y="74" text-anchor="middle" class="svgt">open PR?</text>
+<rect x="480" y="20" width="180" height="46" rx="8" class="svgterm"/>
+<text x="570" y="39" text-anchor="middle" class="svgt">reconcile via PR</text>
+<text x="570" y="55" text-anchor="middle" class="svgl">verification-only (existing)</text>
+<polygon points="330,150 450,195 330,240 210,195" class="svgdec"/>
+<text x="330" y="190" text-anchor="middle" class="svgt">progress file valid?</text>
+<text x="330" y="206" text-anchor="middle" class="svgl">shape + run_id + base_ref + branch</text>
+<rect x="510" y="150" width="200" height="52" rx="8" class="svgterm"/>
+<text x="610" y="170" text-anchor="middle" class="svgt">resume at step N</text>
+<text x="610" y="188" text-anchor="middle" class="svgl">skip reset, checkout branch, 1..N-1 recheck</text>
+<rect x="510" y="240" width="200" height="52" rx="8" class="svgbox"/>
+<text x="610" y="260" text-anchor="middle" class="svgt">cold restart</text>
+<text x="610" y="278" text-anchor="middle" class="svgl">scrub file + reset_target</text>
+<rect x="40" y="240" width="150" height="46" rx="8" class="svgbad"/>
+<text x="115" y="259" text-anchor="middle" class="svgt">retries exhausted</text>
+<text x="115" y="275" text-anchor="middle" class="svgl">exit 5 (cap), scrub</text>
+<line x1="210" y1="50" x2="240" y2="65" class="svga"/>
+<line x1="420" y1="60" x2="480" y2="48" class="svga"/>
+<text x="450" y="44" text-anchor="middle" class="svgl">yes</text>
+<line x1="330" y1="110" x2="330" y2="150" class="svga"/>
+<text x="345" y="135" class="svgl">no</text>
+<line x1="450" y1="185" x2="510" y2="178" class="svga"/>
+<text x="480" y="172" text-anchor="middle" class="svgl">yes</text>
+<line x1="440" y1="215" x2="510" y2="255" class="svga"/>
+<text x="465" y="245" text-anchor="middle" class="svgl">no</text>
+<line x1="240" y1="215" x2="140" y2="240" class="svga"/>
+<text x="180" y="222" text-anchor="middle" class="svgl">attempt &gt; max</text>
+</svg>
+<figcaption>D2 — Resume fires only pre-PR with a validated progress file; every other path scrubs the file (R15, R16, KTD6).</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 880 260" role="img" aria-label="Learning verdict state machine">
+<rect x="20" y="100" width="180" height="52" rx="8" class="svgbox"/>
+<text x="110" y="120" text-anchor="middle" class="svgt">candidate learning</text>
+<text x="110" y="138" text-anchor="middle" class="svgl">sl-compound headless + evidence packet</text>
+<polygon points="360,80 470,126 360,172 250,126" class="svgdec"/>
+<text x="360" y="122" text-anchor="middle" class="svgt">fresh-context</text>
+<text x="360" y="138" text-anchor="middle" class="svgt">evaluator</text>
+<rect x="580" y="20" width="270" height="48" rx="8" class="svgterm"/>
+<text x="715" y="39" text-anchor="middle" class="svgt">commit confidence: verified</text>
+<text x="715" y="56" text-anchor="middle" class="svgl">evidence confirms claims</text>
+<rect x="580" y="106" width="270" height="48" rx="8" class="svgbox"/>
+<text x="715" y="125" text-anchor="middle" class="svgt">commit confidence: candidate</text>
+<text x="715" y="142" text-anchor="middle" class="svgl">unconfirmed, no contradiction · also evaluator crash/timeout</text>
+<rect x="580" y="192" width="270" height="48" rx="8" class="svgbad"/>
+<text x="715" y="211" text-anchor="middle" class="svgt">reject: no commit</text>
+<text x="715" y="228" text-anchor="middle" class="svgl">record in run-record, revert side effects</text>
+<line x1="200" y1="126" x2="250" y2="126" class="svga"/>
+<path d="M 430 100 Q 540 50 580 44" class="svga"/>
+<text x="510" y="62" text-anchor="middle" class="svgl">verified</text>
+<line x1="470" y1="126" x2="580" y2="128" class="svga"/>
+<text x="525" y="118" text-anchor="middle" class="svgl">candidate</text>
+<path d="M 430 152 Q 540 202 580 210" class="svga"/>
+<text x="510" y="196" text-anchor="middle" class="svgl">refuted</text>
+</svg>
+<figcaption>D3 — Three-state verdict (KTD4): only affirmative refutation blocks a commit; failures degrade to candidate, never to silent verified (R8–R10).</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 880 240" role="img" aria-label="Solutions schema propagation">
+<rect x="20" y="90" width="180" height="52" rx="8" class="svgterm"/>
+<text x="110" y="110" text-anchor="middle" class="svgt">src/solutions/schema.ts</text>
+<text x="110" y="128" text-anchor="middle" class="svgl">+ confidence, provenance, evidence</text>
+<rect x="260" y="30" width="170" height="44" rx="8" class="svgbox"/>
+<text x="345" y="49" text-anchor="middle" class="svgt">doc-model.ts</text>
+<text x="345" y="65" text-anchor="middle" class="svgl">FIELD_DESCRIPTIONS</text>
+<rect x="260" y="150" width="170" height="44" rx="8" class="svgbox"/>
+<text x="345" y="169" text-anchor="middle" class="svgt">validate.ts</text>
+<text x="345" y="185" text-anchor="middle" class="svgl">CI + sl-learn gate</text>
+<rect x="490" y="30" width="160" height="44" rx="8" class="svgbox"/>
+<text x="570" y="49" text-anchor="middle" class="svgt">emit.ts</text>
+<text x="570" y="65" text-anchor="middle" class="svgl">two render templates</text>
+<rect x="700" y="20" width="160" height="40" rx="8" class="svgbox"/>
+<text x="780" y="44" text-anchor="middle" class="svgt">sl-compound refs</text>
+<rect x="700" y="70" width="160" height="40" rx="8" class="svgbox"/>
+<text x="780" y="94" text-anchor="middle" class="svgt">sl-compound-refresh refs</text>
+<rect x="490" y="150" width="370" height="52" rx="8" class="svgterm"/>
+<text x="675" y="170" text-anchor="middle" class="svgt">consumers</text>
+<text x="675" y="188" text-anchor="middle" class="svgl">sl-learn evaluator gate · sl-learnings-researcher ranking</text>
+<line x1="200" y1="104" x2="260" y2="60" class="svga"/>
+<line x1="200" y1="128" x2="260" y2="165" class="svga"/>
+<line x1="430" y1="52" x2="490" y2="52" class="svga"/>
+<line x1="650" y1="42" x2="700" y2="38" class="svga"/>
+<line x1="650" y1="62" x2="700" y2="86" class="svga"/>
+<line x1="430" y1="176" x2="490" y2="176" class="svga"/>
+</svg>
+<figcaption>D4 — One schema source fans out; the emit-drift test fails CI until references are regenerated (R7, KTD10).</figcaption>
+</figure>
+</section>
+
+<section id="units">
+<h2>Implementation Units</h2>
+<p>Phased: A hygiene (U1–U3, independently landable) · B goal governance (U4–U6) · C resume (U7–U9) · D learning gate (U10–U12) · E evals (U13). Phase A has no dependencies and can ship first; B–D are ordered internally but independent of each other; E lands last so eval assumptions match the new behavior.</p>
+<ul class="subnav">
+<li><a href="#u1">U1</a></li><li><a href="#u2">U2</a></li><li><a href="#u2b">U2b</a></li><li><a href="#u3">U3</a></li>
+<li><a href="#u4">U4</a></li><li><a href="#u5">U5</a></li><li><a href="#u6">U6</a></li>
+<li><a href="#u7">U7</a></li><li><a href="#u8">U8</a></li><li><a href="#u9">U9</a></li>
+<li><a href="#u10">U10</a></li><li><a href="#u11">U11</a></li><li><a href="#u12">U12</a></li><li><a href="#u13">U13</a></li>
+</ul>
+
+<article class="unit" id="u1">
+<h3><span class="idchip">U1</span> Manifest, CI, and packaging cleanup <span class="phasechip">Phase A</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Remove stale and dead packaging artifacts without touching release-owned version fields.</dd>
+<dt>Requirements</dt><dd>R19</dd>
+<dt>Dependencies</dt><dd>none</dd>
+<dt>Files</dt><dd><code>plugins/super-looper/.claude-plugin/plugin.json</code> (keywords, description — content only), <code>.github/workflows/deploy-docs.yml</code> (delete), <code>.github/workflows/release-preview.yml</code>, <code>package.json</code>, <code>.gitignore</code>, remove <code>plugins/super-looper/logs/</code>, <code>plugins/super-looper/skills/logs/</code>, <code>plugins/super-looper/skills/sl-resolve-pr-feedback/logs/</code>, <code>plugins/super-looper/skills/sl-sessions/scripts/__pycache__/</code>, <code>src/release/</code> (version-gap check), existing release-validate tests</dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>Drop <code>python</code>/<code>image-generation</code> keywords and the image-generation description clause; never touch <code>$.version</code> (release-please owns it; the <code>release-as: 1.0.3</code> pin is active).</li>
+<li>Delete <code>deploy-docs.yml</code> — it watches <code>plugins/super-looper/docs/**</code>, which has never existed.</li>
+<li>Remove the <code>coding_tutor_bump</code> input and related steps from <code>release-preview.yml</code>.</li>
+<li>Mark <code>package.json</code> <code>"private": true</code>; leave its version untouched to avoid churn.</li>
+<li>Remove tracked log/cache dirs from the distributable; add ignore rules so they cannot return.</li>
+<li>Close the documented validator gap: <code>release:validate</code> also asserts <code>plugin.json $.version</code> matches the release-please manifest.</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Hand-bumped <code>plugin.json $.version</code> vs manifest → <code>release:validate</code> exits non-zero (new check).</li>
+<li>Source-grep: no <code>logs/</code> or <code>__pycache__</code> paths tracked under <code>plugins/super-looper/</code>.</li>
+<li><code>claude plugin validate</code> passes after keyword/description edits.</li>
+<li>Test expectation for workflow deletions: none — dead YAML removal, verified by CI still green.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code>, <code>bun run release:validate</code>, and the CI plugin-validate step all green on the PR.</li></ul></details>
+</article>
+
+<article class="unit" id="u2">
+<h3><span class="idchip">U2</span> Retire unwired agents; add fleet color validation <span class="phasechip">Phase A</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Remove the two agents nothing dispatches; make agent color conventions machine-enforced.</dd>
+<dt>Requirements</dt><dd>R20</dd>
+<dt>Dependencies</dt><dd>none</dd>
+<dt>Files</dt><dd>delete <code>plugins/super-looper/agents/sl-ankane-readme-writer.md</code>, <code>plugins/super-looper/agents/sl-design-implementation-reviewer.md</code>; <code>docs/skills/sl-frontend-design.md</code> (drop the descriptive mention); new <code>tests/agent-color-palette.test.ts</code>; re-run release metadata sync</dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>Wiring sweep (2026-07-04) found zero dispatch references for both agents across all SKILL.md and references files; persona/analyst overlap elsewhere is a documented role boundary (<code>persona-catalog.md</code>) — no merge (KTD9).</li>
+<li>Color test clones the <code>tests/skill-agent-sl-prefix.test.ts</code> pattern: every agent <code>color</code> is on the 8-value palette; per-fleet distinctness verified against the co-dispatch map from the dispatching skills, honoring the tier-sharing rule for fleets larger than the palette (per the agent-color solution doc — this closes its deferred follow-up).</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Off-palette color value in any agent file → test fails naming the agent.</li>
+<li>Two agents in the same co-dispatched fleet sharing a color (below palette capacity) → test fails.</li>
+<li>Source-grep: no remaining references to the two deleted agent names anywhere in the plugin.</li>
+<li>Release metadata agent count matches the directory count after retirement.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; <code>release:validate</code> count sync passes.</li></ul></details>
+</article>
+
+<article class="unit" id="u2b">
+<h3><span class="idchip">U2b</span> Progressive disclosure + beta-twin resolution <span class="phasechip">Phase A</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Refactor the four monolithic skills to load-stub + references form; promote or retire sl-work-beta.</dd>
+<dt>Requirements</dt><dd>R22, R23</dd>
+<dt>Dependencies</dt><dd>none</dd>
+<dt>Files</dt><dd><code>plugins/super-looper/skills/sl-test-browser/</code>, <code>plugins/super-looper/skills/sl-agent-native-audit/</code>, <code>plugins/super-looper/skills/sl-frontend-design/</code>, <code>plugins/super-looper/skills/sl-test-xcode/</code> (each gains <code>references/</code>); <code>plugins/super-looper/skills/sl-work/</code>, <code>plugins/super-looper/skills/sl-work-beta/</code> (diff + resolve), <code>plugins/super-looper/skills/lfg/SKILL.md</code> and <code>plugins/super-looper/skills/sl-dogfood-beta/</code> (callers), <code>tests/skill-conventions.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>Refactor to the CONCEPTS.md "Load stub" bar: SKILL.md keeps orchestration plus load instructions that name what each reference contains and the failure mode of skipping it; no improvisable detail stays inline. Mirror the existing sl-code-review / sl-plan shape; respect skill self-containment (references only inside the skill's own dir).</li>
+<li>Beta twin: diff <code>sl-work-beta</code> against <code>sl-work</code>; fold proven deltas into <code>sl-work</code> and retire the beta, or retire it unchanged if the deltas were abandoned. Per CONCEPTS.md, promotion is an orchestration change: move every caller in the same commit (lfg, sl-dogfood-beta, any references).</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Skill-conventions test still passes for the four refactored skills (self-containment, sl- prefix).</li>
+<li>Source-grep: no caller references <code>sl-work-beta</code> after resolution.</li>
+<li>Each refactored SKILL.md drops below 250 lines with references present (checked in review, not a hard test).</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; a smoke invocation of one refactored skill confirms references load.</li></ul></details>
+</article>
+
+<article class="unit" id="u3">
+<h3><span class="idchip">U3</span> docs/skills generated index + integrity tests <span class="phasechip">Phase A</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Kill mechanical mirror drift while preserving the curated-prose convention.</dd>
+<dt>Requirements</dt><dd>R21</dd>
+<dt>Dependencies</dt><dd>none</dd>
+<dt>Files</dt><dd><code>docs/skills/README.md</code> (becomes generated), seven new curated pages (lfg, sl-agent-native-architecture, sl-agent-native-audit, sl-dhh-rails-style, sl-dogfood-beta, sl-learn, sl-work-beta — adjusted for U2b's beta outcome), new <code>src/docs/emit-skills-index.ts</code> + thin shell <code>scripts/docs/emit-skills-index.ts</code>, new <code>tests/docs-skills-index.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>Index generated from SKILL.md frontmatter (name, one-line description, page link) with the <code>GENERATED FILE</code> header; committed copy equals generator output (clone the solutions emit-drift pattern, one code path for <code>--write</code>/<code>--check</code>).</li>
+<li>Coverage test: one page per skill directory. Link test: every index link resolves to an existing file (fixes the eight currently-broken links).</li>
+<li>Pages stay hand-written per plugin AGENTS.md (KTD8); new pages are short purpose/novel-mechanics prose, not SKILL.md dumps.</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Skill dir without a page → coverage test fails naming the skill.</li>
+<li>Index link to a missing file → link test fails.</li>
+<li>Schema-visible frontmatter change without regen → drift test fails until <code>bun run docs:emit-index</code>.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; rendered index lists all skills with working links.</li></ul></details>
+</article>
+
+<article class="unit" id="u4">
+<h3><span class="idchip">U4</span> loop.sh goal-drift guard, exit 8 <span class="phasechip">Phase B</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Make goal mutation during an unattended run a first-class, observable failure.</dd>
+<dt>Requirements</dt><dd>R1, R2, R3</dd>
+<dt>Dependencies</dt><dd>none</dd>
+<dt>Files</dt><dd><code>scripts/loop.sh</code>, <code>docs/loop-driver.md</code>, <code>tests/loop-driver.test.ts</code>, <code>scripts/append-run-record.sh</code> (verify capture)</dd>
+</dl>
+<div class="callout exec"><span class="eyebrow">Execution note</span>Write the failing contract tests for each guard path first — the failure-path records are the metric denominator (set-e-wrapper learning).</div>
+<details><summary>Approach</summary>
+<ul>
+<li><code>EX_GOAL_DRIFT=8</code> joins the readonly block; <code>emit_record</code> maps it to <code>typed_failure: "goal-drift"</code>; docs tables extend; wrapper capture pattern confirmed for the new code (KTD7).</li>
+<li>Snapshot sha256 of <code>STRATEGY.md</code> and the resolved plan file per attempt, after any <code>reset_target</code> (KTD3). Absent STRATEGY.md hashes to a sentinel; seed mode snapshots STRATEGY.md only.</li>
+<li>Re-hash on every <code>done_reached</code> path before verification (D1) — the crash-reconciled open-PR route included. Mismatch: multi-line stderr naming the file and change kind (modified / deleted / created), record with <code>verification_result: "not-run"</code>, exit 8. Mirror the isolation guard's structure.</li>
+</ul>
+</details>
+<details><summary>Test scenarios (stub-seam driven: LOOP_CLAUDE_BIN / LOOP_GH_BIN)</summary>
+<ul>
+<li>Stub mutates the plan file then emits DONE → exit 8, stderr contains <code>goal drift</code>, record has <code>typed_failure: "goal-drift"</code> and <code>verification_result: "not-run"</code>.</li>
+<li>Stub deletes the plan file → exit 8 with "deleted" wording (distinct from modified).</li>
+<li>No STRATEGY.md at start or end → guard passes, run proceeds to verification.</li>
+<li>Stub creates STRATEGY.md mid-run → exit 8 with "created" wording.</li>
+<li>Crash without DONE, open PR exists, plan mutated → reconciled route still exits 8.</li>
+<li>Usage error (exit 2) writes no run-record — symmetry with existing behavior.</li>
+<li>Operator wrapper (<code>append-run-record.sh</code>) captures an exit-8 run into the ledger.</li>
+</ul>
+</details>
+<details><summary>Patterns to follow</summary><ul><li>Isolation guard structure (<code>canon()</code>, stderr explanation, <code>emit_record || true</code>, exit) at <code>scripts/loop.sh:379-395</code>; test shape from the isolation describe block in <code>tests/loop-driver.test.ts</code>.</li></ul></details>
+<details><summary>Verification</summary><ul><li>New describe block green in <code>bun test</code>; <code>docs/loop-driver.md</code> exit-code and typed_failure tables list 8.</li></ul></details>
+</article>
+
+<article class="unit" id="u5">
+<h3><span class="idchip">U5</span> Plugin goal-guard hook <span class="phasechip">Phase B</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Fail goal-file writes fast inside unattended sessions — the plugin's first hook surface.</dd>
+<dt>Requirements</dt><dd>R4</dd>
+<dt>Dependencies</dt><dd>U4</dd>
+<dt>Files</dt><dd>new <code>plugins/super-looper/hooks/hooks.json</code>, new <code>plugins/super-looper/hooks/goal-guard.sh</code>, <code>scripts/loop.sh</code> (forward <code>LOOP_GOAL_GUARD_PATHS</code> through the <code>env -i</code> allowlist), new <code>tests/hooks-goal-guard.test.ts</code>, release metadata if surface counts validate</dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>PreToolUse matcher on Write|Edit; the script exits 0 immediately when <code>LOOP_GOAL_GUARD_PATHS</code> is unset (interactive sessions, sl-strategy unaffected — KTD2); exits 2 with a protocol message when the tool's target canonicalizes to a listed path.</li>
+<li>loop.sh sets the variable to the exact resolved STRATEGY.md and plan paths — never a glob; seed-mode runs list STRATEGY.md only so sl-plan can create the plan.</li>
+<li>hooks.json shape per the vendored spec (<code>docs/specs/claude-code.md</code>): hooks live at plugin root, not <code>.claude-plugin/</code>. Document in the hook script header that the U4 checksum is authoritative and this hook is defense-in-depth (KTD1).</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Script with env unset, any tool input → exit 0.</li>
+<li>Env set, Write targeting the listed plan path (including via a relative/symlinked variant) → exit 2 with the protocol message.</li>
+<li>Env set, Write targeting <code>docs/plans/</code> sibling file → exit 0 (exact-path scope).</li>
+<li>hooks.json parses and declares the expected event/matcher shape (contract test).</li>
+<li><code>claude plugin validate</code> accepts the plugin with the new hooks dir.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; one manual dogfood run confirms an unattended session gets denied on a STRATEGY.md edit while an interactive session is unaffected.</li></ul></details>
+</article>
+
+<article class="unit" id="u6">
+<h3><span class="idchip">U6</span> Goal-change protocol as written contract <span class="phasechip">Phase B</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Make "goals change only with human approval" a documented, grep-testable contract.</dd>
+<dt>Requirements</dt><dd>R5</dd>
+<dt>Dependencies</dt><dd>U4 (names the guard and exit code)</dd>
+<dt>Files</dt><dd><code>AGENTS.md</code>, <code>plugins/super-looper/skills/lfg/SKILL.md</code>, <code>CONCEPTS.md</code> (new "Goal guard" entry), new <code>tests/goal-protocol-contract.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>Contract language: autopilot (lfg and any skill in unattended mode) never edits STRATEGY.md or the active plan document; goal changes route through interactive <code>sl-strategy</code> or a human-approved plan revision before a new run.</li>
+<li>CONCEPTS.md entry defines Goal guard as the harness checksum + hook pair with exit 8 semantics, cross-linking Give-up floor.</li>
+<li>Source-grep contract test asserts the lfg prose carries the never-edit contract (pattern: <code>tests/loop-debug-escalation-contract.test.ts</code>).</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Removing the contract sentence from lfg SKILL.md → contract test fails.</li>
+<li>Test expectation for AGENTS.md/CONCEPTS.md prose: none — editorial content, verified in review.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; CONCEPTS.md entry follows existing glossary format.</li></ul></details>
+</article>
+
+<article class="unit" id="u7">
+<h3><span class="idchip">U7</span> Run-progress file: lfg step-boundary writes <span class="phasechip">Phase C</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Give the harness a structured, trustworthy record of how far a run got — and replace the fragile CI-red substring signal.</dd>
+<dt>Requirements</dt><dd>R14, R17</dd>
+<dt>Dependencies</dt><dd>none (marker format defined here; U8 consumes)</dd>
+<dt>Files</dt><dd><code>plugins/super-looper/skills/lfg/SKILL.md</code>, new <code>plugins/super-looper/skills/lfg/references/progress-file.md</code>, <code>plugins/super-looper/skills/sl-learn/SKILL.md</code>, new <code>tests/lfg-progress-contract.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>loop.sh passes the path via a <code>progress:&lt;path&gt;</code> prompt marker (same shape as <code>plan:</code>/handoff). No marker → interactive run → no writes.</li>
+<li>JSON fields: schema version, run id, attempt, current step, plan path, branch, base ref, HEAD sha at boundary, step-9 fix-iteration counter and per-check flaky dispositions, residual-findings pointer, updated-at. Written atomically (tmp + rename) at each step boundary — the reference file carries the exact contract.</li>
+<li>lfg step 10 and sl-learn read the recorded step-9 disposition instead of grepping the PR body for <code>## CI Failures Unresolved</code> (closes the documented false-positive from the bounded-escalation-rung learning). The PR-body section stays as the human-facing record.</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Source-grep: lfg prose contains the write-at-boundary contract, the atomic-rename instruction, and the <code>progress:</code> marker gate.</li>
+<li>Source-grep: sl-learn and lfg step 10 no longer use the PR-body substring as the machine gate.</li>
+<li>Reference file documents every schema field listed above (field-presence grep).</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; a dogfood run under loop.sh leaves a well-formed progress file in the log dir.</li></ul></details>
+</article>
+
+<article class="unit" id="u8">
+<h3><span class="idchip">U8</span> loop.sh resume consumption <span class="phasechip">Phase C</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Retries resume at the failed step instead of cold-restarting — without weakening any existing invariant.</dd>
+<dt>Requirements</dt><dd>R15, R16, R18</dd>
+<dt>Dependencies</dt><dd>U7</dd>
+<dt>Files</dt><dd><code>scripts/loop.sh</code>, <code>docs/loop-driver.md</code>, <code>plugins/super-looper/skills/lfg/SKILL.md</code> (resume entry mode), <code>tests/loop-driver.test.ts</code></dd>
+</dl>
+<div class="callout exec"><span class="eyebrow">Execution note</span>Failing tests first for the poisoned-file paths — a stale progress file faking a resume point is the failure mode to design against (quiescence-gate learning: gate on what the signal proves).</div>
+<details><summary>Approach</summary>
+<ul>
+<li>Retry branch (no open PR): validate the progress file — <code>jq -e</code> shape check plus binding fields (run id matches this run, attempt below current, base ref equal, recorded branch exists, HEAD sha reachable). Valid → skip <code>reset_target</code>, check out the recorded branch, relaunch with a <code>resume:&lt;path&gt;</code> marker. Any validation failure → scrub the file, <code>reset_target</code>, cold restart (D2).</li>
+<li>lfg resume mode (third input mode beside seed/plan): re-verify steps 1..N-1 postconditions cheaply; on mismatch, record the discrepancy in the progress file and exit without DONE — the next retry cold-restarts. The "execute every step in order" header gets an explicit resume carve-out.</li>
+<li>Scrub the progress file at every terminal (all <code>emit_record</code> sites) and before every cold restart. Resume never fires when a PR exists — reconciliation precedence unchanged (KTD6). Give-up floor untouched: retries still cap at <code>--max-retries</code>, exit 5.</li>
+</ul>
+</details>
+<details><summary>Test scenarios (stub-seam driven)</summary>
+<ul>
+<li>Crash at step 5 with valid progress file → second attempt skips reset (tree state preserved by stub assertion) and its prompt contains the resume marker.</li>
+<li>Corrupt JSON / wrong run id / missing branch → cold restart, file scrubbed, no resume marker.</li>
+<li>Open PR + valid progress file → verification-only route; resume does not fire.</li>
+<li>Successful run → progress file gone at exit.</li>
+<li>Retries exhausted with a valid file → exit 5, file scrubbed, run-record emitted.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li>New resume describe block green; <code>docs/loop-driver.md</code> documents the resume lattice and scrub rule.</li></ul></details>
+</article>
+
+<article class="unit" id="u9">
+<h3><span class="idchip">U9</span> goal_fidelity instrumentation <span class="phasechip">Phase C</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Turn the strategy's uninstrumented headline metric into ledger data.</dd>
+<dt>Requirements</dt><dd>R6</dd>
+<dt>Dependencies</dt><dd>U7 (progress file), U4 (record plumbing precedent)</dd>
+<dt>Files</dt><dd><code>plugins/super-looper/skills/lfg/SKILL.md</code>, <code>scripts/loop.sh</code> (<code>emit_record</code> lifts the field), <code>docs/loop-driver.md</code>, <code>plugins/super-looper/skills/sl-product-pulse/</code> (metric-source mapping), config example comments</dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>lfg step 5 distills the step-4 review (which already receives <code>plan:&lt;path&gt;</code> and checks requirements completeness) into a fidelity verdict — <code>met</code> / <code>partial</code> / <code>drifted</code> plus uncovered requirement IDs — written to the progress file; <code>emit_record</code> copies it into the run-record, the ledger aggregates it. Semi-automated by design, matching the STRATEGY.md metric definition.</li>
+<li>Pulse wiring: map <code>goal_fidelity</code> to the ledger source and drop it from the pending-metrics guidance.</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Progress file carrying a fidelity verdict → run-record includes it verbatim.</li>
+<li>No verdict recorded → run-record field is null; nothing fabricated ("no data" stays honest).</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; a dogfood ledger line shows the field.</li></ul></details>
+</article>
+
+<article class="unit" id="u10">
+<h3><span class="idchip">U10</span> Solutions schema: confidence, provenance, evidence <span class="phasechip">Phase D</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Give learnings a machine-readable trust label through the single-source schema.</dd>
+<dt>Requirements</dt><dd>R7</dd>
+<dt>Dependencies</dt><dd>none</dd>
+<dt>Files</dt><dd><code>src/solutions/schema.ts</code>, <code>src/solutions/doc-model.ts</code>, <code>src/solutions/emit.ts</code> (both templates), regenerated references under <code>plugins/super-looper/skills/sl-compound/references/</code> and <code>plugins/super-looper/skills/sl-compound-refresh/references/</code>, <code>tests/solutions-schema.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>Three optional fields in the shared block (both tracks): <code>confidence</code> enum, <code>provenance</code> enum, <code>evidence</code> free-form pointer (PR URL or commit sha). Absent = legacy, treated as candidate-equivalent by consumers (KTD10).</li>
+<li>Descriptions in <code>FIELD_DESCRIPTIONS</code>; both render templates updated; <code>bun run solutions:emit</code> regenerates — the drift test forces this in the same PR (D4).</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Fixture with <code>confidence: verified</code> + <code>provenance: loop-run</code> + evidence → valid on both tracks.</li>
+<li>Invalid enum value (<code>confidence: high</code>) → rejected with a field error.</li>
+<li>Legacy fixture without the fields → still valid.</li>
+<li>Emit-drift and cross-copy identity tests pass after regeneration.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; existing six docs validate unchanged.</li></ul></details>
+</article>
+
+<article class="unit" id="u11">
+<h3><span class="idchip">U11</span> Evaluator gate in sl-learn <span class="phasechip">Phase D</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Separate the generator from the evaluator on the learning write path.</dd>
+<dt>Requirements</dt><dd>R8, R9, R10, R11, R12</dd>
+<dt>Dependencies</dt><dd>U10</dd>
+<dt>Files</dt><dd>new <code>plugins/super-looper/agents/sl-learning-evaluator.md</code>, <code>plugins/super-looper/skills/sl-learn/SKILL.md</code>, <code>plugins/super-looper/skills/sl-compound/SKILL.md</code> (headless evidence assembly + provenance marking), <code>plugins/super-looper/agents/sl-learnings-researcher.md</code> (confidence weighting), new <code>tests/learn-evaluator-contract.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>sl-learn assembles the evidence packet: branch diff, commit log, CI check timeline, and transcript excerpts the generator selects to support each claim (the evaluator weighs them as claims, not truth).</li>
+<li>New agent runs fresh-context (generation model tier, palette-compliant color, no hot session state) and returns one of three verdicts (D3). Verified and candidate commit with the matching <code>confidence</code> value, <code>provenance: loop-run</code>, and the evidence pointer; rejected reverts the learning plus any CONCEPTS.md/instruction-file edits and records the rejection for the run-record.</li>
+<li>Evaluator crash or timeout → commit as candidate (R10). Interactive <code>/sl-compound</code> marks <code>provenance: interactive-session</code>, no evaluator (R12). sl-learnings-researcher ranks verified above candidate and names the label in output (R11).</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Source-grep: sl-learn prose carries the three-state contract, fail-toward-candidate, and revert-on-reject.</li>
+<li>New agent file exists, sl- prefixed, on-palette color (picked up by U2's color test).</li>
+<li>Source-grep: sl-learnings-researcher mentions confidence weighting.</li>
+<li>Frontmatter produced by the sl-compound flow validates against U10's schema (fixture through <code>solutions:validate</code>).</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; one dogfood run produces a learning with confidence + provenance + evidence set.</li></ul></details>
+</article>
+
+<article class="unit" id="u12">
+<h3><span class="idchip">U12</span> Refresh threshold + staleness pass <span class="phasechip">Phase D</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Keep the learning store bounded and prunable without adding autonomous refresh runs.</dd>
+<dt>Requirements</dt><dd>R13</dd>
+<dt>Dependencies</dt><dd>U10, U11</dd>
+<dt>Files</dt><dd><code>plugins/super-looper/skills/sl-learn/SKILL.md</code>, <code>plugins/super-looper/skills/sl-compound-refresh/SKILL.md</code>, extend <code>tests/learn-evaluator-contract.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>sl-learn counts corpus growth since the last refresh (refresh stamps its run date in the corpus-map header it already maintains); past the threshold (default 10 new learnings) it appends a refresh-due note to the PR body and run-record. It never dispatches the refresh itself — bounded autonomy.</li>
+<li>sl-compound-refresh gains an explicit staleness pass: entries older than the age threshold (default 90 days) or contradicting current code get flagged for consolidate/update/delete — sharpening its existing consolidation mandate with age criteria.</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Source-grep: sl-learn carries the threshold rule and the no-auto-dispatch constraint.</li>
+<li>Source-grep: sl-compound-refresh names the age threshold and the flag-for-review behavior.</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green.</li></ul></details>
+</article>
+
+<article class="unit" id="u13">
+<h3><span class="idchip">U13</span> Behavioral eval suites + learning→eval rule <span class="phasechip">Phase E</span></h3>
+<dl class="strip">
+<dt>Goal</dt><dd>Make self-improvement measurable: evals as the source of truth for the four load-bearing skills.</dd>
+<dt>Requirements</dt><dd>R24, R25</dd>
+<dt>Dependencies</dt><dd>lands after Phases B–D so eval assumptions match shipped behavior</dd>
+<dt>Files</dt><dd>new <code>evals/evals.json</code>, <code>evals/grader.md</code>, <code>evals/README.md</code> under each of <code>plugins/super-looper/skills/lfg/</code>, <code>plugins/super-looper/skills/sl-work/</code>, <code>plugins/super-looper/skills/sl-compound/</code>, <code>plugins/super-looper/skills/sl-code-review/</code>; <code>plugins/super-looper/skills/sl-compound/SKILL.md</code> + <code>AGENTS.md</code> (learning→eval rule); new <code>tests/skill-evals-shape.test.ts</code></dd>
+</dl>
+<details><summary>Approach</summary>
+<ul>
+<li>One narrow load-bearing assumption per suite: lfg — step-order and gate compliance in plan-input mode, including never editing goal files; sl-work — plan-scope authority (no scope invention in unattended mode); sl-compound — schema-valid frontmatter and correct track routing; sl-code-review — plan-requirements completeness verification (the input to goal_fidelity).</li>
+<li>Each suite: three or more scenarios with tiered expected terms plus one negative case, <code>runs_per_eval: 3</code>, two-stage grader, ground truth pinned — cloning the <code>sl-sessions/evals/</code> file shapes. Run via the skill-creator workflow in <code>/tmp/super-looper/&lt;skill&gt;/evals/</code> (KTD11).</li>
+<li>Learning→eval rule added to sl-compound prose and the AGENTS.md behavioral-validation section: a learning that identifies a skill gap obligates the fix PR to add or update an eval.</li>
+</ul>
+</details>
+<details><summary>Test scenarios</summary>
+<ul>
+<li>Shape test: every suite's <code>evals.json</code> carries the required keys (skill_name, variance_protocol, grading_pipeline, evals with prompt/expected_terms/ground_truth) — missing key fails naming the suite.</li>
+<li>Source-grep: sl-compound and AGENTS.md carry the learning→eval rule.</li>
+<li>Test expectation for eval content quality: none mechanical — validated by running the suites via skill-creator (variance protocol is the check).</li>
+</ul>
+</details>
+<details><summary>Verification</summary><ul><li><code>bun test</code> green; each suite executed once end-to-end with passing variance before merge.</li></ul></details>
+</article>
+</section>
+
+<section id="acceptance">
+<h2>Acceptance Examples</h2>
+<table>
+<thead><tr><th>ID</th><th>Given / When / Then</th></tr></thead>
+<tbody>
+<tr id="ae1"><td>AE1.</td><td>Plan-input run; the agent edits the plan file mid-run and emits DONE → loop.sh exits 8, run-record shows <code>typed_failure: "goal-drift"</code>, verification never ran.</td></tr>
+<tr id="ae2"><td>AE2.</td><td>Target repo with no STRATEGY.md, none created during the run → guard passes; outcome decided by verification alone.</td></tr>
+<tr id="ae3"><td>AE3.</td><td>No STRATEGY.md at start; the agent creates one mid-run → exit 8 with "created" wording.</td></tr>
+<tr id="ae4"><td>AE4.</td><td>Seed-mode run; sl-plan writes a new plan under <code>docs/plans/</code> → no drift, and the hook does not deny the creation (exact-path scope, STRATEGY.md-only snapshot).</td></tr>
+<tr id="ae5"><td>AE5.</td><td>Crash at step 5, no PR, valid progress file → next attempt resumes at step 5 on the recorded branch without a tree reset; with a corrupt file, it scrubs and cold-restarts.</td></tr>
+<tr id="ae6"><td>AE6.</td><td>Crash after the PR opened, valid progress file present → verification-only reconciliation; resume does not fire; file scrubbed at exit.</td></tr>
+<tr id="ae7"><td>AE7.</td><td>Evaluator affirmatively refutes a learning's root-cause claim → no learning commit, CONCEPTS.md edit reverted, rejection noted in the run-record; the run still reaches DONE.</td></tr>
+<tr id="ae8"><td>AE8.</td><td>Evaluator times out → the learning commits with <code>confidence: candidate</code> and <code>provenance: loop-run</code>.</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="scope">
+<h2>Scope Boundaries</h2>
+<div class="callout scope-out"><span class="eyebrow">Outside this work's identity</span>
+No auto-merge (the human PR gate is the product's binding non-goal). No semantic/RAG retrieval for learnings (grep-over-frontmatter stays). No live end-to-end lfg integration test (<code>docs/loop-driver-acceptance.md</code> remains the manual smoke). No persona/analyst fleet merge (KTD9). No HTML support in sl-doc-review.</div>
+<div class="callout scope-def"><span class="eyebrow">Deferred to follow-up work</span>
+Post-PR (step 8–9) resume with cross-attempt fix-iteration caps (KTD6). <code>sl-plan</code> 794-line SKILL.md skim for inline bulk that could move to references. Full generation of docs/skills prose pages (only if the curated convention is ever abandoned). Automated goal-fidelity scoring beyond the review-derived verdict.</div>
+</section>
+
+<section id="risks">
+<h2>Risks &amp; Dependencies</h2>
+<div class="risk mit"><span class="eyebrow">Risk · Mitigated</span> <strong>Stale progress file fakes a resume point.</strong> Shape + binding-field validation, scrub-on-every-terminal, and fail-safe cold restart (U8); resume never overrides the PR-reconciliation or retry caps, so the give-up floor is intact.</div>
+<div class="risk mit"><span class="eyebrow">Risk · Mitigated</span> <strong>New exit code breaks the observability contract.</strong> Exit 8 lands in the readonly block, <code>emit_record</code>, both docs tables, and the wrapper capture in one unit (U4/KTD7) with failure-path tests written first.</div>
+<div class="risk"><span class="eyebrow">Risk · Open</span> <strong>First plugin hook surface.</strong> The pinned CI validator (<code>claude plugin validate @2.1.175</code>) and <code>release:validate</code> surface counts may react to a new <code>hooks/</code> dir — U5 verifies both; if the pinned CLI rejects hooks, bump the pin in the same PR.</div>
+<div class="risk"><span class="eyebrow">Risk · Open</span> <strong>Evaluator cost/latency inside the attempt wall-clock.</strong> A slow evaluator can push a green run into timeout after the PR opened (learning silently lost via reconciliation). Accepted for now: the window exists today; fail-toward-candidate keeps the loss honest. Revisit if dogfood runs show it firing.</div>
+<div class="risk"><span class="eyebrow">Risk · Open</span> <strong>Resume-mode prose complexity in lfg.</strong> A third input mode risks diluting the "execute in order" discipline; the carve-out is scoped to postcondition re-verification and the contract test (U6/U7) pins the language.</div>
+<div class="risk mit"><span class="eyebrow">Dependency</span> <strong>Release-owned files.</strong> The active <code>release-as: 1.0.3</code> pin means no cleanup commit may touch version fields — U1 is scoped to content-only manifest edits per the version-drift learning.</div>
+</section>
+
+<section id="sources">
+<h2>Sources &amp; Research</h2>
+<table>
+<thead><tr><th>Kind</th><th>Reference</th></tr></thead>
+<tbody>
+<tr><td>Guidance</td><td><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a> (Nov 2025) — progress files, session re-grounding, immutable success criteria</td></tr>
+<tr><td>Guidance</td><td><a href="https://www.anthropic.com/engineering/harness-design-long-running-apps">Harness design for long-running apps</a> (Mar 2026) — context resets over compaction; generator≠evaluator</td></tr>
+<tr><td>Guidance</td><td><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a> (Sep 2025) — attention budget, JIT retrieval, structured note-taking</td></tr>
+<tr><td>Guidance</td><td><a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">Agent Skills</a> (Oct 2025) + <a href="https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices">skill authoring best practices</a> — progressive disclosure, eval-first iteration</td></tr>
+<tr><td>Guidance</td><td><a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool">Memory tool docs</a> — bounded, prunable, expiring memory; memory as a security surface</td></tr>
+<tr><td>Repo</td><td><a href="https://github.com/akornmeier/super-looper/blob/main/scripts/loop.sh">scripts/loop.sh</a> — isolation guard (379–395), emit_record (282–377), target_ci_green (513), reset_target (531), reconciliation (609–618), env allowlist (438)</td></tr>
+<tr><td>Repo</td><td><a href="https://github.com/akornmeier/super-looper/blob/main/AGENTS.md">AGENTS.md</a> — branching, scratch-space (L22–32), behavioral validation (L78–88), skill self-containment (L105–122)</td></tr>
+<tr><td>Repo</td><td><a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/best-practices/set-e-wrapper-skips-downstream-capture-on-failure.md">set-e wrapper learning</a>, <a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/skill-design/bounded-escalation-rung.md">bounded escalation rung</a>, <a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/workflow/release-please-version-drift-recovery.md">version-drift recovery</a>, <a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/skill-design/agent-color-palette-and-fleet-scoped-distinctness.md">agent color palette</a>, <a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/skill-design/verify-loop-async-quiescence-gate.md">quiescence gate</a></td></tr>
+<tr><td>Repo</td><td><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/sl-sessions/evals/README.md">sl-sessions/evals</a> — the eval-suite structure U13 clones; <a href="https://github.com/akornmeier/super-looper/blob/main/tests/loop-driver.test.ts">tests/loop-driver.test.ts</a> — stub-seam contract pattern; <a href="https://github.com/akornmeier/super-looper/blob/main/docs/specs/claude-code.md">docs/specs/claude-code.md</a> — vendored hooks spec</td></tr>
+<tr><td>Prior plans</td><td><a href="https://github.com/akornmeier/super-looper/blob/main/docs/plans/2026-06-18-001-feat-lfg-plan-input-handoff-plan.md">lfg plan-input handoff</a>, <a href="https://github.com/akornmeier/super-looper/blob/main/docs/plans/2026-06-19-002-feat-loop-debug-escalation-plan.md">loop debug escalation</a> — the marker + contract-test precedents</td></tr>
+</tbody>
+</table>
+</section>
+
+<footer class="composition-signal">Composed 2026-07-04T18:37Z by sl-plan from the July 2026 Anthropic-guidance audit (session synthesis; three-state learning gate user-confirmed 2026-07-04).</footer>
+</div>
+</body>
+</html>
