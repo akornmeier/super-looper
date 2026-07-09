@@ -36,10 +36,12 @@ Output:
   every failure mode degrades to a per-slot skip and exit 0.
 
 Write safety:
-  Before the first modification of a run the original is copied to
-  <plan>.bak (overwriting any stale backup). Each fill is written atomically
-  (temp file in the same directory + os.replace), so a mid-batch failure
-  leaves earlier fills intact and the plan valid.
+  Before the first modification of a run the original is copied once to
+  <plan-name>.bak in the OS temp directory (overwriting any stale backup), and
+  that path is printed to stderr. The backup is never written as a sibling of
+  the plan, so the plans directory is not dirtied. Each fill is written
+  atomically (temp file in the same directory + os.replace), so a mid-batch
+  failure leaves earlier fills intact and the plan valid.
 """
 
 import argparse

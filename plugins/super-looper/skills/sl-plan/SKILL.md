@@ -119,7 +119,7 @@ The U-ID stability rule (Phase 3.5) is unchanged: reordering never renumbers, sp
 
 **Post-run sync.** An autopilot run executes a plan without writing to it (unattended `sl-work` makes zero plan writes), so an HTML plan resumed after a run can be behind git. On resume, check whether git shows commits touching this plan's units that are absent from the `commits` metadata list. If so, offer via `AskUserQuestion` to backfill: append the missing commit SHAs, append a `modified` timestamp, and append one Amendments entry summarizing the run. All three appends are idempotent — skip values already present. Decline leaves the plan untouched.
 
-**Unfilled slots on resume.** When a resumed `.html` plan still has empty image slots (the comment pair with no `<img>` between), run Phase 5.2b after this resume's edits settle — same config/key gating, same failure handling. This is the "fill the images later" path.
+**Unfilled slots on resume.** When a resumed `.html` plan still has empty image slots (the comment pair with no `<img>` between), run Phase 5.2b after this resume's edits settle — same config gating, same script-owned key detection, same failure handling. This is the "fill the images later" path.
 
 **Resume preserves the existing artifact's format, except pipeline mode.** When resuming an existing plan, the resume run writes back in whatever format the existing artifact uses — markdown if the existing file is `.md`, HTML if it is `.html` — so a resume doesn't silently change the artifact shape. Explicit `output:` arguments on this run override (e.g., resuming an `.html` plan with `output:md` switches the artifact to markdown). Pipeline mode (LFG, any `disable-model-invocation` context) always wins per Phase 0.0: even when resuming an existing `.html` plan, pipeline runs force `OUTPUT_FORMAT=md` so downstream automation receives the markdown shape it expects. The resume rewrites the markdown file at the parallel path (`<plan-basename>.md`) and the original `.html` is left in place untouched.
 
@@ -740,16 +740,17 @@ Runs immediately after the write confirmation above, only when `OUTPUT_FORMAT=ht
 
 Resolve gating before doing anything:
 
-1. **Config.** Read `plan_images` from the config already loaded at Phase 0.0. An active (non-commented) key valued `on` or `off` decides; missing, commented, or invalid falls through to the default `on`. If `off`, skip this step silently.
-2. **Key.** Check `OPENAI_API_KEY` presence with the shell: `[ -n "$OPENAI_API_KEY" ]`. If absent, print one line — the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step) — then continue to 5.3.
+**Config.** Read `plan_images` from the config already loaded at Phase 0.0. An active (non-commented) key valued `on` or `off` decides; missing, commented, or invalid falls through to the default `on`. If `off`, skip this step silently.
 
-When enabled and the key is present, print a one-line notice naming the cost (`Generating N images with gpt-image-2 — this calls OpenAI's paid API`), then invoke the bundled script **once** for the whole plan, as a single pinned command (no inline guard — the wrapper defeats the narrow allow-rule):
+**Key detection belongs to the script.** Never shell-check `OPENAI_API_KEY` — the script already resolves the key and reports a per-slot skip when it is absent or invalid. A separate `[ -n "$OPENAI_API_KEY" ]` test is an unpinned Bash call that prompts for permission and creates a second source of truth for key handling.
+
+When enabled, print a one-line notice naming the cost — `Generating N images with gpt-image-2 — this calls OpenAI's paid API; with no OPENAI_API_KEY exported it charges nothing and reports skips instead` — then invoke the bundled script **once** for the whole plan, as a single pinned command (no inline guard — the wrapper defeats the narrow allow-rule):
 
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path>
 ```
 
-Parse the JSON summary on stdout (`slots_found`, `filled`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason. Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
+Parse the JSON summary on stdout (`slots_found`, `filled`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason the script gives. When the skip reason is the absent key, that one line is: the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step). Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
 
 #### 5.3 Confidence Check and Deepening
 
