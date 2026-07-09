@@ -105,7 +105,24 @@ This file contains the shipping workflow (Phase 3-4). It is loaded when all Phas
 
    If the user prefers to commit without creating a PR, load the `sl-commit` skill instead.
 
-3. **Notify User**
+3. **Append Ship-Time Plan Metadata** (HTML plans only, and only when the Phase 2 write-suppression gate resolved plan writes as active)
+
+   Skip this step entirely when the plan is markdown, when the run is unattended (`mode:unattended`, LFG, or any `disable-model-invocation` context), or when execution used parallel subagents or worktree-isolated batches. In those modes the plan file receives zero writes — the goal guard hashes the plan, and any mutation aborts an unattended run as goal drift.
+
+   Otherwise, append to the plan's visible metadata lists in the header `<dl>`:
+
+   - `modified` — an ISO 8601 timestamp for this ship-time write. Never touch `date`; it is the creation date.
+   - `commits` — the commit SHAs just created for this plan's units.
+   - `agent` and `session` — the identifiers of the agent and session that executed the work.
+
+   Rules:
+
+   - **Append only.** Never overwrite or remove an existing entry.
+   - **Idempotent.** A value already present in a field is not appended a second time — re-running ship on the same session and commits changes nothing.
+   - An empty list field renders as the literal text `none`; the first append replaces `none` rather than appending after it.
+   - `sl-work` owns exactly these four fields. Amendments and the `back refs` / `forward refs` fields belong to `sl-plan`'s revision flows — never write them here.
+
+4. **Notify User**
    - Summarize what was completed
    - Link to PR (if one was created)
    - Note any follow-up work needed
