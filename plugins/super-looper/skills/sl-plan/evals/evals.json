@@ -1,0 +1,162 @@
+{
+  "skill_name": "sl-plan",
+  "purpose": "Validate one narrow load-bearing assumption: sl-plan's HTML output path produces a stamped, stateful plan artifact. It stamps the canonical template rather than composing free-form, authors image-slot prompts without ever writing image bytes, completes the plan when no API key is present, preserves the append-only/marker/image regions on resume, and still forces markdown in pipeline mode. These are the properties sl-work's marker contract and the goal guard depend on.",
+  "non_purpose": "Not testing sl-plan's research phases, brainstorm routing, approach-altitude gate, deepening sub-agent dispatch, universal-planning carve-out, confidence check, or markdown-mode composition quality. The narrow assumption is HTML-mode artifact discipline only.",
+  "variance_protocol": {
+    "runs_per_eval": 3,
+    "stability_metric": "stddev of must-tier term recall across runs",
+    "pass_threshold": "must-tier recall >= 80% mean AND stddev < 20% AND runs_passed >= 2 of 3"
+  },
+  "grading_pipeline": {
+    "stage_1": "Programmatic substring match per criticality tier (must / should / may). Pass = all 'must' terms appear (case-insensitive substring) in the response text.",
+    "stage_2": "LLM grader (see grader.md) — judges whether the response makes the correct artifact decision with the contract rationale. For the negative case, judges whether a prohibited behavior appears as an affirmative recommendation."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "html-mode-stamps-template",
+      "tests_risk": "free_form_drift",
+      "prompt": "You are `/sl-plan` and Phase 0.0 resolved `OUTPUT_FORMAT=html`. You have reached Phase 5.2 and are about to write the plan file. Describe exactly how you compose the HTML document, and what you check before confirming the write.",
+      "expected_terms": [
+        {"term": "html-plan-template.md", "tier": "must"},
+        {"term": "stamp", "tier": "must"},
+        {"term": "Implementation Units", "tier": "must"},
+        {"term": "Amendments", "tier": "must"},
+        {"term": "placeholder", "tier": "should"},
+        {"term": "repeat", "tier": "should"},
+        {"term": "checklist", "tier": "should"},
+        {"term": "Problem Frame", "tier": "should"},
+        {"term": "Key Technical Decisions", "tier": "should"},
+        {"term": "composition-signal", "tier": "may"},
+        {"term": "self-contained", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent stamps the literal template from `references/html-plan-template.md` rather than composing the HTML free-form from the section contract",
+        "the agent replaces every `{{PLACEHOLDER}}` token, duplicates each `<!-- repeat -->` block once per unit/task/file/requirement/question, and deletes the repeat markers — no `{{...}}` token and no repeat comment survives into the written plan",
+        "the agent runs the template's post-stamp checklist before confirming the write, and seeds the metadata `<dl>` correctly: `date` set, `agent` and `session` seeded with this run's identity, remaining list fields rendered as the literal `none`, `origin` omitted entirely when there is no upstream brainstorm doc",
+        "the contract section headings (Summary, Problem Frame, Requirements, Key Technical Decisions, High-Level Technical Design, Implementation Units, Validation Commands, Notes, Amendments) appear verbatim as `<h2>` text, and Amendments carries its empty-state paragraph (never populated at create)"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md",
+        "contract_lines": "Phase 0.0 line 85: 'When `OUTPUT_FORMAT=html`, read `references/html-rendering.md` for format principles **and** `references/html-plan-template.md` — the canonical template HTML plans are stamped from.' Phase 5.2 lines 717-722: 'HTML composition — stamp the template, do not compose free-form... copy the template block, replace every `{{PLACEHOLDER}}` with real content, duplicate each `<!-- repeat -->` block once per unit/task/file/requirement/question, delete the repeat markers... Run the template's post-stamp checklist before confirming the write.' plus 'Metadata seeding' bullet. Template post-stamp checklist: plugins/super-looper/skills/sl-plan/references/html-plan-template.md lines 140-150. Template authoring rules: same file lines 13-46.",
+        "expected_behavior": "Stamp the canonical template; zero surviving {{...}} tokens or <!-- repeat --> markers; contract headings verbatim; metadata dl seeded per the field contract; post-stamp checklist run."
+      },
+      "notes": "Core create-path behavior. Failure = the agent free-forms an HTML plan from the section contract, producing a shape sl-work's grep anchors and the template contract test do not recognize."
+    },
+    {
+      "id": 2,
+      "name": "slot-prompt-authoring-not-image-bytes",
+      "tests_risk": "model_writes_image_bytes",
+      "prompt": "You are `/sl-plan` writing an HTML plan at Phase 5.2. The template's hero, problem, and design figures each contain an image slot. What do you write into those slots, and what do you NOT write? What rules govern the text you author there?",
+      "expected_terms": [
+        {"term": "prompt=", "tier": "must"},
+        {"term": "image bytes", "tier": "must"},
+        {"term": "10 words", "tier": "must"},
+        {"term": "wide", "tier": "should"},
+        {"term": ":root", "tier": "should"},
+        {"term": "hero", "tier": "should"},
+        {"term": "caption", "tier": "should"},
+        {"term": "base64", "tier": "may"},
+        {"term": "cap", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent authors each slot's `prompt=\"...\"` attribute and the `<figcaption>` at plan-write time, and explicitly never writes image bytes, base64, or a data URI — the bundled fill script owns the `<img>` element",
+        "the authored prompts follow the template's prompt rules: wide format, one or two core ideas aimed at a professional software engineer, fewer than 10 words of text rendered inside the image, visual identity synced to the page's `:root` palette",
+        "the agent caps the image count (hero, one per major section, unit images only where a unit's architecture needs one) because every image is embedded bytes in a committed file"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md",
+        "contract_lines": "Phase 5.2 line 721: 'Image slot prompts. Author each slot's `prompt=\"...\"` attribute now, following the template's prompt-authoring rules: wide format; one or two core ideas aimed at a professional engineer; fewer than 10 words of text rendered inside the image; visual identity synced to the page's `:root` palette. Cap the count... Never write image bytes.' Slot grammar and prompt-authoring rules: plugins/super-looper/skills/sl-plan/references/html-plan-template.md lines 90-133 ('At create time the pair wraps only the `<figcaption>`. The plan agent authors the `prompt=\"...\"` attribute and the caption; it never writes image bytes.').",
+        "expected_behavior": "Author prompt= attributes and captions inside the slot comment pair; never emit <img>, base64, or a data URI."
+      },
+      "notes": "Guards the K4 token-cost invariant. Failure = the agent tries to fetch, inline, or hand-write image data instead of leaving the slot for the script."
+    },
+    {
+      "id": 3,
+      "name": "no-key-plan-still-completes",
+      "tests_risk": "image_failure_blocks_plan",
+      "prompt": "You have just written an HTML plan and reached Phase 5.2b (Fill Image Slots). `OPENAI_API_KEY` is not set in the environment. What happens to the plan, and what do you tell the user?",
+      "expected_terms": [
+        {"term": "OPENAI_API_KEY", "tier": "must"},
+        {"term": "placeholder", "tier": "must"},
+        {"term": "complete", "tier": "must"},
+        {"term": "one line", "tier": "should"},
+        {"term": "5.3", "tier": "should"},
+        {"term": "continue", "tier": "should"},
+        {"term": "plan_images", "tier": "may"},
+        {"term": "re-run", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent does NOT block, retry, error, or abandon the plan — the plan file is already written and complete; the image slots simply stay as placeholder comment pairs",
+        "the agent prints exactly one visible line explaining the skip reason (no `OPENAI_API_KEY`) and how to fill the slots later (export the key and re-run the skill on the plan), then continues to Phase 5.3",
+        "the agent does not prompt the user for a key, does not invent an alternative image source, and does not hand-author images to compensate"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md",
+        "contract_lines": "Phase 5.2b lines 734-753: 'Key. Check `OPENAI_API_KEY` presence with the shell... If absent, print one line — the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan — then continue to 5.3.' and 'Failures never block. Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.' Template line 119-120: 'A slot the plan declares but never fills stays a comment pair — a plan with no API key is a complete plan with empty figures, never a broken one.'",
+        "expected_behavior": "One-line visible skip note; placeholder slots retained; plan declared complete; continue to Phase 5.3; no retry, no prompt for a key."
+      },
+      "notes": "R5 degradation path. Failure = the agent treats a missing key as a hard error, or silently swallows the skip so the user never learns the figures are empty."
+    },
+    {
+      "id": 4,
+      "name": "resume-preserves-stateful-regions",
+      "tests_risk": "resume_rewrites_living_artifact",
+      "prompt": "The user asks you to deepen an existing `.html` plan at `docs/plans/2026-07-09-001-feat-thing-plan.html`. Its metadata header lists two `commits` and one `modified` timestamp, several unit tasks read `[x]` and one reads `[wip]`, the hero figure contains a filled `<img>`, and Amendments has one entry. You are adding a new unit and revising the Problem Frame. Which regions do you touch, which do you preserve, and how do you record the revision?",
+      "expected_terms": [
+        {"term": "append-only", "tier": "must"},
+        {"term": "Amendments", "tier": "must"},
+        {"term": "marker", "tier": "must"},
+        {"term": "idempotent", "tier": "should"},
+        {"term": "image slot", "tier": "should"},
+        {"term": "executing agent", "tier": "should"},
+        {"term": "regenerate", "tier": "may"},
+        {"term": "U-ID", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent revises the HTML plan in place rather than rewriting it: metadata list fields (`modified`, `commits`, `agent`, `session`, `back refs`, `forward refs`) are appended to, never overwritten or removed, and appends are idempotent — a value already present is not added twice; no field is ever renamed",
+        "status markers belong to the executing agent — the agent does not set, clear, or tidy the existing `[x]` / `[wip]` markers; the newly added unit starts every marker at `[]`",
+        "the filled hero image slot survives untouched — the `<!-- image-slot:hero ... -->` / `<!-- /image-slot:hero -->` comment pair and its single-line `<img>` are copied through unchanged; changing an image means re-running the fill script with `--regenerate <slot>`, not editing the element",
+        "the agent appends exactly one new `<details>` entry to Amendments (newest at the bottom) and never rewrites the existing entry; U-ID stability holds — reordering does not renumber and the new unit takes the next free ID"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md",
+        "contract_lines": "Phase 0.1 lines 110-117: 'HTML plans are stateful tracked artifacts — revise them, never rewrite them... Metadata header lists (`modified`, `commits`, `agent`, `session`, `back refs`, `forward refs`) are append-only... Status markers (`[]`, `[wip]`, `[x]`, `[f]`) belong to the executing agent. Do not set, clear, or \"tidy\" them. New or split units start every marker at `[]`... Filled image slots survive edits... To change an image, re-run the fill script with `--regenerate <slot>`... Amendments records every substantive revision: append one `<details>` entry, newest at the bottom... Earlier entries are never rewritten.' Post-run sync: same file line 119. Metadata field rules: plugins/super-looper/skills/sl-plan/references/html-plan-template.md lines 48-72.",
+        "expected_behavior": "Append-only metadata; markers untouched (new unit starts at []); filled slots copied through; one appended Amendments entry; U-IDs stable."
+      },
+      "notes": "The living-artifact invariant. Failure = a resume that regenerates the document from scratch, clobbering execution state, images, and history."
+    },
+    {
+      "id": 5,
+      "name": "pipeline-mode-still-forces-markdown",
+      "tests_risk": "html_leaks_into_pipeline",
+      "prompt": "LFG invokes you as `/sl-plan` from its automated pipeline (a `disable-model-invocation` context). The user's repo config sets the plan format to HTML. Which output format do you produce, and do you stamp the HTML template or run the image-fill step?",
+      "expected_terms": [
+        {"term": "markdown", "tier": "must"},
+        {"term": "pipeline", "tier": "must"},
+        {"term": "OUTPUT_FORMAT=md", "tier": "must"},
+        {"term": "template", "tier": "should"},
+        {"term": "5.2b", "tier": "should"},
+        {"term": "override", "tier": "should"},
+        {"term": "LFG", "tier": "may"},
+        {"term": "disable-model-invocation", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent forces `OUTPUT_FORMAT=md` at Phase 0.0 regardless of the repo config's HTML preference — pipeline override wins over every other format signal, including an explicit `output:html` argument and a resumed `.html` artifact",
+        "the agent therefore does NOT load or stamp `references/html-plan-template.md` and does NOT run Phase 5.2b's image-fill step — there are no image slots in a markdown plan, so the bundled script is never invoked in a pipeline run",
+        "the agent gives the rationale: downstream automated consumers (sl-work and the loop driver) parse markdown reliably, and markdown plans carry no status markers, no append-only metadata lists, and no Amendments section"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md",
+        "contract_lines": "Phase 0.0 line 78: 'Pipeline override. When invoked from LFG or any `disable-model-invocation` context, force `OUTPUT_FORMAT=md` regardless of steps 1-3.' Phase 5.2 line 730: 'Pipeline mode forces `OUTPUT_FORMAT=md` at Phase 0.0.' Phase 5.2b line 736: 'Never fires in pipeline mode — LFG and any `disable-model-invocation` context force `OUTPUT_FORMAT=md` at Phase 0.0, so there are no slots to fill.' Phase 0.1 line 121: 'Pipeline mode (LFG, any `disable-model-invocation` context) always wins per Phase 0.0.'",
+        "expected_behavior": "Markdown output; no template stamping; no image-fill step; pipeline override beats config and explicit output: argument."
+      },
+      "notes": "R11 boundary. Failure = an HTML plan reaching the unattended loop, where sl-work's write-suppression gate and the goal guard become the only things standing between markers and an exit-8 abort."
+    }
+  ]
+}
