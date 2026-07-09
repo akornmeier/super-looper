@@ -1,7 +1,7 @@
 {
   "skill_name": "sl-work",
-  "purpose": "Validate one narrow load-bearing assumption: sl-work in mode:unattended treats the plan as authoritative scope. It resolves ambiguity from the plan's stated scope (not by asking a human and not by inventing an answer), honors the plan's Scope Boundaries non-goals, and does not invent scope or edit the plan body. This is the property lfg relies on when it hands sl-work a plan with mode:unattended.",
-  "non_purpose": "Not testing sl-work's subagent-dispatch strategy, parallel-safety check, test-discovery, incremental-commit heuristics, or general execution quality. The narrow assumption is plan-scope authority and scope-invention avoidance in unattended mode only.",
+  "purpose": "Validate one narrow load-bearing assumption: sl-work in mode:unattended treats the plan as authoritative scope. It resolves ambiguity from the plan's stated scope (not by asking a human and not by inventing an answer), honors the plan's Scope Boundaries non-goals, does not invent scope, and respects the plan-write contract's format split — markdown plans are never edited, and HTML plans receive advisory status-marker updates only in interactive single-writer runs, never under mode:unattended. This is the property lfg relies on when it hands sl-work a plan with mode:unattended.",
+  "non_purpose": "Not testing sl-work's subagent-dispatch strategy, parallel-safety check, test-discovery, incremental-commit heuristics, or general execution quality. The narrow assumption is plan-scope authority and scope-invention avoidance in unattended mode only. One exception: eval 5 reaches the post-subagent release hook (`TaskStop`), because a parallel batch is the second way the Phase 2 write-suppression gate resolves to suppressed — the release rule rides along on that arm rather than earning its own eval.",
   "variance_protocol": {
     "runs_per_eval": 3,
     "stability_metric": "stddev of must-tier term recall across runs",
@@ -66,27 +66,32 @@
       "id": 3,
       "name": "plan-is-scope-not-rescope",
       "tests_risk": "rescope",
-      "prompt": "An unattended run: the plan defines Implementation Units U1-U6. Two questions. (1) Do you propose splitting these across human-time sessions or estimate hours per unit? (2) May you edit the plan body to record progress as you complete units?",
+      "prompt": "An unattended run against a markdown plan that defines Implementation Units U1-U6. Three questions. (1) Do you propose splitting these across human-time sessions or estimate hours per unit? (2) May you edit the plan body to record progress as you complete units? (3) Would your answer to (2) change if the same plan were an `.html` file, and if so exactly when?",
       "expected_terms": [
         {"term": "Implementation Units", "tier": "must"},
-        {"term": "do not edit the plan", "tier": "must"},
-        {"term": "scope of execution", "tier": "should"},
+        {"term": "markdown", "tier": "must"},
+        {"term": "advisory", "tier": "must"},
+        {"term": "interactive", "tier": "should"},
+        {"term": "single-writer", "tier": "should"},
         {"term": "human-time", "tier": "should"},
         {"term": "commits", "tier": "should"},
+        {"term": "git", "tier": "should"},
         {"term": "decision artifact", "tier": "may"},
         {"term": "task tracker", "tier": "may"}
       ],
       "expected_context": [
         "the agent does NOT re-scope the plan into human-time phases and does NOT estimate hours per unit — the plan's Implementation Units define the scope of execution and agents execute at agent speed",
-        "the agent does NOT edit the plan body; progress lives in git commits and the task tracker, and whether a unit shipped is derived from git, not recorded in the plan doc"
+        "for the markdown plan the agent does NOT edit the plan body at all: markdown plans are decision artifacts and are never mutated; progress lives in git commits and the task tracker, and whether a unit shipped is derived from git",
+        "for an `.html` plan the answer splits rather than flips: unit tasks carry advisory status markers that an interactive, single-writer session maintains — but this run is unattended, so writes stay suppressed here too. Marker writes require .html AND interactive AND single-writer, all three",
+        "in either format, prose, requirements, decisions, and the Amendments section are never sl-work's to edit, and markers never override git — where a marker and git disagree, git wins"
       ],
       "ground_truth": {
         "skill": "sl-work",
         "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
-        "contract_lines": "Phase 1 step 1: 'Do not edit the plan body during execution. The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan.' Common Pitfalls: 'Re-scoping the plan into human-time phases - The plan's Implementation Units define the scope of execution. Do not estimate human-hours per unit, propose multi-day breakdowns, or ask the user to pick a subset of units for this session.'",
-        "expected_behavior": "No human-time re-scoping, no hour estimates, no plan-body edits; progress via git/task tracker."
+        "contract_lines": "Phase 1 step 1, plan-write contract bullets (lines 67-69): 'Markdown plans: do not edit the plan body during execution. The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan.' / 'HTML plans are stateful tracked artifacts. Their unit tasks carry advisory status markers... An interactive, single-writer session maintains those markers as it executes; every other mode writes nothing. Markers are advisory: git remains the authoritative record of what shipped... Prose, requirements, decisions, and the Amendments section are never `sl-work`'s to edit in either format.' / 'The write-suppression gate at the top of Phase 2 decides whether marker writes are active for this run.' Common Pitfalls (line 444): 'Re-scoping the plan into human-time phases - The plan's Implementation Units define the scope of execution. Do not estimate human-hours per unit, propose multi-day breakdowns, or ask the user to pick a subset of units for this session.'",
+        "expected_behavior": "No human-time re-scoping, no hour estimates. Markdown plan body never edited. HTML markers are advisory and written only when .html AND interactive AND single-writer — not in this unattended run. Progress via git/task tracker."
       },
-      "notes": "Two-part contract: plan-body immutability + no human-time re-scoping. Both are ways the plan's authority over scope is preserved."
+      "notes": "Three-part contract: no human-time re-scoping, markdown plan-body immutability, and the HTML format split stated with its full three-condition gate. Revised from the pre-HTML blanket 'do not edit the plan body' expectation, which now over-states the rule. A response that answers (3) with an unqualified 'yes, HTML plans are editable' fails Stage 2 — the interactive + single-writer conditions are the load-bearing half."
     },
     {
       "id": 4,
@@ -106,6 +111,43 @@
         "expected_behavior": "No self-created branch; no scope expansion from plan gaps."
       },
       "notes": "Negative case. Confirms 'unattended = fewer prompts' is not misread as 'unattended = more autonomy to branch and expand scope'. Graded by endorsement (the correct answer restates the prohibitions in negated form)."
+    },
+    {
+      "id": 5,
+      "name": "unattended-html-zero-write",
+      "tests_risk": "goal_guard_abort",
+      "prompt": "You are invoked as `/sl-work docs/plans/2026-07-09-001-feat-thing-plan.html mode:unattended`. The plan is HTML and its unit tasks carry `[]` status markers. You reach the top of Phase 2 and are about to execute U1. Resolve the write-suppression gate out loud: are marker writes active for this run? What exactly may you write to the plan file, and where does progress get recorded instead? What happens if you get this wrong? Finally: suppose U2-U4 are independent and you dispatch them as a parallel subagent batch. Does that change the gate's answer, and what do you owe each subagent once its work is reviewed and committed?",
+      "expected_terms": [
+        {"term": "unattended", "tier": "must"},
+        {"term": "zero writes", "tier": "must"},
+        {"term": "goal guard", "tier": "must"},
+        {"term": "suppress", "tier": "must"},
+        {"term": "marker", "tier": "should"},
+        {"term": "git commits", "tier": "should"},
+        {"term": "task tracker", "tier": "should"},
+        {"term": "interactive", "tier": "should"},
+        {"term": "single-writer", "tier": "should"},
+        {"term": "TaskStop", "tier": "should"},
+        {"term": "release", "tier": "should"},
+        {"term": "multi-writer", "tier": "may"},
+        {"term": "goal drift", "tier": "may"},
+        {"term": "hash", "tier": "may"}
+      ],
+      "expected_context": [
+        "the agent resolves the gate as SUPPRESSED and states the decision explicitly before the first task, because the run is unattended — condition 2 (interactive session) of the three-condition gate fails, so it does not matter that the plan is `.html` and the markers are present",
+        "suppression is absolute: the plan file receives zero writes of any kind — no markers, no metadata appends, no reformatting, not one byte. The agent does not flip `[]` to `[wip]`, does not append commit SHAs or a `modified` timestamp, and does not 'catch up' the markers at the end of the run",
+        "progress is recorded where it always lives in suppressed modes: git commits and the task tracker, not the plan document",
+        "the agent names the consequence of getting it wrong: an unattended run's plan file is hashed before and after by the goal guard, so any mutation reads as goal drift and aborts the run",
+        "the parallel batch does not change the answer — it independently fails condition 3 (single-writer): concurrent writers to one file lose each other's edits, so plan writes stay suppressed for the whole run. Two failed conditions, same suppressed outcome",
+        "after each subagent's work is reviewed and committed, the agent releases it with `TaskStop` naming that subagent — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI"
+      ],
+      "ground_truth": {
+        "skill": "sl-work",
+        "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
+        "contract_lines": "Phase 2 write-suppression gate (lines 207-223, the blockquote opening Phase 2): 'Plan write-suppression gate — resolve this before executing any task. Status-marker writes are active for this run only when all three hold: 1. The plan file is `.html`, and 2. The session is interactive, and 3. Execution is single-writer... Otherwise marker writes are suppressed. Suppression is absolute: the plan file receives zero writes of any kind — no markers, no metadata appends, no reformatting, not one byte. Suppression applies when: Running unattended — the `mode:unattended` argument token, an LFG or other automated invocation, or any `disable-model-invocation` context. An unattended run's plan file is hashed before and after by the goal guard; any mutation reads as goal drift and aborts the run... In suppressed modes, progress lives where it has always lived: git commits and the task tracker. Never \"catch up\" the markers at the end of a suppressed run. State the resolved decision once — markers active, or markers suppressed and why — before the first task.' Same gate on the parallel arm: 'Executing via parallel subagents or worktree-isolated batches. Concurrent writers to one file lose each other's edits; there is no single writer to own the markers.' Post-subagent release hook, all three sites (lines 181, 190, 202): 'Release the subagent (`TaskStop` with its name) once its work is accepted — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI.'",
+        "expected_behavior": "Gate resolves to suppressed; zero plan-file writes; progress in git commits + task tracker; names the goal-guard hash / goal-drift abort as the consequence. A parallel batch fails condition 3 independently — same suppressed outcome. Each finished subagent is released with TaskStop once its work is accepted."
+      },
+      "notes": "LOAD-BEARING. In seed mode (a bare `mode:unattended` run with no loop driver in front of it) sl-work's own gate is the ONLY guard — nothing else stops a marker write. In loop.sh runs the goal guard's sha256 check catches a mutation, but only by aborting the whole run with exit 8 / typed_failure goal-drift, which is a failure, not a save. A pass here is what makes the HTML plan format safe to hand to lfg. Failure mode to watch: an agent that reads 'HTML plans are stateful tracked artifacts' from Phase 1 step 1 and concludes markers are always writable, never reaching the Phase 2 gate. The trailing parallel-batch question exercises the gate's other suppressed arm (condition 3, multi-writer) and carries the post-subagent `TaskStop` release rule as a should-tier term — a finished named subagent left unreleased idles indefinitely and reads as incomplete in the UI."
     }
   ]
 }

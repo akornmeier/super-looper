@@ -1,7 +1,7 @@
 ---
 name: sl-security-sentinel
 description: "Performs security audits for vulnerabilities, input validation, auth/authz, hardcoded secrets, and OWASP compliance. Use when reviewing code for security issues or before deployment."
-model: inherit
+model: opus
 tools: Read, Grep, Glob, Bash
 color: red
 ---

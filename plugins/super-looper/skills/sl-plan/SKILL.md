@@ -2,6 +2,7 @@
 name: sl-plan
 description: "Create structured plans for multi-step tasks -- software features, research workflows, events, study plans, or any goal that benefits from breakdown. Also deepens existing plans with interactive sub-agent review. Use when the user says 'plan this', 'create a plan', 'how should we build', 'break this down', or when a brainstorm doc is ready for planning. Use 'deepen the plan' or 'deepening pass' for the deepening flow. For exploratory requests, prefer sl-brainstorm first."
 argument-hint: "[optional: feature description, requirements doc path, plan path to deepen, or any task to plan] [output:html]"
+allowed-tools: Bash(python3 *generate-plan-images.py*)
 ---
 
 # Create Technical Plan
@@ -82,7 +83,7 @@ Resolution steps:
 **Load the format-rendering reference based on the resolved value.** Section content is the same in either format; presentation differs. Both references are paired with `references/plan-sections.md`, which describes what the plan contains regardless of format.
 
 - When `OUTPUT_FORMAT=md`, read `references/markdown-rendering.md` for format principles.
-- When `OUTPUT_FORMAT=html`, read `references/html-rendering.md` for format principles.
+- When `OUTPUT_FORMAT=html`, read `references/html-rendering.md` for format principles **and** `references/html-plan-template.md` — the canonical template HTML plans are stamped from (authoring rules, metadata field contract, status markers, image-slot grammar).
 
 #### 0.1 Resume Existing Plan Work When Appropriate
 
@@ -106,6 +107,19 @@ The Phase 5.3 short-circuit avoids re-running the full planning workflow and giv
 Normal editing requests (e.g., "update the test scenarios", "add a new implementation unit", "strengthen the risk section") should NOT trigger the fast path — they follow the standard resume flow.
 
 If the plan already has a `deepened: YYYY-MM-DD` frontmatter field and there is no explicit user request to re-deepen, the fast path still applies the same confidence-gap evaluation — it does not force deepening.
+
+**HTML plans are stateful tracked artifacts — revise them, never rewrite them.** When resuming, updating, or deepening an `.html` plan, the following regions are preserved verbatim (read `references/html-plan-template.md` for the grammar of each):
+
+- **Metadata header lists** (`modified`, `commits`, `agent`, `session`, `back refs`, `forward refs`) are append-only. Add entries; never overwrite or remove one. Appends are idempotent — a value already present is not added twice. An empty list renders as the literal `none`; the first append replaces it. Never rename a field.
+- **Status markers** (`[]`, `[wip]`, `[x]`, `[f]`) belong to the executing agent. Do not set, clear, or "tidy" them. New or split units start every marker at `[]`; a deleted unit's markers go with it.
+- **Filled image slots** survive edits — the `<!-- image-slot:NAME ... -->` / `<!-- /image-slot:NAME -->` comment pair and the single-line `<img>` between them are copied through unchanged. To change an image, re-run the fill script with `--regenerate <slot>` rather than editing the element.
+- **Amendments** records every substantive revision: append one `<details>` entry, newest at the bottom, replacing the `No amendments yet.` empty-state paragraph on the first append. Earlier entries are never rewritten.
+
+The U-ID stability rule (Phase 3.5) is unchanged: reordering never renumbers, splitting keeps the original ID on the original concept, deletion leaves a gap.
+
+**Post-run sync.** An autopilot run executes a plan without writing to it (unattended `sl-work` makes zero plan writes), so an HTML plan resumed after a run can be behind git. On resume, check whether git shows commits touching this plan's units that are absent from the `commits` metadata list. If so, offer via `AskUserQuestion` to backfill: append the missing commit SHAs, append a `modified` timestamp, and append one Amendments entry summarizing the run. All three appends are idempotent — skip values already present. Decline leaves the plan untouched.
+
+**Unfilled slots on resume.** When a resumed `.html` plan still has empty image slots (the comment pair with no `<img>` between), run Phase 5.2b after this resume's edits settle — same config gating, same script-owned key detection, same failure handling. This is the "fill the images later" path.
 
 **Resume preserves the existing artifact's format, except pipeline mode.** When resuming an existing plan, the resume run writes back in whatever format the existing artifact uses — markdown if the existing file is `.md`, HTML if it is `.html` — so a resume doesn't silently change the artifact shape. Explicit `output:` arguments on this run override (e.g., resuming an `.html` plan with `output:md` switches the artifact to markdown). Pipeline mode (LFG, any `disable-model-invocation` context) always wins per Phase 0.0: even when resuming an existing `.html` plan, pipeline runs force `OUTPUT_FORMAT=md` so downstream automation receives the markdown shape it expects. The resume rewrites the markdown file at the parallel path (`<plan-basename>.md`) and the original `.html` is left in place untouched.
 
@@ -703,6 +717,13 @@ Compose the plan using the content from `references/plan-sections.md` and the fo
 
 **HTML composition timing.** When `OUTPUT_FORMAT=html`, Phase 5.3 deepening runs before this write completes its final form, but `sl-doc-review` is skipped in HTML mode (its mutation mechanics are markdown-only today — see Phase 5.3.8 format gate in `references/plan-handoff.md`). The HTML artifact reflects deepening synthesis but not doc-review autofixes; this is a known gap until sl-doc-review gains HTML-aware mutation.
 
+**HTML composition — stamp the template, do not compose free-form.** When `OUTPUT_FORMAT=html`, the plan is stamped from the literal template in `references/html-plan-template.md`: copy the template block, replace every `{{PLACEHOLDER}}` with real content, duplicate each `<!-- repeat -->` block once per unit/task/file/requirement/question, delete the repeat markers, and delete sections that do not apply. Run the template's post-stamp checklist before confirming the write.
+
+Two things the write itself owns:
+
+- **Image slot prompts.** Author each slot's `prompt="..."` attribute now, following the template's prompt-authoring rules: wide format; one or two core ideas aimed at a professional engineer; fewer than 10 words of text rendered inside the image; visual identity synced to the page's `:root` palette. Cap the count — hero, one per major section, unit images only where a unit's architecture needs one. Never write image bytes.
+- **Metadata seeding.** Set `date` (creation date), and seed the `agent` and `session` lists with this run's identity. Remaining list fields (`modified`, `commits`, `forward refs`, and `back refs` when there is no upstream doc) render as the literal `none`. Omit the `origin` pair entirely when there is no upstream brainstorm doc.
+
 Confirm (use absolute path so the reference is clickable in modern terminals):
 
 ```text
@@ -712,6 +733,24 @@ Plan written to <absolute path to plan>
 **Pipeline mode:** If invoked from an automated workflow such as LFG or any `disable-model-invocation` context, skip interactive questions. Make the needed choices automatically and proceed to writing the plan. Pipeline mode forces `OUTPUT_FORMAT=md` at Phase 0.0.
 
 **CONCEPTS.md gap-fill (only if the file already exists):** If the plan body uses a domain term whose definition is missing from `CONCEPTS.md`, add the entry. **Domain entities, named processes, and status concepts with project-specific meaning only** — not file paths, class names, function signatures, or implementation decisions. `CONCEPTS.md` is a glossary, not a spec or catch-all. Follow the format set by existing entries. Apply silently. Skip entirely if `CONCEPTS.md` does not exist — creation is owned by sl-compound and sl-compound-refresh.
+
+#### 5.2b Fill Image Slots (HTML mode only)
+
+Runs immediately after the write confirmation above, only when `OUTPUT_FORMAT=html`. **Never fires in pipeline mode** — LFG and any `disable-model-invocation` context force `OUTPUT_FORMAT=md` at Phase 0.0, so there are no slots to fill.
+
+Resolve gating before doing anything:
+
+**Config.** Read `plan_images` from the config already loaded at Phase 0.0. An active (non-commented) key valued `on` or `off` decides; missing, commented, or invalid falls through to the default `on`. If `off`, skip this step silently.
+
+**Key detection belongs to the script.** Never shell-check `OPENAI_API_KEY` — the script already resolves the key and reports a per-slot skip when it is absent or invalid. A separate `[ -n "$OPENAI_API_KEY" ]` test is an unpinned Bash call that prompts for permission and creates a second source of truth for key handling.
+
+When enabled, print a one-line notice naming the cost — `Generating N images with gpt-image-2 — this calls OpenAI's paid API; with no OPENAI_API_KEY exported it charges nothing and reports skips instead` — then invoke the bundled script **once** for the whole plan, as a single pinned command (no inline guard — the wrapper defeats the narrow allow-rule):
+
+```bash
+python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path>
+```
+
+Parse the JSON summary on stdout (`slots_found`, `filled`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason the script gives. When the skip reason is the absent key, that one line is: the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step). Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
 
 #### 5.3 Confidence Check and Deepening
 

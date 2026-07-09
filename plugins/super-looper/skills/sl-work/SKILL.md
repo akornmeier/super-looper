@@ -51,6 +51,7 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
 1. **Read Plan and Clarify** _(skip if arriving from Phase 0 with a bare prompt)_
 
    - Read the work document completely. Plans may be markdown (`.md`) or HTML (`.html`) — both formats are read as text linearly. HTML plans carry the same section names and IDs as markdown plans, just wrapped in semantic HTML elements (`<section>`, `<article>`, etc.); section-finding works the same way (substring match on section names, ignoring HTML wrapper noise).
+   - **Reading large HTML plans.** An HTML plan may embed generated images as single-line base64 data URIs, making the file multiple megabytes. Do not read such a plan whole. Locate the sections needed with Grep, then read scoped offset ranges around the matches, skipping the data-URI lines (each `<img src="data:...">` occupies exactly one line, so skipping is a line-number decision, not a parse). Everything the plan says lives outside those lines.
    - When auto-detecting the latest plan (blank invocation), glob `docs/plans/*.md` AND `docs/plans/*.html` and pick the most recent regardless of extension.
    - Treat the plan as a decision artifact, not an execution script
    - If the plan includes sections such as `Implementation Units`, `Work Breakdown`, `Requirements` (or legacy `Requirements Trace`), `Files`, `Test Scenarios`, or `Verification`, use those as the primary source material for execution
@@ -62,7 +63,10 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    - If anything is unclear or ambiguous, ask clarifying questions now _(pipeline mode: skip — resolve from the plan's scope per the Pipeline mode block above)_
    - If clarifying questions were needed above, get user approval on the resolved answers. If no clarifications were needed, proceed without a separate approval step — plan scope is the plan's authority, not something to renegotiate
    - **Do not skip this** in interactive runs - better to ask questions now than build the wrong thing (in pipeline mode the clarifying step is skipped per the Pipeline mode block above)
-   - **Do not edit the plan body during execution.** The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan. `sl-work` does not mutate the plan — whether it shipped is derived from git, not recorded in the doc. Legacy plans may contain `- [ ]` / `- [x]` marks on unit headings or a `status:` field — ignore them as state; per-unit completion is determined during execution by reading the current file state.
+   - **Plan mutation splits by format.**
+     - **Markdown plans: do not edit the plan body during execution.** The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan. `sl-work` does not mutate the plan — whether it shipped is derived from git, not recorded in the doc. Legacy plans may contain `- [ ]` / `- [x]` marks on unit headings or a `status:` field — ignore them as state; per-unit completion is determined during execution by reading the current file state.
+     - **HTML plans are stateful tracked artifacts.** Their unit tasks carry advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]` failed — inside `<code class="status">` elements. An interactive, single-writer session maintains those markers as it executes; every other mode writes nothing. Markers are advisory: git remains the authoritative record of what shipped, and where a marker and git disagree, git wins and the marker is corrected. Prose, requirements, decisions, and the Amendments section are never `sl-work`'s to edit in either format.
+     - The write-suppression gate at the top of Phase 2 decides whether marker writes are active for this run. Do not write to the plan before reaching it.
 
 2. **Setup Environment**
 
@@ -173,16 +177,17 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    1. Review the subagent's diff — verify changes match the unit's scope and `Files:` list
    2. Run the relevant test suite to confirm the tree is healthy
    3. If tests fail, diagnose and fix before proceeding — do not dispatch dependent units on a broken tree
-   4. Update the task list (do not edit the plan body — progress is carried by the commit)
-   5. Dispatch the next unit
+   4. Update the task list (markdown plan: do not edit the plan body — progress is carried by the commit; HTML plan in an interactive run: also flip the unit's status markers, since the orchestrator is the only writer in serial mode)
+   5. Release the subagent (`TaskStop` with its name) once its work is accepted — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI
+   6. Dispatch the next unit
 
    **After all parallel subagents in a batch complete (worktree-isolated mode):**
    1. Wait for every subagent in the current parallel batch to finish.
    2. For each completed subagent, in dependency order: review the worktree's diff against the orchestrator's branch. If the subagent did not commit its own work, stage and commit it inside that worktree.
    3. Merge each subagent's branch into the orchestrator's branch sequentially in dependency order. **If a merge conflict surfaces, abort the merge (`git merge --abort`) and re-dispatch the conflicting unit serially against the now-merged tree** — hand-resolving silently picks a side and discards one unit's intent. (Predicted overlap from the Parallel Safety Check surfaces here as a conflict, not as silent data loss in shared-directory mode.)
    4. After each merge, run the relevant test suite. If tests fail, diagnose and fix before merging the next branch.
-   5. Update the task list (progress is carried by the merge commits).
-   6. After merging, remove each subagent's worktree and delete its branch. Use the absolute path and branch name returned in the subagent's result.
+   5. Update the task list (progress is carried by the merge commits). Do not edit the plan body in either format — worktree-parallel execution is multi-writer, so plan writes stay suppressed for the whole run (see the Phase 2 gate).
+   6. After merging, release each subagent (`TaskStop` with its name) — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI — then remove its worktree and delete its branch. Use the absolute path and branch name returned in the subagent's result.
       - Unlock the worktree first — the harness locks per-subagent worktrees: `git worktree unlock <absolute-path>`
       - Remove the worktree: `git worktree remove <absolute-path>`
       - Delete the branch: `git branch -d <branch-name>` (the branch outlives the worktree by default and accumulates as orphans if not cleaned up; `-d` lowercase refuses to delete unmerged branches, which is the safety we want — if it fails, investigate before forcing)
@@ -193,10 +198,29 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    2. Cross-check for discovered file collisions: compare the actual files modified by all subagents in the batch (not just their declared `Files:` lists). Subagents may create or modify files not anticipated during planning — this is expected, since plans describe *what* not *how*. A collision only matters when 2+ subagents in the same batch modified the same file. In a shared working directory, only the last writer's version survives — the other unit's changes to that file are lost. If a collision is detected: commit all non-colliding files from all units first, then re-run the affected units serially for the shared file so each builds on the other's committed work
    3. For each completed unit, in dependency order: review the diff, run the relevant test suite, stage only that unit's files, and commit with a conventional message derived from the unit's Goal
    4. If tests fail after committing a unit's changes, diagnose and fix before committing the next unit
-   5. Update the task list (do not edit the plan body — progress is carried by the commits just made)
-   6. Dispatch the next batch of independent units, or the next dependent unit
+   5. Update the task list (do not edit the plan body in either format — parallel execution is multi-writer, so plan writes stay suppressed for the whole run; progress is carried by the commits just made)
+   6. Release each finished subagent (`TaskStop` with its name) — finished named subagents otherwise idle indefinitely and show as incomplete in the UI
+   7. Dispatch the next batch of independent units, or the next dependent unit
 
 ### Phase 2: Execute
+
+> **Plan write-suppression gate — resolve this before executing any task.**
+>
+> Status-marker writes are active for this run **only when all three hold**:
+>
+> 1. The plan file is `.html`, and
+> 2. The session is interactive, and
+> 3. Execution is single-writer — inline or serial subagents, not parallel subagents and not worktree-isolated batches.
+>
+> Otherwise **marker writes are suppressed**. Suppression is absolute: the plan file receives **zero writes of any kind** — no markers, no metadata appends, no reformatting, not one byte. Suppression applies when:
+>
+> - **Running unattended** — the `mode:unattended` argument token, an LFG or other automated invocation, or any `disable-model-invocation` context. An unattended run's plan file is hashed before and after by the goal guard; any mutation reads as goal drift and aborts the run.
+> - **Executing via parallel subagents or worktree-isolated batches.** Concurrent writers to one file lose each other's edits; there is no single writer to own the markers.
+> - **The plan is markdown.** Markdown plans are decision artifacts and are never mutated.
+>
+> In suppressed modes, progress lives where it has always lived: git commits and the task tracker. Never "catch up" the markers at the end of a suppressed run.
+>
+> State the resolved decision once — markers active, or markers suppressed and why — before the first task.
 
 1. **Task Execution Loop**
 
@@ -204,7 +228,7 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
 
    ```
    while (tasks remain):
-     - Mark task as in-progress
+     - Mark task as in-progress (markers active: flip this unit's markers [] -> [wip])
      - Read any referenced files from the plan or discovered during Phase 0
      - **If the unit's work is already present and matches the plan's intent** (files exist with the expected capability, or the unit's `Verification` criteria are already satisfied by the current code), the work has likely shipped on a prior branch or session. Verify it matches, mark the task complete, and move on. Do not silently reimplement.
      - Look for similar patterns in codebase
@@ -214,9 +238,35 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
      - Run System-Wide Test Check (see below)
      - Run tests after changes
      - Assess testing coverage: did this task change behavior? If yes, were tests written or updated? If no tests were added, is the justification deliberate (e.g., pure config, no behavioral change)?
-     - Mark task as completed
+     - Mark task as completed (markers active: flip this unit's markers [wip] -> [x])
      - Evaluate for incremental commit (see below)
    ```
+
+   **Marker update mechanics** _(only when the Phase 2 gate resolved markers as active)_
+
+   Flip the current task's marker at the same moments the task tracker changes state — no separate bookkeeping pass:
+
+   | Transition | When |
+   |------------|------|
+   | `[]` → `[wip]` | Starting the task |
+   | `[wip]` → `[x]` | Task complete and its verification passes |
+   | `[wip]` → `[f]` | The task cannot be made to pass and execution moves on |
+
+   Edit anchors must include the surrounding unit or task text — a marker token like `<code class="status">[]</code>` repeats throughout the file, so anchoring on the bare token edits an arbitrary occurrence. Anchor on the unit heading, the task heading, or the checklist item's own action text together with its marker.
+
+   The plan's global `Validation Commands` checklist carries the same markers and follows the same transitions: flip each item as its command runs during final validation (Phase 3), `[x]` on pass, `[f]` for a step that cannot be completed. Same anchor rule applies.
+
+   `[f]` is informational only. Shipping gates on tests and verification, never on marker state — a plan full of `[x]` with failing tests does not ship, and a stray `[f]` never blocks Phase 3.
+
+   **Resume reconciliation** _(HTML plans, markers active)_
+
+   On a resume or re-run, recompute each unit's real state from code and verification **before executing it** — the same already-shipped detection the loop performs above. Then correct the stale markers the previous run left behind:
+
+   - A `[wip]` whose unit git shows shipped becomes `[x]`.
+   - A `[wip]` with no trace of work in the tree resets to `[]` — a crash-orphaned marker, not progress.
+   - A marker that disagrees with the code loses; the code and git are the record.
+
+   Never treat a marker as resume state, and never skip a unit because it reads `[x]`. Markers are a projection of git, not a substitute for reading it.
 
    When a unit carries an `Execution note`, honor it. For test-first units, write the failing test before implementation for that unit. For characterization-first units, capture existing behavior before changing it. For units without an `Execution note`, proceed pragmatically.
 

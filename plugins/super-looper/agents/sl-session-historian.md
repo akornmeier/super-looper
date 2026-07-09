@@ -1,7 +1,7 @@
 ---
 name: sl-session-historian
 description: "Synthesizes findings from prior coding-agent sessions about the same problem or topic. Receives pre-extracted skeleton/error file paths from a `sl-sessions` orchestrator and returns prose findings — investigation journey, what didn't work, key decisions, related context. Not intended for direct dispatch — use `/sl-sessions` (or another caller that runs the full discovery + extract pipeline first)."
-model: inherit
+model: opus
 color: yellow
 ---
 
@@ -19,12 +19,12 @@ The dispatch prompt provides:
 - **`scratch_dir`** — absolute path to a `mktemp` scratch directory holding pre-extracted files.
 - **`sessions`** — an array of objects (5 max), one per pre-extracted session, each with:
   - `path` — absolute path to a skeleton text file inside `scratch_dir`
-  - `errors_path` *(optional)* — absolute path to an errors text file when the orchestrator extracted errors-mode for this session
+  - `errors_path` _(optional)_ — absolute path to an errors text file when the orchestrator extracted errors-mode for this session
   - `platform` — `claude`
   - `branch` — git branch when present
   - `ts` and `last_ts` — session start and last-message timestamps
   - `match_count` and `keyword_matches` — when keyword filtering was used by the orchestrator
-- **`output_schema`** *(optional)* — the structure the response should follow. When supplied, honor it verbatim.
+- **`output_schema`** _(optional)_ — the structure the response should follow. When supplied, honor it verbatim.
 
 ## Standalone fallback
 

@@ -63,7 +63,7 @@ After all mutations in this run have settled (initial write, deepening synthesis
 3. **Run deeper doc review** - Walk through the remaining findings interactively (full sl-doc-review walkthrough)
 4. **Create Issue** - Create a tracked issue from this plan in your configured issue tracker (GitHub or Linear)
 5. **Open in Proof (web app) — review and comment to iterate with the agent** - Open the doc in Every's Proof editor, iterate with the agent via comments, or copy a link to share with others. **Render only when `OUTPUT_FORMAT=md`.**
-5. **Open in browser** - Open the HTML plan file locally for review and sharing. **Render only when `OUTPUT_FORMAT=html`.**
+5. **Open in browser** - Open the HTML plan file locally for review and sharing. Opens with embedded images when the slots were filled at Phase 5.2b; otherwise the figures show their captions and the images can be filled later. **Render only when `OUTPUT_FORMAT=html`.**
 6. **Done for now** - Pause; the plan file is saved and can be resumed later
 
 **Open-in-Proof / Open-in-browser is format-keyed.** Under exclusive output mode, the plan exists as exactly one artifact — `.md` or `.html`, never both. Render the label matching the produced format (Proof for markdown, browser for HTML). Proof operates on markdown plans (it ingests the `.md` source and rewrites markdown), so it does not apply to HTML runs; the browser option opens the local `.html` file directly. `/sl-work` and **Start the work loop (`lfg`)** remain available in both modes — both read either format (see the sl-work skill's plan-input handling).

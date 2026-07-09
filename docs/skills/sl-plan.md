@@ -188,6 +188,26 @@ In universal-planning mode, the U-IDs, dependency ordering, scope boundaries, an
 
 ---
 
+## HTML Plans as Living Artifacts
+
+A markdown plan is a static document. An HTML plan (`output:html`, or `plan_output: html` in `.super-looper/config.local.yaml`) is a **living artifact** — it accumulates state as the work proceeds, while staying a single self-contained file.
+
+**Stamped from a canonical template.** Every HTML plan is stamped from the same template rather than composed free-form, so shape is consistent across plans and across authors: metadata header, sections in a fixed order, per-unit blocks, Notes, Amendments. Downstream consumers (and humans skimming a months-old plan) find the same structure every time.
+
+**Per-section generated images.** The template declares image slots — a hero image plus one per major section — that `sl-plan` fills after the plan is written, by invoking a bundled script that calls OpenAI's images API (`gpt-image-2`) and injects the result inline. It requires `OPENAI_API_KEY` exported in the environment; image generation is a **paid** API call. Set `plan_images: off` in the config to disable it. Every failure mode — no key, bad key, rate limit, network error — degrades to a visible skip reason and leaves the slot as a placeholder. **A plan is complete without its images**; they are illustration, never content.
+
+Cap guidance is hero + one per major section, and that cap is a real constraint, not a style preference: the images are embedded as base64 webp inside the file, so a fully-filled plan is meaningfully larger than its markdown equivalent — and plans are committed, so that size lands in git history and in PR diffs.
+
+**Append-only metadata and Amendments.** The metadata header's lists (`modified`, `commits`, `agent`, `session`, back/forward refs) are append-only — entries are added, never overwritten or removed, and appends are idempotent. Substantive revisions append an entry to `Amendments` rather than silently rewriting the plan body. Together these make the plan's own history readable from the plan.
+
+**Post-run sync on resume.** An autopilot run executes a plan without writing to it, so an HTML plan resumed after a run can be behind git. On resume, `sl-plan` checks whether git has commits for this plan's units that the `commits` list doesn't know about, and offers to backfill them along with a `modified` timestamp and one Amendment summarizing the run. Declining leaves the plan untouched.
+
+**Bake images before an unattended run.** For `scripts/loop.sh --plan-file <plan>.html`, generate the images *before* launching. The plan file is checksum-guarded during a run — the goal guard aborts (exit 8, goal drift) if it changes mid-run — so the image script must never fire inside the loop.
+
+**The model split.** Author plans interactively on the top-tier model: planning is where model quality pays off most, because a bad decision captured in the plan is executed faithfully many times over. Execute via `scripts/loop.sh`, which already defaults to `--model opus`.
+
+---
+
 ## Reference
 
 | Argument | Effect |

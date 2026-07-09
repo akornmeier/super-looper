@@ -1,7 +1,7 @@
 ---
 name: sl-framework-docs-researcher
 description: "Gathers comprehensive documentation and best practices for frameworks, libraries, or dependencies. Use when you need official docs, version-specific constraints, or implementation patterns."
-model: inherit
+model: opus
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, mcp__context7__*
 color: orange
 ---

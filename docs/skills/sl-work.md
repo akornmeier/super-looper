@@ -57,7 +57,7 @@ Asking an agent "implement this plan" goes wrong in predictable ways:
 
 ### 1. Plan-aware execution — honors the WHAT/HOW separation
 
-`sl-work` reads the plan as a decision artifact, not a script. Scope, decisions, U-IDs, files, test scenarios, and verification criteria are authoritative — the agent figures out the actual implementation itself. The plan body stays read-only during execution; progress lives in git commits and the task tracker.
+`sl-work` reads the plan as a decision artifact, not a script. Scope, decisions, U-IDs, files, test scenarios, and verification criteria are authoritative — the agent figures out the actual implementation itself. The plan's content stays read-only during execution; progress lives in git commits and the task tracker. (Interactive runs against an HTML plan also flip that plan's status markers — see below — but never touch its content.)
 
 ### 2. Idempotent re-execution
 
@@ -86,6 +86,14 @@ Every PR description includes a `Post-Deploy Monitoring & Validation` section: l
 ### 8. Smart triage on bare prompts
 
 Not every invocation has a plan. `sl-work` accepts a bare prompt and triages by complexity: trivial work (a couple of files, no behavioral change) goes straight to implementation; small/medium work builds a task list; large or sensitive work surfaces a recommendation to use `/sl-brainstorm` or `/sl-plan` first. The triage is what makes `sl-work` reasonable for direct invocation on small work, without forcing the full chain for everything.
+
+### 9. Advisory status markers in HTML plans
+
+An HTML plan (`/sl-plan output:html`) carries a status marker per unit and task — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]` failed. During an **interactive** run, `sl-work` flips those markers at its normal task-lifecycle points, so an open plan shows live progress without anyone narrating it.
+
+The markers are **advisory; git is authoritative.** On resume, `sl-work` recomputes each unit's real state from the code and its verification criteria, then corrects stale markers — including a `[wip]` orphaned by a crash. A marker is never trusted as resume state, and `[f]` is informational: shipping gates on verification, not on what a marker says. Ship-time metadata (a `modified` timestamp, commit SHAs, session id) is appended idempotently.
+
+**Unattended and parallel runs write nothing to the plan.** `mode:unattended`, `lfg`, `scripts/loop.sh`, and parallel-worktree execution make zero plan writes — a single-writer invariant, and a hard requirement of the goal guard, which checksums the plan and aborts on mid-run change. Their progress lives where it always has: git, the task tracker, and the run-progress file. An interactive `/sl-plan` resume afterwards offers to backfill what the run couldn't record.
 
 ---
 
@@ -167,7 +175,7 @@ For large bare-prompt scope (cross-cutting, sensitive surfaces, many files), `sl
 | `<plan path>` | Origin-sourced execution |
 | `<bare prompt>` | Triage by complexity (Trivial / Small-Medium / Large) |
 
-Output: commits and (typically) a PR via `sl-commit-push-pr`. The plan is read-only throughout — `sl-work` never mutates it; whether it shipped is derived from git, not recorded in the doc.
+Output: commits and (typically) a PR via `sl-commit-push-pr`. The plan's content is read-only throughout — `sl-work` never rewrites it; whether it shipped is derived from git, not from the doc. The one exception is cosmetic: an interactive run against an HTML plan flips that plan's advisory status markers and appends ship-time metadata. Unattended and parallel runs write nothing at all.
 
 ---
 
