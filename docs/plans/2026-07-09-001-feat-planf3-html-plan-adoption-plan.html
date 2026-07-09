@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: feat: Adopt planf3 mechanics into sl-plan's HTML output path</title>
+<style>
+:root{
+  --bg:#fbfaf8; --ink:#22211e; --muted:#6b675f; --line:#e4e1da;
+  --accent:#0f6f5c; --accent-soft:#e8f3f0; --accent-text:#0b5546;
+  --warn:#8a5a12; --warn-soft:#f7efe0;
+  --info:#3b5a86; --info-soft:#e9eff7;
+  --card:#ffffff; --code-bg:#f1efe9;
+  --sans:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:15px}
+main{max-width:920px;margin-inline:auto;padding:2.5rem 1.5rem 4rem}
+p,li{max-width:70ch}
+h1{font-size:1.7rem;line-height:1.25;margin:.2rem 0 .6rem}
+h2{font-size:1.25rem;margin:2.2rem 0 .8rem;padding-top:1.2rem;border-top:1px solid var(--line)}
+h3{font-size:1.02rem;margin:1.4rem 0 .5rem}
+code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+pre{background:var(--code-bg);padding: .8rem 1rem;border-radius:8px;overflow-x:auto}
+pre code{background:none;padding:0}
+a{color:var(--accent-text)}
+table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.93rem}
+th,td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top}
+th{background:var(--code-bg);font-weight:600}
+.eyebrow{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.meta-header dl{display:grid;grid-template-columns:auto 1fr;gap:.15rem 1rem;margin:.6rem 0 0;font-size:.9rem}
+.meta-header dt{color:var(--muted);font-weight:600}
+.meta-header dd{margin:0}
+.idchip{display:inline-block;font-family:var(--mono);font-size:.78rem;font-weight:700;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:.1rem .55rem;margin-right:.4rem}
+article.unit{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0}
+article.unit h3{margin:.1rem 0 .55rem}
+article.unit dl.strip{display:grid;grid-template-columns:auto 1fr;gap:.15rem 1rem;margin:.3rem 0 .6rem;font-size:.9rem}
+article.unit dl.strip dt{color:var(--muted);font-weight:600}
+article.unit dl.strip dd{margin:0}
+details{border:1px solid var(--line);border-radius:8px;padding:.45rem .8rem;margin:.45rem 0;background:var(--bg)}
+summary{cursor:pointer;font-weight:600;font-size:.9rem}
+details[open]{padding-bottom:.7rem}
+.callout{border:1px solid var(--line);border-radius:10px;padding: .8rem 1.1rem;margin:.9rem 0}
+.callout .eyebrow{display:block;margin-bottom:.25rem}
+.callout.deferred{background:var(--warn-soft)}
+.callout.deferred .eyebrow{color:var(--warn)}
+.callout.inscope{background:var(--accent-soft)}
+.callout.inscope .eyebrow{color:var(--accent-text)}
+.callout.risk{background:var(--info-soft)}
+.callout.risk .eyebrow{color:var(--info)}
+.subnav{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem 1.1rem;font-size:.9rem}
+.subnav ul{margin:.3rem 0;padding-left:1.2rem;columns:2;column-gap:2rem}
+figure{margin:1.4rem 0;text-align:center}
+figcaption{font-size:.83rem;color:var(--muted);margin-top:.4rem}
+footer.composition-signal{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.8rem;color:var(--muted)}
+strong{color:inherit}
+</style>
+</head>
+<body>
+<main>
+
+<header class="meta-header">
+  <span class="eyebrow">Implementation plan · super-looper</span>
+  <h1>feat: Adopt planf3 mechanics into sl-plan's HTML output path</h1>
+  <dl>
+    <dt>title</dt><dd>feat: Adopt planf3 mechanics into sl-plan's HTML output path</dd>
+    <dt>type</dt><dd>feat</dd>
+    <dt>date</dt><dd><time datetime="2026-07-09">2026-07-09</time></dd>
+  </dl>
+</header>
+
+<section id="summary">
+  <h2>Summary</h2>
+  <p>Adopt planf3's plan-artifact mechanics into sl-plan's existing HTML output mode: a canonical HTML plan template that leans heavily on planf3's own template, AI-generated raster images embedded by a bundled script (never by the model), in-plan status markers that interactive <code>sl-work</code> updates as units complete, and an append-only living-artifact layer (metadata lists + Amendments). Markdown plans and the unattended pipeline are untouched; the goal guard stays fully intact.</p>
+</section>
+
+<section id="problem-frame">
+  <h2>Problem Frame</h2>
+  <p>sl-plan's HTML mode composes free-form from a section contract, so plan shape varies run to run, plans carry no images beyond hand-authored SVG, and execution progress lives only in git and the task tracker. The planf3 skill demonstrates that a literal stamped template — placeholders, per-section generated images, in-artifact status markers, append-only metadata — is what frontier models reproduce most consistently, and it makes the plan a living artifact any fresh agent can resume from. Super-looper wants those mechanics without giving up its own contracts: the single self-contained file invariant, stable IDs, section vocabulary that <code>sl-work</code> greps, the goal guard, and git as the authoritative progress record.</p>
+</section>
+
+<section id="requirements">
+  <h2>Requirements</h2>
+
+  <h3>Template and artifact</h3>
+  <ul>
+    <li id="r1">R1. HTML plans are stamped from a canonical template adapted directly from planf3's template (in its <code>SKILL.md</code>): <code>{{PLACEHOLDER}}</code> tokens, <code>&lt;!-- repeat --&gt;</code> blocks, a <code>&lt;details&gt;</code> metadata header, hero/problem/solution image slots, unit blocks with per-task checklists, a per-unit Testing Strategy with a 🔁 validation loop, global Validation Commands, a free-form Notes canvas, and an append-only Amendments section.</li>
+    <li id="r2">R2. The template preserves super-looper's HTML contracts: section-heading vocabulary from the section contract, stable R-IDs/U-IDs as anchors and visible text, single self-contained file, all metadata as visible text, composition-signal footer, default-closed collapsibles.</li>
+    <li id="r3">R3. Metadata extends the existing field contract additively: <code>title</code>/<code>type</code>/<code>date</code>/<code>origin</code> keep their names (planf3's <code>created</code> maps to <code>date</code>); new append-only list fields are added — <code>modified</code>, <code>commits</code>, <code>agent</code>, <code>session</code>, <code>back refs</code>, <code>forward refs</code>. No field is ever renamed.</li>
+  </ul>
+
+  <h3>Images</h3>
+  <ul>
+    <li id="r4">R4. A bundled stdlib-only <code>python3</code> script generates images via OpenAI's images API (<code>gpt-image-2</code>), requests webp with compression from the API (no local transcoding), and injects the base64 data URI into the named slot in the HTML file itself. The model never reads or writes base64 payloads.</li>
+    <li id="r5">R5. Image failure never blocks the plan: absent key, invalid key, rate limit, network error, and unknown-model all degrade to the same visible-reason skip, leaving slots as placeholder comments. Re-runs fill only empty slots; a named slot can be forced to regenerate.</li>
+    <li id="r6">R6. Image prompts are authored by sl-plan at plan-write time into the slot comment grammar, following planf3's prompt rules: wide format, one or two core ideas, under 10 words of text in the image, visual identity synced to the page palette.</li>
+  </ul>
+
+  <h3>Completion tracking</h3>
+  <ul>
+    <li id="r7">R7. During interactive execution of an <code>.html</code> plan, <code>sl-work</code> updates status markers — <code>[]</code> idle, <code>[wip]</code> in progress, <code>[x]</code> complete, <code>[f]</code> failed — at its existing task-lifecycle hook points, using unit/task-text-bearing edit anchors.</li>
+    <li id="r8">R8. Markers are advisory; git is authoritative. On resume, sl-work recomputes each unit's real state from code and verification, corrects stale markers (including crash-orphaned <code>[wip]</code>), and never trusts a marker as resume state. <code>[f]</code> is informational — shipping gates on verification, not marker state.</li>
+    <li id="r9">R9. Ship-time metadata appends (<code>modified</code> timestamp, commit SHAs, session id) are idempotent — entries already present are never duplicated.</li>
+  </ul>
+
+  <h3>Safety and existing contracts</h3>
+  <ul>
+    <li id="r10">R10. In unattended mode (<code>mode:unattended</code>, lfg, loop.sh) and in parallel-worktree execution, sl-work makes zero writes to the plan file. The goal guard's checksum and PreToolUse hook are untouched. For <code>loop.sh --plan-file</code> runs against an HTML plan, images are baked before the run; the image script never runs mid-loop.</li>
+    <li id="r11">R11. The markdown plan contract is unchanged: no status field, progress derived from git, pipeline mode still forces markdown output.</li>
+    <li id="r12">R12. Post-run sync: after an autopilot run, an interactive sl-plan resume on the HTML plan backfills what the run could not write — commit SHAs from git, a <code>modified</code> timestamp, and one Amendment entry summarizing the run.</li>
+    <li id="r13">R13. The byte-duplicated shared rendering references (<code>html-rendering.md</code>, <code>markdown-rendering.md</code>) are not edited; all carve-outs live in sl-plan-local and sl-work-local files, so the cross-skill byte-identity tests stay green.</li>
+  </ul>
+
+  <h3>Quality and efficiency</h3>
+  <ul>
+    <li id="r14">R14. Contract tests and behavioral evals land in the same change: a new bun test pinning the template's invariants, a new <code>sl-plan</code> eval suite, and a revision of the <code>sl-work</code> eval that currently pins "does not edit the plan body".</li>
+    <li id="r15">R15. The work introduces no new LLM sub-agent dispatches (image generation is script-only). Documentation states the model split: author plans on the top-tier model, execute via <code>loop.sh</code> which already defaults to <code>--model opus</code>.</li>
+  </ul>
+</section>
+
+<section id="ktd">
+  <h2>Key Technical Decisions</h2>
+  <ul>
+    <li><strong>K1 — Template lives in a new sl-plan-local reference, not the shared rendering reference:</strong> <code>html-rendering.md</code> is byte-duplicated into sl-brainstorm and sl-ideate and content-pinned by tests; a plan-specific template there would triple-fan-out and shift that file's philosophy. A sibling reference loaded only on the sl-plan HTML path costs nothing elsewhere.</li>
+    <li><strong>K2 — planf3's template is the base; colliding headings map to contract vocabulary:</strong> downstream consumers grep section names, so planf3's structure is kept but its headings are renamed where they collide (see mapping in High-Level Technical Design). Everything else — metadata <code>&lt;details&gt;</code>, figures, checklists, loops, Notes, Amendments — carries over near-verbatim.</li>
+    <li><strong>K3 — stdlib <code>urllib</code> script with API-side webp:</strong> the repo has no uv or third-party-dependency precedent for bundled scripts, and stdlib Python cannot encode webp. The OpenAI images API accepts <code>output_format: webp</code> + <code>output_compression</code> (planf3's own script exposes both), so the script only base64-wraps returned bytes.</li>
+    <li><strong>K4 — Script-side injection:</strong> the script replaces the slot comment with the <code>&lt;img src="data:image/webp;base64,..."&gt;</code> element directly. A single 1536×1024 webp is hundreds of KB; routing that through model Read/Edit would burn tokens for nothing.</li>
+    <li><strong>K5 — Slot grammar carries the prompt and survives filling:</strong> <code>&lt;!-- image-slot:hero prompt="..." --&gt;</code> opens the slot and a <code>&lt;!-- /image-slot:hero --&gt;</code> closer wraps the injected image, so re-runs can skip filled slots and a named slot can be regenerated after its placeholder is consumed. The script reports found/filled/skipped per slot; a declared-but-missing slot is a warning, never silence.</li>
+    <li><strong>K6 — Markers advisory, git authoritative:</strong> sl-work's existing already-shipped detection stays the source of truth; markers are a human-and-agent-readable projection of it. This resolves crash-stale <code>[wip]</code>, marker/git disagreement, and keeps the markdown philosophy intact underneath.</li>
+    <li><strong>K7 — Single-writer, interactive-only mutation:</strong> unattended and parallel-worktree execution suppress all plan writes. This is what keeps the goal guard, the AGENTS.md goal-change protocol, and lfg's plan-input HTML acceptance all simultaneously safe — lfg needs no changes.</li>
+    <li><strong>K8 — Ownership split of append-only regions:</strong> sl-work owns only the <code>modified</code>/<code>commits</code>/<code>session</code> metadata lists (ship time); sl-plan's revision flows own Amendments and the back/forward reference fields. No writer overlaps another's region.</li>
+    <li><strong>K9 — Scoped reads for image-laden plans:</strong> sl-work locates sections by grep and reads offset-scoped ranges, skipping data-URI lines, instead of reading a multi-MB HTML file whole. The template keeps each data URI on a single line to make skipping mechanical.</li>
+    <li><strong>K10 — Model id pinned as a single constant:</strong> <code>gpt-image-2</code> (planf3 pins snapshot <code>gpt-image-2-2026-04-21</code>); an unknown-model API error degrades identically to key-absent. Implementation verifies the id against the live API before landing.</li>
+  </ul>
+</section>
+
+<section id="htd">
+  <h2>High-Level Technical Design</h2>
+
+  <p>Two flows share the artifact. The create flow stamps the template and fills image slots script-side; the execute flow splits hard on mode — interactive execution writes markers and metadata, unattended execution never touches the file, which is what keeps the goal guard's checksum valid.</p>
+
+  <figure>
+    <svg viewBox="0 0 860 380" width="100%" height="auto" role="img" aria-label="Component flow: sl-plan stamps template, script fills images, sl-work executes with interactive writes or unattended no-writes under the goal guard">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b675f"/>
+        </marker>
+      </defs>
+      <style>
+        .box{fill:#ffffff;stroke:#a8a49b;stroke-width:1.2;rx:8}
+        .soft{fill:#e8f3f0;stroke:#0f6f5c}
+        .warnb{fill:#f7efe0;stroke:#8a5a12}
+        .lbl{font:600 13px -apple-system,Segoe UI,sans-serif;fill:#22211e}
+        .sub{font:11.5px -apple-system,Segoe UI,sans-serif;fill:#6b675f}
+        .edge{stroke:#6b675f;stroke-width:1.3;fill:none;marker-end:url(#arr)}
+        .elbl{font:11.5px -apple-system,Segoe UI,sans-serif;fill:#22211e;paint-order:stroke fill;stroke:#fbfaf8;stroke-width:3px}
+      </style>
+      <rect class="box" x="20" y="40" width="170" height="64" rx="8"/>
+      <text class="lbl" x="105" y="66" text-anchor="middle">sl-plan (HTML mode)</text>
+      <text class="sub" x="105" y="84" text-anchor="middle">stamps canonical template</text>
+
+      <rect class="box" x="20" y="180" width="170" height="64" rx="8"/>
+      <text class="lbl" x="105" y="206" text-anchor="middle">image script</text>
+      <text class="sub" x="105" y="224" text-anchor="middle">gpt-image-2 → webp b64</text>
+
+      <rect class="box soft" x="330" y="110" width="200" height="80" rx="8"/>
+      <text class="lbl" x="430" y="140" text-anchor="middle">HTML plan artifact</text>
+      <text class="sub" x="430" y="158" text-anchor="middle">template + images + markers</text>
+      <text class="sub" x="430" y="174" text-anchor="middle">+ append-only metadata</text>
+
+      <rect class="box" x="660" y="40" width="180" height="64" rx="8"/>
+      <text class="lbl" x="750" y="66" text-anchor="middle">sl-work (interactive)</text>
+      <text class="sub" x="750" y="84" text-anchor="middle">writes markers + metadata</text>
+
+      <rect class="box warnb" x="660" y="180" width="180" height="64" rx="8"/>
+      <text class="lbl" x="750" y="206" text-anchor="middle">sl-work (unattended)</text>
+      <text class="sub" x="750" y="224" text-anchor="middle">zero plan writes</text>
+
+      <rect class="box warnb" x="660" y="300" width="180" height="56" rx="8"/>
+      <text class="lbl" x="750" y="323" text-anchor="middle">goal guard (loop.sh)</text>
+      <text class="sub" x="750" y="340" text-anchor="middle">sha256 unchanged → no exit 8</text>
+
+      <rect class="box" x="330" y="300" width="200" height="56" rx="8"/>
+      <text class="lbl" x="430" y="323" text-anchor="middle">sl-plan resume</text>
+      <text class="sub" x="430" y="340" text-anchor="middle">post-run sync + amendments</text>
+
+      <path class="edge" d="M190 72 L330 128"/>
+      <text class="elbl" x="240" y="88">writes plan</text>
+      <path class="edge" d="M105 104 L105 180"/>
+      <text class="elbl" x="112" y="148">authors slot prompts</text>
+      <path class="edge" d="M190 212 L330 168"/>
+      <text class="elbl" x="228" y="204">injects data URIs</text>
+      <path class="edge" d="M530 128 L660 76"/>
+      <text class="elbl" x="560" y="94">executes</text>
+      <path class="edge" d="M660 92 L530 142"/>
+      <text class="elbl" x="556" y="130">marker updates</text>
+      <path class="edge" d="M530 172 L660 208"/>
+      <text class="elbl" x="558" y="200">read-only</text>
+      <path class="edge" d="M750 244 L750 300"/>
+      <text class="elbl" x="758" y="276">hash verified</text>
+      <path class="edge" d="M530 328 L660 328"/>
+      <text class="elbl" x="562" y="320">after run: backfill</text>
+      <path class="edge" d="M430 300 L430 190"/>
+      <text class="elbl" x="438" y="250">appends (git-derived)</text>
+    </svg>
+    <figcaption>Create and execute flows around the HTML plan artifact. Only interactive paths write to the file.</figcaption>
+  </figure>
+
+  <p>Marker lifecycle within one task. Resume never trusts the stored marker — it recomputes from git/verification and corrects the projection.</p>
+
+  <figure>
+    <svg viewBox="0 0 760 170" width="100%" height="auto" role="img" aria-label="Status marker state machine: idle to wip to complete or failed, with resume reconciliation from git">
+      <defs>
+        <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b675f"/>
+        </marker>
+      </defs>
+      <style>
+        .st{fill:#ffffff;stroke:#a8a49b;stroke-width:1.2}
+        .stg{fill:#e8f3f0;stroke:#0f6f5c}
+        .stw{fill:#f7efe0;stroke:#8a5a12}
+        .t{font:600 13px ui-monospace,Menlo,monospace;fill:#22211e}
+        .s2{font:11.5px -apple-system,Segoe UI,sans-serif;fill:#6b675f}
+        .e2{stroke:#6b675f;stroke-width:1.3;fill:none;marker-end:url(#arr2)}
+        .l2{font:11.5px -apple-system,Segoe UI,sans-serif;fill:#22211e;paint-order:stroke fill;stroke:#fbfaf8;stroke-width:3px}
+      </style>
+      <rect class="st" x="30" y="55" width="110" height="46" rx="23"/>
+      <text class="t" x="85" y="83" text-anchor="middle">[ ] idle</text>
+      <rect class="st" x="280" y="55" width="120" height="46" rx="23"/>
+      <text class="t" x="340" y="83" text-anchor="middle">[wip]</text>
+      <rect class="stg" x="560" y="18" width="150" height="46" rx="23"/>
+      <text class="t" x="635" y="46" text-anchor="middle">[x] complete</text>
+      <rect class="stw" x="560" y="98" width="150" height="46" rx="23"/>
+      <text class="t" x="635" y="126" text-anchor="middle">[f] failed</text>
+      <path class="e2" d="M140 78 L280 78"/>
+      <text class="l2" x="162" y="70">unit starts</text>
+      <path class="e2" d="M400 68 L560 44"/>
+      <text class="l2" x="432" y="48">verification passes</text>
+      <path class="e2" d="M400 90 L560 116"/>
+      <text class="l2" x="430" y="118">cannot pass; move on</text>
+      <path class="e2" d="M340 55 C 340 8, 120 8, 92 55"/>
+      <text class="l2" x="150" y="22">resume: git says untouched → reset</text>
+    </svg>
+    <figcaption>Marker states. <code>[f]</code> is informational; shipping gates on verification, not markers.</figcaption>
+  </figure>
+
+  <h3>planf3 → super-looper template mapping</h3>
+  <p>The canonical template keeps planf3's skeleton and conventions; only headings that collide with the section contract are renamed, because section vocabulary is the grep contract downstream.</p>
+  <table>
+    <thead><tr><th>planf3 template section</th><th>Canonical template</th><th>Carried over</th></tr></thead>
+    <tbody>
+      <tr><td>Metadata <code>&lt;details&gt;</code> header</td><td>Same, as visible <code>&lt;dl&gt;</code></td><td>Append-only lists; <code>created</code> renamed to <code>date</code> per field contract</td></tr>
+      <tr><td>Hero figure + <code>{{HERO_IMAGE}}</code></td><td>Same</td><td>Slot comment grammar gains a <code>prompt="..."</code> attribute</td></tr>
+      <tr><td>Purpose</td><td>Summary</td><td>Prose + placeholder token</td></tr>
+      <tr><td>Problem (+ image)</td><td>Problem Frame (+ image slot)</td><td>Verbatim structure</td></tr>
+      <tr><td>Solution (+ image)</td><td>High-Level Technical Design (+ image slot)</td><td>Verbatim structure; inline SVG still permitted alongside</td></tr>
+      <tr><td>Relevant Files (existing/new tags)</td><td>Per-unit <code>Files</code> fields</td><td>existing/new tag styling carries into unit cards</td></tr>
+      <tr><td>Implementation Phases + checklists + status markers</td><td>Implementation Units (U-IDs) + per-task checklists + same markers</td><td><code>[]</code>/<code>[wip]</code>/<code>[x]</code>/<code>[f]</code> legend, per-unit Testing Strategy, 🔁 validation loop — near-verbatim</td></tr>
+      <tr><td>Validation Commands (global)</td><td>Same</td><td>Verbatim, including the do-not-exit loop instruction</td></tr>
+      <tr><td>Questionables (toggleable Q&amp;A)</td><td>Open Questions (<code>&lt;details&gt;</code> per entry)</td><td>Rendered only when open questions exist</td></tr>
+      <tr><td>Notes (free canvas)</td><td>Same</td><td>Verbatim, including optional extra image slots</td></tr>
+      <tr><td>Amendments (append-only)</td><td>Same</td><td>Verbatim; owned by sl-plan revision flows</td></tr>
+    </tbody>
+  </table>
+  <p>Sections the contract requires that planf3 lacks — Requirements with R-IDs and Key Technical Decisions — are added to the template as repeat-blocks in the same placeholder idiom.</p>
+</section>
+
+<section id="units">
+  <h2>Implementation Units</h2>
+
+  <nav class="subnav">
+    <span class="eyebrow">Units</span>
+    <ul>
+      <li><a href="#u1">U1. Canonical HTML plan template reference</a></li>
+      <li><a href="#u2">U2. sl-plan HTML-path wiring</a></li>
+      <li><a href="#u3">U3. Image generation script</a></li>
+      <li><a href="#u4">U4. sl-work marker execution contract</a></li>
+      <li><a href="#u5">U5. Section-contract amendment</a></li>
+      <li><a href="#u6">U6. Config and docs</a></li>
+      <li><a href="#u7">U7. Contract tests</a></li>
+      <li><a href="#u8">U8. Behavioral evals</a></li>
+    </ul>
+  </nav>
+
+  <article class="unit" id="u1">
+    <h3><span class="idchip">U1</span>Canonical HTML plan template reference</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>The stamped template every HTML plan reproduces, adapted directly from planf3's template.</dd>
+      <dt>Requirements</dt><dd>R1, R2, R3</dd>
+      <dt>Dependencies</dt><dd>None (first unit)</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code> (new)</dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>Author the reference as instructions plus one literal HTML template block, mirroring how planf3's SKILL.md embeds its template. Start from planf3's template verbatim and apply the K2 mapping: rename colliding headings, add Requirements/KTD repeat-blocks, replace <code>created</code> with <code>date</code>, add the append-only list fields, keep <code>{{PLACEHOLDER}}</code> and <code>&lt;!-- repeat --&gt;</code> conventions and the marker legend exactly. Add the K5 slot grammar (<code>image-slot:&lt;name&gt; prompt="..."</code> with closing marker), the single-line data-URI rule (K9), the composition-signal footer, and instructions carried from planf3: replace every placeholder, no <code>{{}}</code> tokens may survive, repeat-blocks duplicate per phase/task/file, all CSS in one <code>&lt;style&gt;</code> block, visual identity in <code>:root</code> custom properties syncs page and images.</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>Template block contains all contract section headings (Summary, Problem Frame, Requirements, Key Technical Decisions, Implementation Units, Validation Commands, Notes, Amendments) — pinned by U7's bun test.</li>
+        <li>Template contains the marker legend with all four states and metadata <code>&lt;dl&gt;</code> with <code>date</code> plus all six append-only fields.</li>
+        <li>Slot grammar appears with <code>prompt=</code> attribute and closing marker.</li>
+        <li>Behavioral (U8): a generated plan leaves no <code>{{...}}</code> token and no repeat-comment in the final file.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p>Reference exists, U7 test passes, and a skill-creator eval run stamps a plan matching the template's section order and conventions.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u2">
+    <h3><span class="idchip">U2</span>sl-plan HTML-path wiring</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>sl-plan loads and stamps the template in HTML mode, authors image prompts into slots, runs the fill step, and gains revision/preservation rules.</dd>
+      <dt>Requirements</dt><dd>R1, R6, R12, R13</dd>
+      <dt>Dependencies</dt><dd>U1, U3</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-plan/SKILL.md</code>, <code>plugins/super-looper/skills/sl-plan/references/plan-handoff.md</code></dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>Phase 0.0: when <code>OUTPUT_FORMAT=html</code>, load the template reference alongside <code>html-rendering.md</code>. Phase 5.2: stamp the template rather than composing free-form; author each slot's <code>prompt="..."</code> during the write. Add a post-write image-fill step: resolve <code>plan_images</code> config and key presence; when enabled, print a one-line "generating N images" notice and invoke the U3 script once per plan via the pinned <code>${CLAUDE_SKILL_DIR}</code> form; on any failure, report the per-slot skip reasons and continue to the menu. Phase 0.1 resume/deepen on HTML plans: never touch the metadata header's append-only lists, marker states, filled image slots, or Amendments; new/split units start <code>[]</code>; deleted units drop their markers. Post-run sync (R12): when a resume detects commits for this plan's units that are missing from the <code>commits</code> list, offer to backfill commits, <code>modified</code>, and one Amendment entry. Update the 5.4 menu wording so "Open in browser" mentions image state. Pipeline mode remains forced-markdown throughout — restate at the fill step.</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>Behavioral (U8): HTML run with no <code>OPENAI_API_KEY</code> writes the full plan with placeholder slots and a visible skip reason; run with key fills slots.</li>
+        <li>Behavioral (U8): resume on a marked-up HTML plan preserves markers, metadata lists, images, and amendments.</li>
+        <li>Contract (U7): SKILL.md references only files that exist; handoff-routing test still passes after menu wording edit.</li>
+        <li>Pipeline invocation still emits markdown (existing forced-md language untouched).</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p>skill-creator eval run produces a stamped HTML plan end-to-end; <code>bun test</code> green.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u3">
+    <h3><span class="idchip">U3</span>Image generation script</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Bundled script that generates and embeds all of a plan's images without any model-token cost.</dd>
+      <dt>Requirements</dt><dd>R4, R5</dd>
+      <dt>Dependencies</dt><dd>U1 (slot grammar)</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-plan/scripts/generate-plan-images.py</code> (new)</dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>Stdlib-only <code>python3</code> (repo convention; adapted from planf3's script but replacing the openai SDK + dotenv with <code>urllib.request</code> and env-var reads). CLI: <code>generate-plan-images.py &lt;plan.html&gt; [--slot &lt;name&gt;] [--regenerate &lt;name&gt;] [--size 1536x1024] [--quality high]</code>. Behavior: parse slot comments; for each empty slot, POST to the images API with the slot's prompt, <code>model</code> pinned per K10, <code>output_format: webp</code>, <code>output_compression</code>; write the returned base64 as a single-line data-URI <code>&lt;img&gt;</code> wrapped in the slot's open/close comments (K5); write via temp-file-and-rename with a one-time <code>.bak</code> backup. Key absent → JSON skip report, exit 0, file untouched (riffrec pattern). 401/429/5xx/network/unknown-model → same skip path per slot, partial fills preserved. Emit a JSON summary: slots found/filled/skipped with reasons; declared-but-missing slot names are warnings. Follow the sl-compound guarded invocation pattern so the skill-conventions platform-var test passes.</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>No key: exits 0, file byte-identical, JSON reports every slot skipped with reason.</li>
+        <li>Malformed/missing named slot: warning in summary, nonzero warning count, no silent no-op.</li>
+        <li>Re-run on partially filled plan: filled slots untouched, empty slots attempted.</li>
+        <li><code>--regenerate hero</code> on a filled slot: image replaced within the slot wrappers.</li>
+        <li>Simulated API error mid-batch (mock/urlopen failure): earlier fills preserved, later slots reported skipped, exit 0.</li>
+        <li>Live smoke (implementation-time): pinned model id verified against the real API; response is webp bytes.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p>Script self-check (<code>--help</code> + no-key dry run) passes; a real key fills a sample plan's slots and the file opens in a browser with images rendered.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u4">
+    <h3><span class="idchip">U4</span>sl-work marker execution contract</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Interactive sl-work projects execution state into HTML plan markers; unattended and parallel runs never write.</dd>
+      <dt>Requirements</dt><dd>R7, R8, R9, R10</dd>
+      <dt>Dependencies</dt><dd>U1 (marker/anchor conventions), U5 (contract carve-out)</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-work/SKILL.md</code>, <code>plugins/super-looper/skills/sl-work/references/shipping-workflow.md</code></dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>Add the HTML carve-out at every site that currently states the no-mutation rule (Phase 1 step 1, the three task-list update points, and the shipping workflow) so no stale copy contradicts the new behavior. Place the write-suppression gate at the top of Phase 2, load-bearing: markers are written only when the plan is <code>.html</code> AND the session is interactive AND execution is single-writer (not worktree-parallel); otherwise zero plan writes. Marker flips use Edit anchors that include the unit/task text, never the bare token. On resume, recompute unit state from code/verification and correct markers before executing (git authoritative, K6). Ship time: append <code>modified</code>/commit SHAs/session id idempotently (dedupe by value); Amendments is out of sl-work's ownership (K8). Reading: locate sections by grep, read scoped offsets, skip data-URI lines (K9).</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>Behavioral (U8): interactive run on an HTML plan flips <code>[]</code>→<code>[wip]</code>→<code>[x]</code> for a completing unit and <code>[f]</code> for a failing one, with correct anchors.</li>
+        <li>Behavioral (U8): <code>mode:unattended</code> run on the same plan makes zero file writes (hash-identical plan afterward).</li>
+        <li>Behavioral (U8): resume on a plan with a stale <code>[wip]</code> whose unit git shows shipped corrects it to <code>[x]</code>.</li>
+        <li>Re-running ship on the same session/commits does not duplicate metadata list entries.</li>
+        <li>Markdown plan execution behavior is unchanged (existing evals still pass with revised wording).</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p>skill-creator eval runs for the three marker scenarios pass; an end-to-end unattended composition check (goal-guard scenario) shows no exit 8.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u5">
+    <h3><span class="idchip">U5</span>Section-contract amendment</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>The format-independent contract explicitly authorizes the HTML-only stateful layer instead of contradicting it.</dd>
+      <dt>Requirements</dt><dd>R3, R11, R13</dd>
+      <dt>Dependencies</dt><dd>None (can land with U1)</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-plan/references/plan-sections.md</code></dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>Amend the "no status field" rule into a format-split: markdown plans keep the rule verbatim; HTML plans are declared stateful tracked artifacts carrying advisory markers (git authoritative), append-only metadata lists, and an Amendments section — an intentional divergence, stated so it cannot read as drift. Add the six new optional metadata fields to the well-known-fields list with append-only semantics and the K8 ownership split. Clarify that Amendments records post-execution history and is exempt from the resolve-in-place rule, which continues to govern live plan prose. Shared rendering references are not touched (R13).</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>Contract (U7): <code>tests/compound-support-files.test.ts</code> still passes — byte-identity of shared refs unaffected.</li>
+        <li>Contract (U7): new-field names present in the contract text match the template's field names exactly.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p><code>bun test</code> green; a doc read-through finds no remaining sentence claiming plans are never mutated without the HTML qualifier.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u6">
+    <h3><span class="idchip">U6</span>Config and docs</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Users can discover and control the image step; docs state the mode boundaries and model split.</dd>
+      <dt>Requirements</dt><dd>R10, R15</dd>
+      <dt>Dependencies</dt><dd>U2, U3, U4</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-setup/references/config-template.yaml</code>, <code>plugins/super-looper/README.md</code>, <code>docs/skills/sl-plan.md</code>, <code>docs/skills/sl-work.md</code>, <code>scripts/docs/</code> loop docs if present</dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>Add a commented <code>plan_images</code> key (<code>on | off</code>; default: on when <code>OPENAI_API_KEY</code> is present) to the config template following the existing commented-key discipline. Document in the skill docs: HTML plans are interactive living artifacts (markers, amendments, images) while markdown plans remain the pipeline shape; for <code>loop.sh --plan-file</code> HTML runs images must be baked pre-run; unattended progress lives in the run-progress file and run-record ledger, not markers; author plans on the top-tier model and execute via <code>loop.sh</code> (already defaulting to <code>--model opus</code>). Note the expected file-size cost of embedded images and the cap guidance (hero + one per major section).</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>Contract (U7): docs-index test passes after skill-doc edits.</li>
+        <li>Config template parse: commented <code>plan_images</code> line is ignored by the resolution step (existing commented-YAML test pattern).</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p><code>bun run release:validate</code> and <code>bun test</code> green; README inventory counts unchanged (no new skills/agents).</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u7">
+    <h3><span class="idchip">U7</span>Contract tests</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>The template's invariants and the new file surfaces are pinned by <code>bun test</code>.</dd>
+      <dt>Requirements</dt><dd>R2, R13, R14</dd>
+      <dt>Dependencies</dt><dd>U1, U2, U3, U5</dd>
+      <dt>Files</dt><dd><code>tests/skills/sl-plan-html-template.test.ts</code> (new)</dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>New test file asserting the template reference: contains every contract section heading, the four-state marker legend, the metadata <code>&lt;dl&gt;</code> with <code>date</code> + six append-only fields, the slot grammar with prompt attribute and closing marker, the composition-footer element, and no absolute paths. Existing dynamic suites cover the rest automatically (script reference integrity, platform-var guard, self-containment, frontmatter) — verify rather than extend. Confirm <code>compound-support-files</code> and <code>html-output-invariants</code> pass untouched, proving the shared refs weren't edited. Every new directory contains committed files (empty-dir CI learning).</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li>Deleting a template section heading fails the new test.</li>
+        <li>Renaming the script file fails <code>skill-conventions</code> reference-integrity.</li>
+        <li>Unguarded <code>${CLAUDE_SKILL_DIR}</code> use fails the platform-var rule unless acknowledged.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p>Full <code>bun test</code> green locally and in CI.</p>
+    </details>
+  </article>
+
+  <article class="unit" id="u8">
+    <h3><span class="idchip">U8</span>Behavioral evals</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>The new behaviors are measurable via skill-creator eval suites; the stale sl-work eval no longer pins the old contract.</dd>
+      <dt>Requirements</dt><dd>R7, R10, R14</dd>
+      <dt>Dependencies</dt><dd>U2, U4</dd>
+      <dt>Files</dt><dd><code>plugins/super-looper/skills/sl-plan/evals/evals.json</code>, <code>grader.md</code>, <code>README.md</code> (new); <code>plugins/super-looper/skills/sl-work/evals/evals.json</code>, <code>grader.md</code></dd>
+    </dl>
+    <details>
+      <summary>Approach</summary>
+      <p>New <code>sl-plan</code> suite (three-file shape, shape-checked by the existing evals test): template adherence (all sections, no leftover placeholders), slot-prompt authoring, graceful no-key behavior, resume preservation of markers/metadata/amendments. Revise the <code>sl-work</code> suite: replace the blanket "does not edit the plan body" expectation with the format-split contract, and add the unattended zero-write eval (the sole guard in seed mode, so it is load-bearing). Ground-truth pointers reference the revised SKILL.md contract lines.</p>
+    </details>
+    <details>
+      <summary>Test scenarios</summary>
+      <ul>
+        <li><code>tests/skill-evals-shape.test.ts</code> auto-discovers and passes the new suite.</li>
+        <li>Eval runs via skill-creator meet the suite's pass threshold on the scenarios listed in U2/U4.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Verification</summary>
+      <p>Shape test green; eval run results recorded in the PR description.</p>
+    </details>
+  </article>
+</section>
+
+<section id="scope-boundaries">
+  <h2>Scope Boundaries</h2>
+  <div class="callout inscope">
+    <span class="eyebrow">In scope</span>
+    <p>Everything in the Implementation Units: template, image generation + injection, interactive marker tracking, append-only metadata/amendments, post-run sync, contract/test/eval updates.</p>
+  </div>
+  <div class="callout deferred">
+    <span class="eyebrow">Deferred to follow-up work</span>
+    <ul>
+      <li>Image edit/refine script (planf3's <code>edit_gpt_image.py</code> equivalent) — regeneration covers the near-term need.</li>
+      <li>Automated bidirectional back/forward reference wiring (planf3's update-references workflow) — the template carries the fields; population stays manual/interactive.</li>
+      <li>Marker tracking for markdown plans and any goal-guard hash-scope redesign to allow unattended plan writes — large blast radius; requires re-auditing every plan-hash invariant.</li>
+      <li>Per-phase PR execution in lfg/loop.sh — one run/PR per plan phase, with between-run plan sync (markers, commits, amendment) in the guard-free gap between attempts. Complementary to this plan (R12's post-run sync becomes the per-phase sync step) but loop-driver surface: needs its own design pass for merge sequencing, stacked-vs-serial PRs, and run-record lineage.</li>
+      <li>sl-doc-review HTML mutation support — pre-existing gap, unchanged by this work.</li>
+      <li>Per-image cost gating beyond the one-line notice (budget config, spend caps).</li>
+    </ul>
+  </div>
+  <div class="callout deferred">
+    <span class="eyebrow">Non-goals</span>
+    <ul>
+      <li>No lfg changes — pipeline mode keeps forcing markdown; plan-input HTML acceptance is safe because sl-work's unattended gate suppresses writes.</li>
+      <li>No edits to the byte-duplicated shared rendering references.</li>
+      <li>No new LLM sub-agent dispatches, no new plugin agents, no version or changelog hand-edits.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="risks">
+  <h2>Risks &amp; Dependencies</h2>
+  <div class="callout risk">
+    <span class="eyebrow">Risk · mitigated</span>
+    <p><strong>Goal-guard composition.</strong> An unattended run over an HTML plan whose executor writes markers would exit 8. Mitigated by the load-bearing unattended gate (U4), the zero-write eval (U8), and baking images pre-run — with the explicit note that in seed mode sl-work's own gate is the only guard.</p>
+  </div>
+  <div class="callout risk">
+    <span class="eyebrow">Risk · mitigated</span>
+    <p><strong>Context blowup from embedded images.</strong> Multi-hundred-KB single-line data URIs in a file sl-work reads. Mitigated by API-side webp compression, the image-count cap guidance, single-line URIs, and scoped grep/offset reads (K9).</p>
+  </div>
+  <div class="callout risk">
+    <span class="eyebrow">Risk · open</span>
+    <p><strong>OpenAI API surface drift.</strong> The pinned model id or webp output support could change. Contained to one constant in one script; every API failure mode already degrades to placeholder slots, so drift breaks images, never plans. Verify live at implementation (U3 smoke).</p>
+  </div>
+  <div class="callout risk">
+    <span class="eyebrow">Risk · accepted</span>
+    <p><strong>Repo bloat from committed images.</strong> Plans are committed (loop.sh requires it), so embedded webp enlarges history and PR diffs. Accepted as the cost of the single-file invariant; documented with cap guidance (U6).</p>
+  </div>
+  <p><strong>Dependency:</strong> an <code>OPENAI_API_KEY</code> with images access, for the U3 live smoke and for any user who wants filled slots. Everything else is repo-internal.</p>
+</section>
+
+<section id="sources">
+  <h2>Sources &amp; Research</h2>
+  <ul>
+    <li>planf3 skill (local checkout at <code>~/Code/planf3</code>, IndyDevDan): template and instructions in <code>.claude/skills/planf3/SKILL.md</code>; workflows <code>create-plan.md</code>, <code>build-plan.md</code>, <code>update-plan.md</code>, <code>update-references.md</code>, <code>image-generation.md</code>; scripts <code>generate_gpt_image.py</code> (gpt-image-2 params: webp/jpeg + <code>output_compression</code>, snapshot pin <code>gpt-image-2-2026-04-21</code>).</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/sl-plan/references/plan-sections.md"><code>plugins/super-looper/skills/sl-plan/references/plan-sections.md</code></a> — metadata field contract and the no-status rule this plan amends.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/plugins/super-looper/skills/sl-work/SKILL.md"><code>plugins/super-looper/skills/sl-work/SKILL.md</code></a> — the no-mutation rule at Phase 1 step 1 and its three restatements; HTML plans already read as text; already-shipped detection.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/CONCEPTS.md"><code>CONCEPTS.md</code></a> — Goal guard, Model tier; <a href="https://github.com/akornmeier/super-looper/blob/main/AGENTS.md"><code>AGENTS.md</code></a> — goal-change protocol, bundled-script path rules, learning-to-eval rule.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/docs/solutions/skill-design/resume-skip-rescopes-per-attempt-invariant-baseline.md"><code>docs/solutions/skill-design/resume-skip-rescopes-per-attempt-invariant-baseline.md</code></a> — why the guard collision is resolved by design (write suppression), not hash-scope carve-out.</li>
+    <li><a href="https://github.com/akornmeier/super-looper/blob/main/tests/skill-conventions.test.ts"><code>tests/skill-conventions.test.ts</code></a>, <a href="https://github.com/akornmeier/super-looper/blob/main/tests/compound-support-files.test.ts"><code>tests/compound-support-files.test.ts</code></a> — dynamic contract suites the new files must pass; byte-identity pin that keeps shared refs untouched.</li>
+    <li><code>scripts/loop.sh</code> — <code>MODEL="opus"</code> default; plan committed and sha256-guarded per attempt; plan-file mode accepts <code>.html</code>.</li>
+    <li>API-key graceful-skip precedent: <code>plugins/super-looper/skills/sl-riffrec-feedback-analysis/scripts/analyze_riffrec_zip.py</code>.</li>
+  </ul>
+</section>
+
+<footer class="composition-signal">Composed 2026-07-09 by sl-plan from the user's planf3-adoption request and confirmed scoping (AI-raster images · HTML-only tracking · canonical template leaning on planf3's SKILL.md template).</footer>
+
+</main>
+</body>
+</html>
