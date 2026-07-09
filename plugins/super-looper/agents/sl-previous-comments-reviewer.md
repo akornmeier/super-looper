@@ -1,10 +1,9 @@
 ---
 name: sl-previous-comments-reviewer
 description: Conditional code-review persona, selected when reviewing a PR that has existing review comments or review threads. Checks whether prior feedback has been addressed in the current diff.
-model: inherit
+model: opus
 tools: Read, Grep, Glob, Bash, Write
 color: blue
-
 ---
 
 # Previous Comments Reviewer

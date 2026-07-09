@@ -1,7 +1,7 @@
 ---
 name: sl-data-migration-reviewer
 description: Conditional code-review persona for migration files, schema dumps, backfills, and data transformations. Covers schema drift, mapping correctness, deploy-window safety, and verification plans.
-model: inherit
+model: opus
 tools: Read, Grep, Glob, Bash, Write
 color: orange
 ---
