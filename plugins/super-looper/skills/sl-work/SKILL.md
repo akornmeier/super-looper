@@ -178,7 +178,8 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    2. Run the relevant test suite to confirm the tree is healthy
    3. If tests fail, diagnose and fix before proceeding — do not dispatch dependent units on a broken tree
    4. Update the task list (markdown plan: do not edit the plan body — progress is carried by the commit; HTML plan in an interactive run: also flip the unit's status markers, since the orchestrator is the only writer in serial mode)
-   5. Dispatch the next unit
+   5. Release the subagent (`TaskStop` with its name) once its work is accepted — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI
+   6. Dispatch the next unit
 
    **After all parallel subagents in a batch complete (worktree-isolated mode):**
    1. Wait for every subagent in the current parallel batch to finish.
@@ -186,7 +187,7 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    3. Merge each subagent's branch into the orchestrator's branch sequentially in dependency order. **If a merge conflict surfaces, abort the merge (`git merge --abort`) and re-dispatch the conflicting unit serially against the now-merged tree** — hand-resolving silently picks a side and discards one unit's intent. (Predicted overlap from the Parallel Safety Check surfaces here as a conflict, not as silent data loss in shared-directory mode.)
    4. After each merge, run the relevant test suite. If tests fail, diagnose and fix before merging the next branch.
    5. Update the task list (progress is carried by the merge commits). Do not edit the plan body in either format — worktree-parallel execution is multi-writer, so plan writes stay suppressed for the whole run (see the Phase 2 gate).
-   6. After merging, remove each subagent's worktree and delete its branch. Use the absolute path and branch name returned in the subagent's result.
+   6. After merging, release each subagent (`TaskStop` with its name) — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI — then remove its worktree and delete its branch. Use the absolute path and branch name returned in the subagent's result.
       - Unlock the worktree first — the harness locks per-subagent worktrees: `git worktree unlock <absolute-path>`
       - Remove the worktree: `git worktree remove <absolute-path>`
       - Delete the branch: `git branch -d <branch-name>` (the branch outlives the worktree by default and accumulates as orphans if not cleaned up; `-d` lowercase refuses to delete unmerged branches, which is the safety we want — if it fails, investigate before forcing)
@@ -198,7 +199,8 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    3. For each completed unit, in dependency order: review the diff, run the relevant test suite, stage only that unit's files, and commit with a conventional message derived from the unit's Goal
    4. If tests fail after committing a unit's changes, diagnose and fix before committing the next unit
    5. Update the task list (do not edit the plan body in either format — parallel execution is multi-writer, so plan writes stay suppressed for the whole run; progress is carried by the commits just made)
-   6. Dispatch the next batch of independent units, or the next dependent unit
+   6. Release each finished subagent (`TaskStop` with its name) — finished named subagents otherwise idle indefinitely and show as incomplete in the UI
+   7. Dispatch the next batch of independent units, or the next dependent unit
 
 ### Phase 2: Execute
 
