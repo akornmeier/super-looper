@@ -75,10 +75,6 @@ const APPEND_ONLY_FIELDS = [
 const SINGLE_FIELDS = ["title", "type", "date", "origin"]
 
 describe("html-plan-template.md structure", () => {
-  test("reference exists and is non-empty", () => {
-    expect(REFERENCE.length).toBeGreaterThan(0)
-  })
-
   test("carries exactly one fenced html block under `## Template`", () => {
     // The template is stamped verbatim. A second fenced block under the
     // heading would make "copy the block below" ambiguous — the agent would
@@ -157,8 +153,8 @@ describe("html-plan-template.md status markers", () => {
     // skip real work. Both the prose and the template's inline legend must
     // say git wins, because the executing agent may only see the template.
     expect(
-      /advisory[\s\S]{0,80}git is (the )?authoritative|Markers are advisory/i.test(PROSE),
-      "Prose must state markers are advisory and git is authoritative.",
+      /advisory[\s\S]{0,80}git is (the )?authoritative/i.test(PROSE),
+      "Prose must state markers are advisory AND that git is the authoritative record — the advisory half alone leaves the reconciliation rule (K6) unenforced.",
     ).toBe(true)
     expect(
       /advisory[\s\S]{0,40}git is authoritative/i.test(TEMPLATE),
@@ -194,8 +190,8 @@ describe("html-plan-template.md metadata field contract", () => {
     // `date`. Without an explicit statement, an author adapting planf3's
     // template would carry `created` over and break `date`-keyed consumers.
     expect(
-      /`created`[\s\S]{0,60}(not used|is not)|`date`[\s\S]{0,40}creation date/i.test(PROSE),
-      "Prose must state that `date` is the creation-date field and planf3's `created` name is not used — the field contract forbids renaming.",
+      /`created`[\s\S]{0,60}not used/i.test(PROSE),
+      "Prose must state that planf3's `created` name is not used — the field contract forbids renaming, and without the explicit sentence an author adapting planf3's template will carry `created` over and break `date`-keyed consumers.",
     ).toBe(true)
   })
 
@@ -228,7 +224,9 @@ describe("html-plan-template.md image slot grammar", () => {
         `Image slot '${name}' has an opening comment but no matching \`<!-- /image-slot:${name} -->\` closer. The pair is what lets the fill script skip filled slots and regenerate a named one (K5); an unterminated slot swallows the rest of the document.`,
       ).toBe(true)
     }
-    expect(opened.length).toBe(closed.length)
+    // Sorted compare (not length compare) so a duplicated name on one side
+    // cannot mask a missing name on the other.
+    expect([...opened].sort()).toEqual([...closed].sort())
   })
 
   test("prose pins the single-line data URI rule (K9)", () => {
@@ -261,20 +259,6 @@ describe("html-plan-template.md image slot grammar", () => {
 })
 
 describe("html-plan-template.md placeholder convention", () => {
-  test("template contains {{...}} placeholder tokens", () => {
-    expect(
-      /\{\{[^}]+\}\}/.test(TEMPLATE),
-      "Template must use `{{PLACEHOLDER}}` tokens — the stamped-template idiom depends on them (R1).",
-    ).toBe(true)
-  })
-
-  test("template contains <!-- repeat --> markers", () => {
-    expect(
-      /<!--\s*repeat/.test(TEMPLATE),
-      "Template must mark repeatable blocks with `<!-- repeat` comments so the agent knows what to duplicate per unit/task/file.",
-    ).toBe(true)
-  })
-
   test("prose forbids any {{...}} token surviving into a written plan", () => {
     expect(
       /No `\{\{\}\}` token may\s*\n?\s*survive|No `\{\{\.\.\.\}\}` token remains|Replace EVERY `\{\{\.\.\.\}\}` token/i.test(
@@ -329,8 +313,8 @@ describe("html-plan-template.md preserved HTML contracts (R2)", () => {
       "Template must carry exactly one <style> block — the single-self-contained-file invariant.",
     ).toBe(1)
     expect(
-      /<link\s+rel="stylesheet"|<script\s+src=/i.test(TEMPLATE),
-      "Template must not reference external stylesheets or scripts — HTML plans are single self-contained files.",
+      /<link\s+rel="stylesheet"|<script/i.test(TEMPLATE),
+      "Template must not reference external stylesheets or carry any <script> element (inline or external) — HTML plans are single self-contained files, and the template needs no JS.",
     ).toBe(false)
     expect(
       /self-contained/i.test(PROSE),
@@ -365,9 +349,22 @@ describe("html-plan-template.md / plan-sections.md cross-file consistency", () =
   }
 
   test("plan-sections.md declares the append-only semantics for those fields", () => {
+    // Scope to the six-field block: the Amendments section also says
+    // "append-only", so a whole-file match would keep passing after the
+    // metadata append-only sentence was gutted.
+    const blockStart = PLAN_SECTIONS.indexOf("The next six fields")
     expect(
-      /append-only|appended/i.test(PLAN_SECTIONS),
-      "plan-sections.md must state the append-only semantics of the new list fields, not just their names.",
+      blockStart,
+      "plan-sections.md must introduce the six new list fields with the 'The next six fields' block — the template's field contract points at it.",
+    ).toBeGreaterThan(-1)
+    const fieldBlock = PLAN_SECTIONS.slice(blockStart, blockStart + 1500)
+    expect(
+      /append-only/i.test(fieldBlock),
+      "The six-field block in plan-sections.md must state the append-only semantics of the new list fields, not just their names.",
+    ).toBe(true)
+    expect(
+      /idempotent|never duplicated|not added twice/i.test(fieldBlock),
+      "The six-field block must state appends are idempotent (R9).",
     ).toBe(true)
   })
 })

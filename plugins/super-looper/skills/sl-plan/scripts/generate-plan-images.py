@@ -48,6 +48,7 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import urllib.error
@@ -95,6 +96,16 @@ def parse_slots(content):
 
     for match in OPEN_RE.finditer(content):
         name, prompt = match.group(1), match.group(2)
+        if "--" in prompt:
+            # A literal `--` is invalid inside an HTML comment: the browser
+            # terminates the comment at the first `-->` even though this
+            # parser would read straight across it. Refuse rather than fill
+            # a slot the browser and the script disagree about.
+            warnings.append(
+                "slot '" + name + "' prompt contains '--', which is invalid inside an HTML comment"
+                " (escape quotes as &quot; and avoid double hyphens); skipped"
+            )
+            continue
         closer = _closer_re(name).search(content, match.end())
         if not closer:
             warnings.append(
@@ -107,6 +118,15 @@ def parse_slots(content):
         seen.add(name)
 
         interior = content[match.end():closer.start()]
+        if OPEN_RE.search(interior):
+            # Another opener before this slot's closer (a missing closer
+            # upstream, or interleaved slots). Filling would rewrite the
+            # interior and destroy the inner opener outright.
+            warnings.append(
+                "slot '" + name + "' contains another image-slot opener before its closer"
+                " (missing closer?); refusing to fill it"
+            )
+            continue
         caption = FIGCAPTION_RE.search(interior)
         slots.append(
             {
@@ -231,6 +251,9 @@ def generate_image(api_key, prompt, model, size, quality, compression):
     except (json.JSONDecodeError, IndexError, KeyError, TypeError):
         return None, "unexpected API response shape"
 
+    if not b64:
+        return None, "API returned empty image data"
+
     try:
         raw = base64.b64decode(b64, validate=True)
     except Exception:
@@ -243,10 +266,13 @@ def generate_image(api_key, prompt, model, size, quality, compression):
 
 
 def backup_once(plan, state):
+    """One-time backup to OS temp — never a sibling in the (tracked) plans dir."""
     if state["backed_up"]:
         return
-    Path(str(plan) + ".bak").write_bytes(plan.read_bytes())
+    backup = Path(tempfile.gettempdir()) / (plan.name + ".bak")
+    shutil.copy2(plan, backup)
     state["backed_up"] = True
+    sys.stderr.write("Backup of the original plan: " + str(backup) + "\n")
 
 
 def atomic_write(plan, content):
@@ -285,6 +311,20 @@ SAMPLE = """<figure>
   <!-- image-slot:orphan prompt="No closer" -->
   <figcaption>Broken.</figcaption>
 </figure>
+<figure>
+  <!-- image-slot:hyphens prompt="a --> b" -->
+  <figcaption>Comment-breaking prompt.</figcaption>
+  <!-- /image-slot:hyphens -->
+</figure>
+"""
+
+INTERLEAVED = """<figure>
+  <!-- image-slot:outer prompt="Outer" -->
+  <!-- image-slot:inner prompt="Inner" -->
+  <figcaption>Inner caption.</figcaption>
+  <!-- /image-slot:inner -->
+  <!-- /image-slot:outer -->
+</figure>
 """
 
 
@@ -294,7 +334,17 @@ def self_test():
     assert [s["name"] for s in slots] == ["hero", "problem", "unit-3"], [s["name"] for s in slots]
     assert slots[0]["prompt"] == "Wide minimal diagram of a plan artifact"
     assert [s["filled"] for s in slots] == [False, True, False]
-    assert len(warnings) == 1 and "orphan" in warnings[0], warnings
+    assert len(warnings) == 2, warnings
+    assert any("orphan" in w for w in warnings), warnings
+    # A prompt containing `--` breaks the HTML comment in the browser even
+    # though this parser reads across it — the slot must be refused.
+    assert any("hyphens" in w and "--" in w for w in warnings), warnings
+
+    # An opener nested before a slot's closer would be destroyed by a fill —
+    # the outer slot is refused; the inner one still parses.
+    islots, iwarnings = parse_slots(INTERLEAVED)
+    assert [s["name"] for s in islots] == ["inner"], [s["name"] for s in islots]
+    assert any("outer" in w and "refusing" in w for w in iwarnings), iwarnings
 
     # Default run targets only empty slots; filled ones are reported, not silent.
     targets, skipped, warns = select_targets(slots, None, None)
@@ -363,6 +413,10 @@ def main():
 
     if args.plan is None:
         parser.error("plan file is required (or pass --self-test)")
+    if args.slot and args.regenerate:
+        parser.error("--slot and --regenerate are mutually exclusive; pass one")
+    if not 0 <= args.compression <= 100:
+        parser.error("--compression must be between 0 and 100")
     plan = args.plan.expanduser()
     if not plan.is_file():
         sys.stderr.write("generate-plan-images: plan file not found: " + str(plan) + "\n")
@@ -405,9 +459,18 @@ def main():
             skipped.append({"slot": name, "reason": reason})
             continue
 
-        content = fill_slot(content, slot, b64)
-        backup_once(plan, state)
-        atomic_write(plan, content)
+        new_content = fill_slot(content, slot, b64)
+        try:
+            backup_once(plan, state)
+            atomic_write(plan, new_content)
+        except OSError as e:
+            # Read-only directory, full disk, permissions — degrade to a
+            # per-slot skip like every other failure. Earlier successful
+            # writes are already on disk; this fill is discarded.
+            sys.stderr.write("[" + str(index) + "/" + str(len(targets)) + "] " + name + ": skipped - write failed: " + str(e) + "\n")
+            skipped.append({"slot": name, "reason": "write failed: " + str(e)})
+            continue
+        content = new_content
         filled.append(name)
         kib = (len(b64) * 3 // 4) // 1024
         sys.stderr.write("[" + str(index) + "/" + str(len(targets)) + "] " + name + ": embedded (~" + str(kib) + " KiB)\n")

@@ -224,7 +224,8 @@ git, not stored in the doc.
 
 **HTML plans** are stateful tracked artifacts. Implementation-unit tasks carry
 advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]`
-failed — which interactive `sl-work` updates as it executes. Git remains
+failed — which `sl-work` updates during interactive single-writer execution
+(never unattended, never under parallel writers). Git remains
 authoritative; the markers are a projection of it. When marker and git
 disagree, git wins and the marker is corrected. HTML plans still add no
 `status` metadata field and no lifecycle: a marker is per-task state, not a
@@ -265,10 +266,13 @@ only ever appended, never overwritten or removed. Each holds a list.
 - **`forward refs`** — repo-relative paths to downstream artifacts this plan
   produced.
 
-Ownership does not overlap. `sl-work` appends `modified`, `commits`, `agent`,
-and `session` at ship time, idempotently — an entry already present is never
-duplicated. `sl-plan` seeds `agent` and `session` at create time; its revision
-flows own `back refs` and `forward refs`.
+Ownership is scoped by flow — no two writers touch the same field at the same
+moment. At ship time, `sl-work` appends `modified`, `commits`, `agent`, and
+`session`, idempotently — an entry already present is never duplicated.
+`sl-plan` seeds `agent` and `session` at create time, and its resume flow may
+backfill `commits` and `modified` for a run that could not write them (the
+post-run sync after an unattended run). `sl-plan`'s revision flows own
+`back refs` and `forward refs`, and Amendments is theirs alone.
 
 Field names are stable across plan revisions — never rename a field or
 repurpose its semantics. Agents composing new plans MUST use these exact

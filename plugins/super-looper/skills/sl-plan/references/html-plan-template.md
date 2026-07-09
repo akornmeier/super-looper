@@ -12,7 +12,7 @@ each section must contain). This file governs *shape*; those two govern
 
 ## Authoring rules
 
-- **Replace EVERY `{{...}}` token with real content.** No `{{}}` token may
+- **Replace EVERY `{{...}}` token with real content.** No `{{...}}` token may
   survive into the written plan.
 - **Blocks marked `<!-- repeat -->` are repeatable.** Duplicate them once per
   unit, task, checklist item, file, question, or amendment the plan needs,
@@ -121,6 +121,11 @@ Rules:
 
 Prompt authoring rules:
 
+- **The prompt lives inside an HTML comment attribute.** Escape any double
+  quote as `&quot;` and never include `--` (two hyphens) — a browser
+  terminates the comment at the first `-->` regardless of quoting. The fill
+  script refuses a slot whose prompt contains `--` and reports it as a
+  warning.
 - Wide format. Images render at the page's full container width.
 - One or two core ideas per image, aimed at a professional software engineer:
   convey exactly what is being built, not decoration.
@@ -224,7 +229,7 @@ footer.composition-signal{margin-top:3rem;padding-top:1rem;border-top:1px solid 
       <dl>
         <dt>title</dt>        <dd>{{PLAN_TITLE}}</dd>
         <dt>type</dt>         <dd>{{COMMIT_TYPE}}</dd>
-        <dt>date</dt>         <dd><time datetime="{{CREATED_ISO}}">{{CREATED_ISO}}</time></dd>
+        <dt>date</dt>         <dd><time datetime="{{DATE_ISO}}">{{DATE_ISO}}</time></dd>
         <dt>origin</dt>       <dd>{{ORIGIN_PATH}}</dd>
         <dt>modified</dt>     <dd>{{MODIFIED_ISO_LIST}}</dd>
         <dt>commits</dt>      <dd>{{COMMIT_SHA_LIST}}</dd>
@@ -420,7 +425,7 @@ footer.composition-signal{margin-top:3rem;padding-top:1rem;border-top:1px solid 
     </details>
   </section>
 
-  <footer class="composition-signal">Composed {{CREATED_ISO}} by sl-plan from {{COMPOSITION_SOURCE}}.</footer>
+  <footer class="composition-signal">Composed {{DATE_ISO}} by sl-plan from {{COMPOSITION_SOURCE}}.</footer>
 
 </main>
 </body>
