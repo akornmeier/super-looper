@@ -214,10 +214,21 @@ plan.
   intent the eventual commit message should reflect.
 - **`date`** — creation date in ISO 8601 (`YYYY-MM-DD`), ASCII digits only.
 
-Plans carry **no `status` field** — a plan is a decision artifact, not a
-tracked work item. `sl-work` does not mutate the plan at ship time;
-whether a plan shipped is derived from git, not stored in the doc. Do not
-add a `status` field or an `active → completed` lifecycle.
+No plan carries a **`status` field**. What follows from that splits by format,
+and the split is intentional design, not drift.
+
+**Markdown plans** are decision artifacts, not tracked work items. The rule
+holds in full: no `status` field, no `active → completed` lifecycle. `sl-work`
+does not mutate the plan at ship time; whether a plan shipped is derived from
+git, not stored in the doc.
+
+**HTML plans** are stateful tracked artifacts. Implementation-unit tasks carry
+advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]`
+failed — which interactive `sl-work` updates as it executes. Git remains
+authoritative; the markers are a projection of it. When marker and git
+disagree, git wins and the marker is corrected. HTML plans still add no
+`status` metadata field and no lifecycle: a marker is per-task state, not a
+document state.
 
 ### Optional but well-known
 
@@ -240,6 +251,24 @@ semantics so downstream tooling can rely on them:
   to the normal code path. Written by `sl-plan`'s approach-altitude flow
   (`references/approach-altitude.md`) when a non-code deliverable is
   persisted for execution.
+
+The next six fields are **HTML plans only** and **append-only**: entries are
+only ever appended, never overwritten or removed. Each holds a list.
+
+- **`modified`** — ISO 8601 timestamps, one appended per ship-time write.
+  `date` remains the creation date and never changes.
+- **`commits`** — commit SHAs that landed this plan's units.
+- **`agent`** — the agents that authored or executed the plan.
+- **`session`** — session ids that worked the plan.
+- **`back refs`** — repo-relative paths to upstream artifacts this plan
+  descends from.
+- **`forward refs`** — repo-relative paths to downstream artifacts this plan
+  produced.
+
+Ownership does not overlap. `sl-work` appends `modified`, `commits`, `agent`,
+and `session` at ship time, idempotently — an entry already present is never
+duplicated. `sl-plan` seeds `agent` and `session` at create time; its revision
+flows own `back refs` and `forward refs`.
 
 Field names are stable across plan revisions — never rename a field or
 repurpose its semantics. Agents composing new plans MUST use these exact
@@ -270,6 +299,21 @@ These apply regardless of rendering format.
   the order requirements were discussed. R-IDs stay continuous across groups
   (R1, R2 in the first group; R3, R4 in the second; never restart at R1 per
   group).
+
+## Amendments
+
+HTML plans carry an **Amendments** section: an append-only record of changes
+made to the plan after execution began. Entries are appended in order; earlier
+entries are never rewritten or removed. `sl-plan`'s revision flows own it —
+never `sl-work`, and never at plan-creation time, since a plan with no
+execution behind it has nothing to amend.
+
+Amendments is exempt from **resolve in place; don't stratify**. That rule
+governs live plan prose — Summary, Requirements, KTDs, Units — and continues
+to govern every one of those sections: superseded text there is rewritten or
+removed, not stacked. Amendments is not live prose. It is the history of a
+shipped artifact, and its value is the chronology. An amendment records that a
+live section changed; it does not stand in for changing it.
 
 ## Rendering
 
