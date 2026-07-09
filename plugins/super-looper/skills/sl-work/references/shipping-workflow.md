@@ -120,7 +120,7 @@ This file contains the shipping workflow (Phase 3-4). It is loaded when all Phas
    - **Append only.** Never overwrite or remove an existing entry.
    - **Idempotent.** A value already present in a field is not appended a second time — re-running ship on the same session and commits changes nothing.
    - An empty list field renders as the literal text `none`; the first append replaces `none` rather than appending after it.
-   - `sl-work` owns exactly these four fields. Amendments and the `back refs` / `forward refs` fields belong to `sl-plan`'s revision flows — never write them here.
+   - At ship time, `sl-work` writes exactly these four fields and nothing else. (A later `sl-plan` resume may backfill `commits`/`modified` for a run that could not write — that is its post-run sync, not sl-work's concern.) Amendments and the `back refs` / `forward refs` fields belong to `sl-plan`'s revision flows — never write them here.
 
 4. **Notify User**
    - Summarize what was completed

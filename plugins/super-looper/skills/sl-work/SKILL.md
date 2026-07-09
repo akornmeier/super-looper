@@ -254,6 +254,8 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
 
    Edit anchors must include the surrounding unit or task text — a marker token like `<code class="status">[]</code>` repeats throughout the file, so anchoring on the bare token edits an arbitrary occurrence. Anchor on the unit heading, the task heading, or the checklist item's own action text together with its marker.
 
+   The plan's global `Validation Commands` checklist carries the same markers and follows the same transitions: flip each item as its command runs during final validation (Phase 3), `[x]` on pass, `[f]` for a step that cannot be completed. Same anchor rule applies.
+
    `[f]` is informational only. Shipping gates on tests and verification, never on marker state — a plan full of `[x]` with failing tests does not ship, and a stray `[f]` never blocks Phase 3.
 
    **Resume reconciliation** _(HTML plans, markers active)_
