@@ -94,6 +94,35 @@ The gate must assert a **positive fact**. "No unresolved review threads" is sati
 vacuously by a pull request nobody reviewed; requiring conversation resolution would
 relocate that inverted predicate into GitHub rather than fix it.
 
+### The cron backstop is load-bearing. Do not delete it.
+
+`pr-reviewed.yml` triggers on `pull_request_review` **and** on a `schedule`. The second
+trigger looks redundant and is not.
+
+**GitHub refuses to run workflows it attributes to the Copilot bot.** A
+`pull_request_review` event whose `triggering_actor` is `Copilot` produces a run that
+completes as `action_required` without ever executing. Copilot is the only reviewer on
+this repository, so the fast path never fires for the reviews that matter. Observed on
+PR #33, same workflow, same head, same reviews:
+
+| `triggering_actor` | Conclusion |
+| --- | --- |
+| `akornmeier` | `success` |
+| `Copilot` | `action_required` |
+
+Cron runs are attributed to `github-actions` and always execute. The scheduled sweep is
+what actually turns `pr-reviewed` green after Copilot reviews; the `pull_request_review`
+trigger only helps when a human reviews. Remove the schedule and this check silently
+never posts on a Copilot-only review — which is indistinguishable from a mistyped
+context name, and blocks merge forever.
+
+Cron's floor is 5 minutes and GitHub delays it under load. Budget roughly 15 minutes
+between a review landing and the pull request going green.
+
+The sweep skips a pull request whose head already carries the state it would post.
+Without that, every open pull request would accumulate hundreds of identical statuses
+per day.
+
 `pr-reviewed` also carries the changes-requested block, which nothing else does:
 GitHub only refuses to merge over a `CHANGES_REQUESTED` review when required
 approvals is at least 1, and it is 0 here. The status stays red while any such review

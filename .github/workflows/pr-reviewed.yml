@@ -6,15 +6,33 @@ name: PR reviewed
 # reviewed, whereas a status that is never posted leaves the pull request
 # blocked, which is the property the gate needs.
 #
-# There is deliberately no companion job to reset the status on a new push.
-# Commit statuses are per-SHA, so a new head simply has no `pr-reviewed` status,
-# and an absent required context blocks merge on its own. Copilot re-reviews
-# each push (`copilot_code_review` rule, `review_on_push: true`), which is what
-# posts the status again on the new head.
+# There is deliberately no job to reset the status on a new push. Commit
+# statuses are per-SHA, so a new head simply has no `pr-reviewed` status, and an
+# absent required context blocks merge on its own.
+#
+# Two triggers, because one is not enough:
+#
+#   pull_request_review  fast path. Works when a *human* reviews. GitHub refuses
+#                        to run workflows it attributes to the Copilot bot --
+#                        such runs complete as `action_required` without ever
+#                        executing -- so Copilot's own review cannot post this
+#                        status, even though `copilot_code_review` re-reviews
+#                        every push and Copilot is the only reviewer here.
+#   schedule             backstop. Cron runs are attributed to github-actions,
+#                        never to Copilot, so they always execute. This is what
+#                        actually turns the status green on a Copilot-only
+#                        review, within a cron tick of the review landing.
+#
+# Without the backstop this check could silently never post, which is
+# indistinguishable from a mistyped context name and blocks merge forever.
 
 on:
   pull_request_review:
     types: [submitted, dismissed]
+  schedule:
+    # GitHub's floor is 5 minutes and it delays under load; treat this as an
+    # upper bound of roughly 15 minutes, not a guarantee of 5.
+    - cron: "*/5 * * * *"
 
 permissions:
   pull-requests: read
@@ -25,41 +43,65 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Report pr-reviewed status for the head commit
+      - name: Report pr-reviewed status for each open pull request head
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
-          # A gh or jq failure aborts before the POST, leaving the status absent
-          # and the pull request blocked. Failing closed is the point.
-          states=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews" \
-            --jq '.[]
-                  | select(.commit_id == env.HEAD_SHA)
-                  | select(.user.login != env.PR_AUTHOR)
-                  | select(.state != "DISMISSED")
-                  | .state')
-
-          if [ -z "$states" ]; then
-            state=failure
-            description="No review by another party on this commit."
-          elif printf '%s\n' "$states" | grep -qx CHANGES_REQUESTED; then
-            # Stays red while any changes-requested review stands on this head.
-            # Clearing it is a human dismissing the review, which GitHub audits;
-            # the gate never dismisses a review to satisfy itself.
-            state=failure
-            description="Changes requested on this commit."
+          # On a review event, only that pull request changed. On cron, sweep
+          # every open pull request -- the review that needs reporting may have
+          # landed on any of them.
+          if [ -n "${EVENT_PR:-}" ]; then
+            prs="$EVENT_PR"
           else
-            state=success
-            description="Reviewed on this commit."
+            prs=$(gh api --paginate "repos/$REPO/pulls?state=open" --jq '.[].number')
           fi
 
-          echo "head=$HEAD_SHA state=$state"
-          gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
-            -f state="$state" \
-            -f context=pr-reviewed \
-            -f description="$description" >/dev/null
+          for pr in $prs; do
+            meta=$(gh api "repos/$REPO/pulls/$pr" --jq '"\(.head.sha) \(.user.login)"')
+            HEAD_SHA="${meta%% *}"
+            PR_AUTHOR="${meta##* }"
+            export HEAD_SHA PR_AUTHOR
+
+            # A gh or jq failure aborts before the POST, leaving the status
+            # absent and the pull request blocked. Failing closed is the point.
+            states=$(gh api --paginate "repos/$REPO/pulls/$pr/reviews" \
+              --jq '.[]
+                    | select(.commit_id == env.HEAD_SHA)
+                    | select(.user.login != env.PR_AUTHOR)
+                    | select(.state != "DISMISSED")
+                    | .state')
+
+            if [ -z "$states" ]; then
+              state=failure
+              description="No review by another party on this commit."
+            elif printf '%s\n' "$states" | grep -qx CHANGES_REQUESTED; then
+              # Stays red while any changes-requested review stands on this head.
+              # Clearing it is a human dismissing the review, which GitHub audits;
+              # the gate never dismisses a review to satisfy itself.
+              state=failure
+              description="Changes requested on this commit."
+            else
+              state=success
+              description="Reviewed on this commit."
+            fi
+
+            # Cron re-evaluates every open pull request on every tick. Posting an
+            # unchanged status each time would bury the head in hundreds of
+            # identical statuses a day.
+            current=$(gh api "repos/$REPO/commits/$HEAD_SHA/status" \
+              --jq '[.statuses[] | select(.context == "pr-reviewed")][0].state // ""')
+            if [ "$current" = "$state" ]; then
+              echo "pr#$pr head=$HEAD_SHA already $state, skipping"
+              continue
+            fi
+
+            echo "pr#$pr head=$HEAD_SHA $current -> $state"
+            gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
+              -f state="$state" \
+              -f context=pr-reviewed \
+              -f description="$description" >/dev/null
+          done
