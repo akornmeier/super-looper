@@ -122,6 +122,29 @@ gh api -X PUT repos/akornmeier/super-looper/rulesets/17763543 \
   --input .github/rulesets/main-ruleset.restore.json
 ```
 
+This payload is a verbatim pre-mutation snapshot, so it carries `bypass_actors`. That
+is correct for a **rollback** — restoring the exact prior state — and wrong for an
+**emergency unfreeze**, where the Emergencies section below applies instead: disable
+enforcement, never reinstate a bypass. Once plan unit U10 removes `bypass_actors`
+permanently, replaying this file reinstates the bypass it deleted. After U10, clear it
+in the payload before the `PUT`:
+
+```bash
+jq '.bypass_actors = []' .github/rulesets/main-ruleset.restore.json \
+  | gh api -X PUT repos/akornmeier/super-looper/rulesets/17763543 --input -
+```
+
+**Set it to `[]`; do not delete the key.** `PUT` on a ruleset is a *partial* update —
+an omitted field is left unchanged, not cleared. `jq 'del(.bypass_actors)'` therefore
+silently leaves the bypass exactly where it was, which looks like it worked. Verified
+against the live ruleset: omitting the key preserved
+`[{actor_id: 5, actor_type: RepositoryRole, bypass_mode: always}]`, while
+`.bypass_actors = []` cleared it.
+
+The restore path above has been rehearsed, not merely written down: replaying
+`main-ruleset.restore.json` returned the ruleset to all four original rules and its
+original bypass actor. A restore path that has never been executed is a hypothesis.
+
 No data is at risk in either direction. The cutover is pure configuration.
 
 ## The stuck-gate detector (R21)
