@@ -30,9 +30,17 @@ on:
   pull_request_review:
     types: [submitted, dismissed]
   schedule:
-    # GitHub's floor is 5 minutes and it delays under load; treat this as an
-    # upper bound of roughly 15 minutes, not a guarantee of 5.
+    # Nominally every 5 minutes, but GitHub throttles scheduled runs hard on
+    # this repo -- measured cadence is roughly hourly, and individual ticks are
+    # dropped entirely. This is the unattended backstop, not the fast path.
     - cron: "*/5 * * * *"
+  # The on-demand fast path. `gh workflow run "PR reviewed"` re-evaluates every
+  # open pull request immediately, attributed to the dispatcher (a human), so
+  # it always executes -- unlike a Copilot-triggered run, and unlike the
+  # per-run Approve button, whose REST endpoint 403s on non-fork runs and so
+  # cannot be scripted. This is how you unstick a pull request that is reviewed
+  # but still waiting on the hourly cron.
+  workflow_dispatch:
 
 permissions:
   pull-requests: read

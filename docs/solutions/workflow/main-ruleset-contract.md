@@ -110,18 +110,32 @@ PR #33, same workflow, same head, same reviews:
 | `akornmeier` | `success` |
 | `Copilot` | `action_required` |
 
-Cron runs are attributed to `github-actions` and always execute. The scheduled sweep is
-what actually turns `pr-reviewed` green after Copilot reviews; the `pull_request_review`
-trigger only helps when a human reviews. Remove the schedule and this check silently
-never posts on a Copilot-only review — which is indistinguishable from a mistyped
-context name, and blocks merge forever.
+Scheduled runs are attributed to `github-actions` (in practice, the last identity to
+edit the workflow) and always execute, so the sweep is the carrier that turns
+`pr-reviewed` green after Copilot reviews; the `pull_request_review` trigger only helps
+when a *human* reviews. Remove the schedule and this check silently never posts on a
+Copilot-only review — which is indistinguishable from a mistyped context name, and
+blocks merge forever.
 
-Cron's floor is 5 minutes and GitHub delays it under load. Budget roughly 15 minutes
-between a review landing and the pull request going green.
+**Cron is slow here. Do not rely on it for interactive merges.** The cron asks for
+every 5 minutes, but GitHub throttles scheduled runs on this repo severely: the
+measured gap between ticks was **60 minutes**, and intermediate ticks are dropped
+outright. A reviewed pull request can therefore sit `blocked` on `pr-reviewed` for the
+better part of an hour with nothing wrong.
+
+Two fast paths exist for when you do not want to wait:
+
+- **`gh workflow run "PR reviewed"`** (the `workflow_dispatch` trigger) re-evaluates
+  every open pull request immediately, attributed to you, so it always executes. This
+  is the scriptable unstick.
+- **The "Approve workflows to run" button** on the pull request approves Copilot's own
+  gated `pr-reviewed` run, which then posts in seconds. Note this is *not* scriptable:
+  `POST /actions/runs/{id}/approve` returns `403 "This run is not from a fork pull
+  request"` for these non-fork runs, so the button is the only way to reach it.
 
 The sweep skips a pull request whose head already carries the state it would post.
-Without that, every open pull request would accumulate hundreds of identical statuses
-per day.
+Without that, cron and every dispatch would bury each open head under a pile of
+identical statuses.
 
 `pr-reviewed` also carries the changes-requested block, which nothing else does:
 GitHub only refuses to merge over a `CHANGES_REQUESTED` review when required
@@ -214,6 +228,43 @@ working gate look stuck.
 `pr-reviewed` is absent by design until a review lands on the current head. On a fresh
 push it will not exist, and the pull request is correctly blocked until Copilot
 re-reviews (the `copilot_code_review` rule sets `review_on_push: true`).
+
+## The release train (R19)
+
+release-please opens `chore: release main` from the `release-please--branches--main`
+branch, authored by `github-actions[bot]`. Under this gate it is subject to the same
+four required checks as any pull request, and there is no auto-merge: a release is
+always a deliberate human merge, and blocking a release pull request never blocks
+feature work — feature pull requests do not depend on a release merging.
+
+**Chosen path: manual approval at release time. No exemption, no scoped ruleset, no
+bot bypass.** Two facts make this work without any of those:
+
+1. **The reviewer requirement is satisfied by the releaser.** The release pull
+   request's author is `github-actions[bot]`, not the maintainer, so the maintainer's
+   own review of it is a *non-author* review — exactly what `pr-reviewed` asserts.
+   Reading the changelog before releasing is the review.
+2. **The checks need one approval click.** release-please runs as `GITHUB_TOKEN`, so
+   every workflow run on the release branch is attributed to `github-actions[bot]` and
+   lands in `action_required` — GitHub will not auto-run bot-attributed workflows.
+   Clicking "Approve workflows to run" once makes `test`, `pr-title`, and `pr-size`
+   execute; reviewing the pull request makes `pr-reviewed` green (via dispatch or the
+   next cron tick).
+
+So the release flow is: **approve the workflows, review the pull request, merge.** One
+extra click at release time, and nothing standing between releases.
+
+**Rejected: give release-please a human-owned PAT.** Replacing `GITHUB_TOKEN` with a
+fine-grained PAT owned by the maintainer would attribute the runs to a human, so they
+would execute with no approval click. It was rejected for the reason the plan rejected
+a separate machine identity for merges: a PAT is a credential to provision, store, and
+rotate, and its silent expiry would stall releases with no obvious cause. A click at
+release time is cheaper than a secret with a lifecycle. This can be revisited if
+releases ever become frequent enough that the click is a real burden.
+
+Not chosen, and deliberately not: restoring a general bypass, or scoping the required
+checks to exclude the release ref. The first is what U10 removes; the second hides the
+release pull request from the gate that exists to check it.
 
 ## Emergencies
 
