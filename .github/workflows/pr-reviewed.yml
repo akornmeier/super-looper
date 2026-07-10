@@ -1,0 +1,65 @@
+name: PR reviewed
+
+# Emits a `pr-reviewed` commit status asserting that somebody other than the
+# author reviewed *this exact head commit*. The gate must assert a positive
+# fact: "no unresolved threads" is satisfied vacuously by a pull request nobody
+# reviewed, whereas a status that is never posted leaves the pull request
+# blocked, which is the property the gate needs.
+#
+# There is deliberately no companion job to reset the status on a new push.
+# Commit statuses are per-SHA, so a new head simply has no `pr-reviewed` status,
+# and an absent required context blocks merge on its own. Copilot re-reviews
+# each push (`copilot_code_review` rule, `review_on_push: true`), which is what
+# posts the status again on the new head.
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  pull-requests: read
+  statuses: write
+
+jobs:
+  report-status:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report pr-reviewed status for the head commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+
+          # A gh or jq failure aborts before the POST, leaving the status absent
+          # and the pull request blocked. Failing closed is the point.
+          states=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+            --jq '.[]
+                  | select(.commit_id == env.HEAD_SHA)
+                  | select(.user.login != env.PR_AUTHOR)
+                  | select(.state != "DISMISSED")
+                  | .state')
+
+          if [ -z "$states" ]; then
+            state=failure
+            description="No review by another party on this commit."
+          elif printf '%s\n' "$states" | grep -qx CHANGES_REQUESTED; then
+            # Stays red while any changes-requested review stands on this head.
+            # Clearing it is a human dismissing the review, which GitHub audits;
+            # the gate never dismisses a review to satisfy itself.
+            state=failure
+            description="Changes requested on this commit."
+          else
+            state=success
+            description="Reviewed on this commit."
+          fi
+
+          echo "head=$HEAD_SHA state=$state"
+          gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
+            -f state="$state" \
+            -f context=pr-reviewed \
+            -f description="$description" >/dev/null

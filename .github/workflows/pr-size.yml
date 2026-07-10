@@ -1,0 +1,29 @@
+name: PR size
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  pr-size:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Keep this job and step unconditional. A job skipped by an `if:` guard
+      # reports success to a required status check, so a conditional here would
+      # open the gate on exactly the pull requests it exists to stop.
+      #
+      # The count comes from the event payload rather than a diff, so no
+      # checkout, no actions, and nothing to pin.
+      - name: Enforce changed-file cap
+        env:
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          CAP: 100
+        run: |
+          echo "changed files: $CHANGED_FILES (cap: $CAP)"
+          if [ "$CHANGED_FILES" -gt "$CAP" ]; then
+            echo "::error::This pull request changes $CHANGED_FILES files, over the cap of $CAP. Split it into smaller pull requests."
+            exit 1
+          fi
