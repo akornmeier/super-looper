@@ -29,6 +29,19 @@ tags:
 
 Ruleset `17763543` on `akornmeier/super-looper`, target `~DEFAULT_BRANCH`.
 
+**This document is the specification, not a report of live state.** It records what the
+ruleset must enforce and why. Whether a given rule is active right now — during a
+rollout window, after a rollback, or with enforcement disabled for an emergency — is
+answered only by the API:
+
+```bash
+gh api repos/akornmeier/super-looper/rulesets/17763543 --jq '[.rules[].type]'
+```
+
+Do not infer from this document that a required-checks rule is already active. Ask the
+API. Documentation asserting a protection it could not see is the failure this whole
+contract exists to correct.
+
 ## The required contexts
 
 GitHub matches required checks **by name, as a literal string**. A required context
