@@ -146,10 +146,14 @@ and leaves the version drift unresolved.
 
 ## When the rules were violated (direct merge / direct push)
 
-A direct push or direct merge to `main` skips `release:validate`, the test suite,
-and PR-title validation. That is how an unvalidated hand-bump or a stale pin lands
-unnoticed and is only discovered when releases break — the "multi-PR recovery" the
-contributor rules warn about.
+A direct push or direct merge to `main` is not ungated so much as gated too late.
+`ci.yml` triggers on `push` to `main`, so `release:validate` and the suite do run —
+but only after the commit has landed, and a red result unlands nothing. PR-title
+validation never runs at all, because that job is gated to `pull_request` events, and
+neither do the other pull-request-only checks. So the validator's verdict arrives
+after the damage, as a red badge on `main` rather than a blocked merge. That is how an
+unvalidated hand-bump or a stale pin lands unnoticed and is only discovered when
+releases break — the "multi-PR recovery" the contributor rules warn about.
 
 Prevention is **not yet structural**, contrary to what this document previously
 claimed. The `main` ruleset blocks branch deletion, force-pushes, and re-creation
