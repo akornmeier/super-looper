@@ -149,10 +149,21 @@ and leaves the version drift unresolved.
 A direct push or direct merge to `main` skips `release:validate`, the test suite,
 and PR-title validation. That is how an unvalidated hand-bump or a stale pin lands
 unnoticed and is only discovered when releases break — the "multi-PR recovery" the
-contributor rules warn about. Prevention is structural: branch protection on `main`
-requires the `test` status check, so every change flows through a PR that runs the
-gate. If a bad value already landed, use the decision tree above and ship the
-correction as its own PR — never a second direct merge.
+contributor rules warn about.
+
+Prevention is **not yet structural**, contrary to what this document previously
+claimed. The `main` ruleset blocks branch deletion, force-pushes, and re-creation
+of the branch, and it auto-requests a Copilot review — but it requires neither a
+pull request nor any status check, and a bypass actor exempts the maintainer.
+Nothing refuses a direct push to `main` today; the merge policy in `AGENTS.md` is a
+convention held by discipline. Planned work adds a pull-request rule and a
+required-status-checks rule so the routing becomes enforced. Whatever gate lands,
+the property that matters is unchanged: every change must flow through a PR that
+runs `release:validate`, the suite, and title validation. The required-check entry
+is the mechanism; that routing is the protection.
+
+If a bad value already landed, use the decision tree above and ship the correction
+as its own PR — never a second direct merge.
 
 ## Why this matters
 
