@@ -27,3 +27,5 @@ jobs:
             echo "::error::This pull request changes $CHANGED_FILES files, over the cap of $CAP. Split it into smaller pull requests."
             exit 1
           fi
+
+# Observation branch: verifying pr-reviewed posts. This PR will be closed.
