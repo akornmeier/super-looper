@@ -266,18 +266,60 @@ Not chosen, and deliberately not: restoring a general bypass, or scoping the req
 checks to exclude the release ref. The first is what U10 removes; the second hides the
 release pull request from the gate that exists to check it.
 
+## The bypass actor is gone (R12)
+
+`bypass_actors` was removed on 2026-07-10, as a standalone change that touched nothing
+else in the ruleset. `current_user_can_bypass` now reads `never`. The gate binds the
+maintainer exactly as it binds anyone: a direct `git push` to `main` is refused with
+
+```
+- Changes must be made through a pull request.
+- 4 of 4 required status checks are expected.
+! [remote rejected] HEAD -> main (push declined due to repository rule violations)
+```
+
+That refusal was verified against the live repository after removal — the plan's own
+test, which could not run while the bypass existed.
+
+Removal was sequenced last, after a real pull request (#35) had gone green on all four
+required contexts and merged, and after the release path above was established. Lock-out
+risk lives only in the combination of an absent bypass and a required check that may
+never post; adding the gate first, with the bypass retained, made a wrong check name
+survivable. See [`../best-practices/`](../best-practices/) for the general shape — a new
+guard is armed only after the thing it guards is observed working.
+
 ## Emergencies
 
 **Disable ruleset enforcement. Do not restore a bypass actor.** Disabling is recorded
-in the audit log; a standing bypass is not.
+in the audit log; a standing bypass is not. Reinstating a bypass to unstick one merge
+leaves a permanent hole to fix a temporary problem.
 
-Removing `bypass_actors` removes rule *bypass*, not ruleset *administration*. The
-owner can still disable or edit the ruleset at any time. The worst case is a
-repository-wide pull-request freeze until the gate is fixed — an availability
-incident, not an irreversible one.
+Removing `bypass_actors` removed rule *bypass*, not ruleset *administration*. The owner
+can still disable or edit the ruleset at any time, so the worst case is a
+repository-wide pull-request freeze until the gate is fixed — an availability incident,
+not an irreversible one. This is a behavioral guarantee, not a capability boundary: the
+maintainer retains admin and can disable the gate they installed. That is a known,
+accepted residual.
 
-This is a behavioral guarantee, not a capability boundary: the maintainer retains
-admin and can disable the gate they installed. That is a known, accepted residual.
+**The stuck-gate signal, restated for the no-bypass world.** With the bypass gone, a
+misconfiguration can no longer be merged past — so distinguishing a *stuck* gate from a
+*failing* one matters more, not less. A pull request reporting blocked while **no check
+has failed** means a required context is not reporting (see the stuck-gate detector
+above): a misconfiguration, not a real failure. The response is to fix or dispatch the
+missing context (`gh workflow run "PR reviewed"` for `pr-reviewed`), or in a true
+emergency to disable enforcement — never to re-add a bypass.
+
+**Rollback.** To restore the pre-removal state (gate active, bypass present), replay the
+snapshot recorded at removal time:
+
+```bash
+gh api -X PUT repos/akornmeier/super-looper/rulesets/17763543 \
+  --input .github/rulesets/main-ruleset.with-gate-and-bypass.json
+```
+
+No data is at risk: the cutover was pure configuration. To roll back further — the gate
+removed entirely — replay `main-ruleset.restore.json` instead, per the Snapshot and
+restore path section above.
 
 ## Related
 
