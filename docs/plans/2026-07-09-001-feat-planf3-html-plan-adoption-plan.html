@@ -543,7 +543,7 @@ strong{color:inherit}
     <h3><span class="idchip">F1</span>Image edit/refine script</h3>
     <dl class="strip">
       <dt>Goal</dt><dd>A bundled edit/refine path (planf3's <code>edit_gpt_image.py</code> equivalent) so an existing embedded slot can be revised in place rather than fully regenerated.</dd>
-      <dt>Surface</dt><dd><code>plugins/super-looper/skills/sl-plan/scripts/</code> (companion to <code>generate-plan-images.py</code>), plus a slot-grammar note in <code>references/html-plan-template.md</code>.</dd>
+      <dt>Surface</dt><dd><code>plugins/super-looper/skills/sl-plan/scripts/</code> (companion to <code>generate-plan-images.py</code>), plus a slot-grammar note in <code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code>.</dd>
       <dt>Why deferred</dt><dd>Regeneration (force-refill of a named slot) covered the near-term need; edit is a convenience over an already-working path.</dd>
       <dt>First step</dt><dd>Confirm the OpenAI images edit endpoint surface for <code>gpt-image-2</code>, then extend or fork the generate script with an <code>--edit &lt;slot&gt;</code> mode reusing the same graceful-skip and data-URI injection logic.</dd>
       <dt>Effort / risk</dt><dd>Small &middot; low — isolated to one script; every failure mode already degrades to the existing placeholder skip. Needs a contract test and an eval per the learning-to-eval rule if it changes skill prose.</dd>
@@ -555,7 +555,7 @@ strong{color:inherit}
     <h3><span class="idchip">F2</span>Automated bidirectional reference wiring</h3>
     <dl class="strip">
       <dt>Goal</dt><dd>Automated population of the <code>back refs</code>/<code>forward refs</code> metadata fields across linked plans (planf3's update-references workflow).</dd>
-      <dt>Surface</dt><dd>sl-plan skill workflow prose + <code>references/html-plan-template.md</code>; the fields already exist in the template (R3), only population is manual today.</dd>
+      <dt>Surface</dt><dd>sl-plan skill workflow prose + <code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code>; the fields already exist in the template (R3), only population is manual today.</dd>
       <dt>Why deferred</dt><dd>The template carries the fields; interactive/manual population was sufficient to ship. Automation adds cross-file traversal.</dd>
       <dt>First step</dt><dd>Design the traversal contract: given a new plan's <code>back refs</code>, write the reciprocal <code>forward refs</code> into each target plan. Decide whether this is a script or interactive skill step (note the goal-guard interaction if it ever mutates a committed plan under an unattended run).</dd>
       <dt>Effort / risk</dt><dd>Medium &middot; medium — multi-file writes; must not violate the single-file invariant or the append-only rule.</dd>
@@ -576,7 +576,7 @@ strong{color:inherit}
   </article>
 
   <article class="unit" id="f4">
-    <h3><span class="idchip">F4</span>Per-phase PR execution in lfg/loop.sh</h3>
+    <h3><span class="idchip">F4</span>Per-phase PR execution in the lfg loop driver (<code>scripts/loop.sh</code>)</h3>
     <dl class="strip">
       <dt>Goal</dt><dd>One run/PR per plan phase, with between-run plan sync (markers, commits, amendment) performed in the guard-free gap between attempts. R12's post-run sync becomes the per-phase sync step.</dd>
       <dt>Surface</dt><dd>Loop driver — <code>scripts/loop.sh</code> and the <code>lfg</code> skill. Currently only a reserved <code>run_id</code> join-key comment exists (<code>"per-phase agent trace"</code>); no execution logic.</dd>
