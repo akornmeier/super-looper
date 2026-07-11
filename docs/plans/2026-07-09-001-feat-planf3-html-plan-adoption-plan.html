@@ -525,7 +525,7 @@ strong{color:inherit}
 
 <section id="action-plan">
   <h2>Action Plan &middot; Deferred Follow-ups</h2>
-  <p>Status review on <time datetime="2026-07-11">2026-07-11</time> (post-merge of PR #28): all six items from the Deferred callout above remain <strong>unimplemented</strong>. Recent work (U10/U11 ruleset and merge-policy fixes) touched none of them. Each is captured below as a discrete follow-up unit with the concrete first step, owning surface, and rough effort. They are independent and can be picked up in any order except where a dependency is noted; the recommended sequence runs the low-blast-radius items first (F1, F6, F2) and treats F3/F4 as design-gated.</p>
+  <p>Status review on <time datetime="2026-07-11">2026-07-11</time> (post-merge of PR #28): all six items from the Deferred callout above remain <strong>unimplemented</strong>. Recent unrelated merge-policy / ruleset work (PRs #33&ndash;#36) touched none of them. Each is captured below as a discrete follow-up unit with the concrete first step, owning surface, and rough effort. They are independent and can be picked up in any order except where a dependency is noted; the recommended sequence runs the low-blast-radius items first (F1, F6, F2) and treats F3/F4 as design-gated.</p>
 
   <nav class="subnav">
     <span class="eyebrow">Follow-ups</span>
@@ -543,7 +543,7 @@ strong{color:inherit}
     <h3><span class="idchip">F1</span>Image edit/refine script</h3>
     <dl class="strip">
       <dt>Goal</dt><dd>A bundled edit/refine path (planf3's <code>edit_gpt_image.py</code> equivalent) so an existing embedded slot can be revised in place rather than fully regenerated.</dd>
-      <dt>Surface</dt><dd><code>plugins/super-looper/skills/sl-plan/scripts/</code> (companion to <code>generate-plan-images.py</code>), plus a slot-grammar note in <code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code>.</dd>
+      <dt>Surface</dt><dd>A new script alongside <code>plugins/super-looper/skills/sl-plan/scripts/generate-plan-images.py</code>, plus a slot-grammar note in <code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code>.</dd>
       <dt>Why deferred</dt><dd>Regeneration (force-refill of a named slot) covered the near-term need; edit is a convenience over an already-working path.</dd>
       <dt>First step</dt><dd>Confirm the OpenAI images edit endpoint surface for <code>gpt-image-2</code>, then extend or fork the generate script with an <code>--edit &lt;slot&gt;</code> mode reusing the same graceful-skip and data-URI injection logic.</dd>
       <dt>Effort / risk</dt><dd>Small &middot; low — isolated to one script; every failure mode already degrades to the existing placeholder skip. Needs a contract test and an eval per the learning-to-eval rule if it changes skill prose.</dd>
