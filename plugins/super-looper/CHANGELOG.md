@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.5.0...super-looper-v0.6.0) (2026-07-11)
+
+
+### Features
+
+* **sl-plan:** add bundled image generation script with script-side base64 injection ([8d8e623](https://github.com/akornmeier/super-looper/commit/8d8e623f105133810ab8204c6b214de8adf75101))
+* **sl-plan:** add canonical HTML plan template adapted from planf3 ([3a11aae](https://github.com/akornmeier/super-looper/commit/3a11aaed306426d2ac02298545cd9215acbf6d76))
+* **sl-plan:** declare HTML plans stateful tracked artifacts in section contract ([198116a](https://github.com/akornmeier/super-looper/commit/198116aadb60a7220186b85a1a54a7cc6d4388f0))
+* **sl-plan:** planf3-style HTML plans with images and live tracking ([dd193e8](https://github.com/akornmeier/super-looper/commit/dd193e8e71dd7b28b00d731744c0b16b35cb10e0))
+* **sl-plan:** stamp HTML plans from canonical template and fill image slots post-write ([b4efb65](https://github.com/akornmeier/super-looper/commit/b4efb65aea52969b1d0d920752d3d6ba72430988))
+* **sl-work:** maintain advisory status markers in HTML plans during interactive execution ([1a91d74](https://github.com/akornmeier/super-looper/commit/1a91d749724884598ff4061ff153015ac82b3741))
+
+
+### Bug Fixes
+
+* **sl-plan:** harden image-slot grammar, script failure paths, and fill-later routing per review ([3649eff](https://github.com/akornmeier/super-looper/commit/3649eff0b37faa8a280b66c3bffd6b13618853a0))
+* **sl-work:** release finished subagents so they mark complete in the UI ([fd9b4de](https://github.com/akornmeier/super-looper/commit/fd9b4de098b5390015d5146cb53c063a38d4be56))
+* **sl-work:** scope ship-time metadata ownership and own global validation markers ([baec94f](https://github.com/akornmeier/super-looper/commit/baec94f44ae54d2e996a1d0d71927b1d0bae2ae6))
+
 ## [0.5.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.4.1...super-looper-v0.5.0) (2026-07-05)
 
 
