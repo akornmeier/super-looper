@@ -508,7 +508,7 @@ strong{color:inherit}
       <li>Image edit/refine script (planf3's <code>edit_gpt_image.py</code> equivalent) — regeneration covers the near-term need.</li>
       <li>Automated bidirectional back/forward reference wiring (planf3's update-references workflow) — the template carries the fields; population stays manual/interactive.</li>
       <li>Marker tracking for markdown plans and any goal-guard hash-scope redesign to allow unattended plan writes — large blast radius; requires re-auditing every plan-hash invariant.</li>
-      <li>Per-phase PR execution in lfg/loop.sh — one run/PR per plan phase, with between-run plan sync (markers, commits, amendment) in the guard-free gap between attempts. Complementary to this plan (R12's post-run sync becomes the per-phase sync step) but loop-driver surface: needs its own design pass for merge sequencing, stacked-vs-serial PRs, and run-record lineage.</li>
+      <li>Per-phase PR execution in the lfg loop driver (<code>scripts/loop.sh</code>) — one run/PR per plan phase, with between-run plan sync (markers, commits, amendment) in the guard-free gap between attempts. Complementary to this plan (R12's post-run sync becomes the per-phase sync step) but loop-driver surface: needs its own design pass for merge sequencing, stacked-vs-serial PRs, and run-record lineage.</li>
       <li>sl-doc-review HTML mutation support — pre-existing gap, unchanged by this work.</li>
       <li>Per-image cost gating beyond the one-line notice (budget config, spend caps).</li>
     </ul>
@@ -521,6 +521,95 @@ strong{color:inherit}
       <li>No new LLM sub-agent dispatches, no new plugin agents, no version or changelog hand-edits.</li>
     </ul>
   </div>
+</section>
+
+<section id="action-plan">
+  <h2>Action Plan &middot; Deferred Follow-ups</h2>
+  <p>Status review on <time datetime="2026-07-11">2026-07-11</time> (post-merge of PR #28): all six items from the Deferred callout above remain <strong>unimplemented</strong>. Recent unrelated merge-policy / ruleset work (PRs #33&ndash;#36) touched none of them. Each is captured below as a discrete follow-up unit with the concrete first step, owning surface, and rough effort. They are independent and can be picked up in any order except where a dependency is noted; the recommended sequence runs the low-blast-radius items first (F1, F6, F2) and treats F3/F4 as design-gated.</p>
+
+  <nav class="subnav">
+    <span class="eyebrow">Follow-ups</span>
+    <ul>
+      <li><a href="#f1">F1. Image edit/refine script</a></li>
+      <li><a href="#f2">F2. Automated bidirectional reference wiring</a></li>
+      <li><a href="#f3">F3. Markdown marker tracking + goal-guard hash-scope redesign</a></li>
+      <li><a href="#f4">F4. Per-phase PR execution in the lfg loop driver (scripts/loop.sh)</a></li>
+      <li><a href="#f5">F5. sl-doc-review HTML mutation support</a></li>
+      <li><a href="#f6">F6. Per-image cost gating</a></li>
+    </ul>
+  </nav>
+
+  <article class="unit" id="f1">
+    <h3><span class="idchip">F1</span>Image edit/refine script</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>A bundled edit/refine path (planf3's <code>edit_gpt_image.py</code> equivalent) so an existing embedded slot can be revised in place rather than fully regenerated.</dd>
+      <dt>Surface</dt><dd>A new script alongside <code>plugins/super-looper/skills/sl-plan/scripts/generate-plan-images.py</code>, plus a slot-grammar note in <code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code>.</dd>
+      <dt>Why deferred</dt><dd>Regeneration (force-refill of a named slot) covered the near-term need; edit is a convenience over an already-working path.</dd>
+      <dt>First step</dt><dd>Confirm the OpenAI images edit endpoint surface for <code>gpt-image-2</code>, then extend or fork the generate script with an <code>--edit &lt;slot&gt;</code> mode reusing the same graceful-skip and data-URI injection logic.</dd>
+      <dt>Effort / risk</dt><dd>Small &middot; low — isolated to one script; every failure mode already degrades to the existing placeholder skip. Needs a contract test and an eval per the learning-to-eval rule if it changes skill prose.</dd>
+      <dt>Priority</dt><dd>Medium</dd>
+    </dl>
+  </article>
+
+  <article class="unit" id="f2">
+    <h3><span class="idchip">F2</span>Automated bidirectional reference wiring</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Automated population of the <code>back refs</code>/<code>forward refs</code> metadata fields across linked plans (planf3's update-references workflow).</dd>
+      <dt>Surface</dt><dd>sl-plan skill workflow prose + <code>plugins/super-looper/skills/sl-plan/references/html-plan-template.md</code>; the fields already exist in the template (R3), only population is manual today.</dd>
+      <dt>Why deferred</dt><dd>The template carries the fields; interactive/manual population was sufficient to ship. Automation adds cross-file traversal.</dd>
+      <dt>First step</dt><dd>Design the traversal contract: given a new plan's <code>back refs</code>, write the reciprocal <code>forward refs</code> into each target plan. Decide whether this is a script or interactive skill step (note the goal-guard interaction if it ever mutates a committed plan under an unattended run).</dd>
+      <dt>Effort / risk</dt><dd>Medium &middot; medium — multi-file writes; must not violate the single-file invariant or the append-only rule.</dd>
+      <dt>Priority</dt><dd>Medium</dd>
+    </dl>
+  </article>
+
+  <article class="unit" id="f3">
+    <h3><span class="idchip">F3</span>Markdown marker tracking + goal-guard hash-scope redesign</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Extend in-plan status markers to markdown plans, which requires a goal-guard hash-scope redesign so unattended runs can write markers without tripping exit 8 (<code>goal-drift</code>).</dd>
+      <dt>Surface</dt><dd>Goal guard (<code>scripts/loop.sh</code> checksum path + the plugin's PreToolUse goal-guard hook), the plan-hash invariants, sl-work marker contract.</dd>
+      <dt>Why deferred</dt><dd>Large blast radius — requires re-auditing every plan-hash invariant. The HTML path shipped precisely because its unattended gate suppresses writes, sidestepping the guard collision (see <code>docs/solutions/skill-design/resume-skip-rescopes-per-attempt-invariant-baseline.md</code>).</dd>
+      <dt>First step</dt><dd><strong>Design pass before any code:</strong> enumerate every consumer of the per-attempt plan sha256 and define a marker-region carve-out (or normalized hash) that preserves goal-drift detection while allowing marker writes. Do not touch code until the invariant audit is written down.</dd>
+      <dt>Effort / risk</dt><dd>Large &middot; high — safety-critical guard surface. Gate on a written design + review.</dd>
+      <dt>Priority</dt><dd>Low (design-gated)</dd>
+    </dl>
+  </article>
+
+  <article class="unit" id="f4">
+    <h3><span class="idchip">F4</span>Per-phase PR execution in the lfg loop driver (<code>scripts/loop.sh</code>)</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>One run/PR per plan phase, with between-run plan sync (markers, commits, amendment) performed in the guard-free gap between attempts. R12's post-run sync becomes the per-phase sync step.</dd>
+      <dt>Surface</dt><dd>Loop driver — <code>scripts/loop.sh</code> and the <code>lfg</code> skill. Currently only a reserved <code>run_id</code> join-key comment exists (<code>"per-phase agent trace"</code>); no execution logic.</dd>
+      <dt>Why deferred</dt><dd>Complementary to this plan but a distinct loop-driver surface needing its own design pass for merge sequencing, stacked-vs-serial PRs, and run-record lineage.</dd>
+      <dt>First step</dt><dd><strong>Design pass:</strong> decide stacked vs serial PRs and the merge-sequencing model, then define where the between-attempt sync runs relative to the goal guard (the guard-free gap is load-bearing here).</dd>
+      <dt>Effort / risk</dt><dd>Large &middot; high — changes the loop's PR/merge lifecycle; interacts with the merge-policy ruleset. Gate on design + review.</dd>
+      <dt>Priority</dt><dd>Low (design-gated)</dd>
+    </dl>
+  </article>
+
+  <article class="unit" id="f5">
+    <h3><span class="idchip">F5</span>sl-doc-review HTML mutation support</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Let sl-doc-review propose and apply edits to HTML plan/doc artifacts, not only markdown.</dd>
+      <dt>Surface</dt><dd><code>plugins/super-looper/skills/sl-doc-review/SKILL.md</code> and its references.</dd>
+      <dt>Why deferred</dt><dd>Pre-existing gap, unchanged by this work — HTML plans are now first-class outputs but doc-review still assumes markdown mutation.</dd>
+      <dt>First step</dt><dd>Audit where sl-doc-review assumes markdown structure (heading/anchor edits), then define an HTML-safe mutation path that preserves the single-file invariant, stable IDs, and append-only rules. Add a behavioral eval.</dd>
+      <dt>Effort / risk</dt><dd>Medium &middot; medium — must not corrupt embedded data URIs or break anchors.</dd>
+      <dt>Priority</dt><dd>Medium</dd>
+    </dl>
+  </article>
+
+  <article class="unit" id="f6">
+    <h3><span class="idchip">F6</span>Per-image cost gating</h3>
+    <dl class="strip">
+      <dt>Goal</dt><dd>Cost controls beyond the one-line notice: budget config and spend caps for image generation.</dd>
+      <dt>Surface</dt><dd><code>plugins/super-looper/skills/sl-plan/scripts/generate-plan-images.py</code> and sl-plan config/docs.</dd>
+      <dt>Why deferred</dt><dd>The one-line spend notice was sufficient to ship; hard caps are a hardening step.</dd>
+      <dt>First step</dt><dd>Decide the cap unit (images-per-run vs estimated-USD-per-run) and where config lives, then enforce it in the script before dispatching API calls, degrading to the same visible skip when the cap is hit.</dd>
+      <dt>Effort / risk</dt><dd>Small &middot; low — self-contained in the script; reuses the existing skip path.</dd>
+      <dt>Priority</dt><dd>Low</dd>
+    </dl>
+  </article>
 </section>
 
 <section id="risks">
