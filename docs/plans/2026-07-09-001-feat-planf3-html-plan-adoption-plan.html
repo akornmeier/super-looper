@@ -508,7 +508,7 @@ strong{color:inherit}
       <li>Image edit/refine script (planf3's <code>edit_gpt_image.py</code> equivalent) — regeneration covers the near-term need.</li>
       <li>Automated bidirectional back/forward reference wiring (planf3's update-references workflow) — the template carries the fields; population stays manual/interactive.</li>
       <li>Marker tracking for markdown plans and any goal-guard hash-scope redesign to allow unattended plan writes — large blast radius; requires re-auditing every plan-hash invariant.</li>
-      <li>Per-phase PR execution in lfg/loop.sh — one run/PR per plan phase, with between-run plan sync (markers, commits, amendment) in the guard-free gap between attempts. Complementary to this plan (R12's post-run sync becomes the per-phase sync step) but loop-driver surface: needs its own design pass for merge sequencing, stacked-vs-serial PRs, and run-record lineage.</li>
+      <li>Per-phase PR execution in the lfg loop driver (<code>scripts/loop.sh</code>) — one run/PR per plan phase, with between-run plan sync (markers, commits, amendment) in the guard-free gap between attempts. Complementary to this plan (R12's post-run sync becomes the per-phase sync step) but loop-driver surface: needs its own design pass for merge sequencing, stacked-vs-serial PRs, and run-record lineage.</li>
       <li>sl-doc-review HTML mutation support — pre-existing gap, unchanged by this work.</li>
       <li>Per-image cost gating beyond the one-line notice (budget config, spend caps).</li>
     </ul>
@@ -531,10 +531,10 @@ strong{color:inherit}
     <span class="eyebrow">Follow-ups</span>
     <ul>
       <li><a href="#f1">F1. Image edit/refine script</a></li>
-      <li><a href="#f2">F2. Bidirectional reference wiring</a></li>
-      <li><a href="#f3">F3. Markdown marker tracking + goal-guard scope</a></li>
-      <li><a href="#f4">F4. Per-phase PR execution in loop.sh</a></li>
-      <li><a href="#f5">F5. sl-doc-review HTML mutation</a></li>
+      <li><a href="#f2">F2. Automated bidirectional reference wiring</a></li>
+      <li><a href="#f3">F3. Markdown marker tracking + goal-guard hash-scope redesign</a></li>
+      <li><a href="#f4">F4. Per-phase PR execution in the lfg loop driver (scripts/loop.sh)</a></li>
+      <li><a href="#f5">F5. sl-doc-review HTML mutation support</a></li>
       <li><a href="#f6">F6. Per-image cost gating</a></li>
     </ul>
   </nav>
@@ -603,7 +603,7 @@ strong{color:inherit}
     <h3><span class="idchip">F6</span>Per-image cost gating</h3>
     <dl class="strip">
       <dt>Goal</dt><dd>Cost controls beyond the one-line notice: budget config and spend caps for image generation.</dd>
-      <dt>Surface</dt><dd><code>generate-plan-images.py</code> and sl-plan config/docs.</dd>
+      <dt>Surface</dt><dd><code>plugins/super-looper/skills/sl-plan/scripts/generate-plan-images.py</code> and sl-plan config/docs.</dd>
       <dt>Why deferred</dt><dd>The one-line spend notice was sufficient to ship; hard caps are a hardening step.</dd>
       <dt>First step</dt><dd>Decide the cap unit (images-per-run vs estimated-USD-per-run) and where config lives, then enforce it in the script before dispatching API calls, degrading to the same visible skip when the cap is hit.</dd>
       <dt>Effort / risk</dt><dd>Small &middot; low — self-contained in the script; reuses the existing skip path.</dd>
