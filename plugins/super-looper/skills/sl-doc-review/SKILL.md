@@ -43,6 +43,14 @@ If `mode:headless` is not present, the skill runs in its default interactive mod
 
 **If no document is specified (headless mode):** Output "Review failed: headless mode requires a document path. Re-invoke with: Skill(\"sl-doc-review\", \"mode:headless <path>\")" without dispatching agents.
 
+### Document format
+
+Documents may be markdown (`.md`) or HTML (`.html`). Review itself is format-agnostic — persona selection, synthesis, confidence anchors, and routing are identical either way. **Mutation is not.**
+
+**When the document is `.html`, read `references/html-mutation.md` before applying any fix or Defer entry.** An HTML plan carries embedded image bytes on single lines that can run to hundreds of kilobytes, id-anchored cross-references, and fields that other agents own — so a whole-file rewrite or a careless edit anchor destroys an image, breaks a link, or claims work that never shipped. That reference defines the safe path; the markdown mechanics in `references/open-questions-defer.md` do not apply to it.
+
+**Reading a large HTML document:** do not read it whole. Locate the sections needed with Grep and read scoped offset ranges around the matches, skipping data-URI lines — each `<img src="data:...">` occupies exactly one line, so skipping is a line-number decision, not a parse.
+
 ### Classify Document Type
 
 Classify the document by reading its **content shape**, not its file path. Path is a tie-breaker hint, not the primary signal — a brainstorm-style doc placed under `docs/plans/` should still classify as `requirements`, and a plan-shaped doc under `docs/brainstorms/` should still classify as `plan`. The reviewers below operate differently depending on this classification, so misclassifying a plan-shaped doc as a requirements doc (or vice versa) produces noisy or under-scrutinized findings.
@@ -63,6 +71,8 @@ Use these signals to decide:
 - Per-unit fields named `Goal`, `Files`, `Approach`, `Test scenarios`, `Verification`
 - Repo-relative file paths to create/modify/test
 - Prose framing focused on technical decisions, sequencing, and implementer-facing detail
+
+These signals read the same in HTML: an HTML plan carries the identical field names in its visible metadata `<dl>` (`<dt>type</dt><dd>feat</dd>`) and the identical section headings in `<h2>`, with R-IDs and U-IDs as both `id` attributes and visible text. Classify on the same shape, ignoring the markup wrapper.
 
 **Tie-breaker rule.** When the content signals are mixed or sparse, fall back to path: `docs/brainstorms/` → `requirements`, `docs/plans/` → `plan`. When neither path location applies, treat the dominant content shape as authoritative; if shape is genuinely ambiguous, default to `requirements` (the more conservative classification — it activates fewer plan-specific feasibility checks).
 
