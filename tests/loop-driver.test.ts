@@ -1084,6 +1084,34 @@ describe("goal-drift guard (R1-R3)", () => {
     expect(rec.goal_drift.change).toBe("modified")
   })
 
+  // The marker carve-out frees marker VALUES, nothing else. A trailing-newline-only
+  // edit changes no marker, so it must still read as drift — hashing a normalized
+  // stream captured in a shell variable would silently permit it, since command
+  // substitution strips trailing newlines.
+  test("a trailing-newline-only plan edit still trips the guard", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "printf '\\n\\n' >> docs/plans/p.md", // appends only newlines at EOF
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("modified")
+  })
+
   // Scenario 2: plan deleted => exit 8 with "deleted" wording, distinct from modified.
   test("plan deleted then DONE => exit 8 with 'deleted' wording", async () => {
     const target = mkdirInWork("target")

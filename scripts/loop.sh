@@ -715,13 +715,17 @@ hash_file() {
 hash_plan() {
   local f="$1"
   if [ ! -f "$f" ]; then printf '%s' "$GUARD_ABSENT_SENTINEL"; return 0; fi
-  local normalized
-  normalized="$(normalize_markers "$f")" || { printf 'unreadable:%s' "$f"; return 0; }
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s' "$normalized" | sha256sum 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
-  else
-    printf '%s' "$normalized" | shasum -a 256 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
-  fi
+  # Pipe the normalized stream straight into the hasher. Capturing it in a
+  # variable first would strip trailing newlines (command substitution does),
+  # so an edit that only added or removed newlines at EOF would hash the same
+  # and slip past the guard -- a carve-out wider than the marker values this
+  # normalization is meant to free.
+  local hasher out
+  if command -v sha256sum >/dev/null 2>&1; then hasher=sha256sum; else hasher="shasum -a 256"; fi
+  out="$(normalize_markers "$f" | $hasher 2>/dev/null | awk '{print $1}'; exit "${PIPESTATUS[0]}")" \
+    || { printf 'unreadable:%s' "$f"; return 0; }
+  if [ -z "$out" ]; then printf 'unreadable:%s' "$f"; return 0; fi
+  printf '%s' "$out"
 }
 
 # Rewrite every status marker to `[]`. HTML: <code class="status">[x]</code>.
