@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/akornmeier/super-looper/compare/super-looper-v0.6.0...super-looper-v0.6.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **resolve-pr-feedback:** auto-refresh a bot-blocked review gate after quiescence ([3b286ba](https://github.com/akornmeier/super-looper/commit/3b286baa3cbfbdb0b008cc05f0c1f0d89ee879fd))
+* **resolve-pr-feedback:** auto-refresh a bot-blocked review gate after quiescence ([cc97744](https://github.com/akornmeier/super-looper/commit/cc97744c1aea163a15e2cbc2cb3a2ea5bafaa8ad))
+
 ## [0.6.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.5.0...super-looper-v0.6.0) (2026-07-11)
 
 
