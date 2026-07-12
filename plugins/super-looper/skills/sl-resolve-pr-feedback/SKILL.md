@@ -47,4 +47,6 @@ After determining mode, read the matching reference and follow it. Each referenc
 - Valid fixes committed and pushed
 - Each thread replied to with quoted context
 - Threads resolved via GraphQL (except `needs-human`)
-- Empty result from get-pr-comments on verify (minus intentionally-open threads)
+- The remaining feedback is non-substantive -- **not** necessarily an empty thread list
+
+**Done means the findings stopped being substantive, not that the bot stopped talking.** A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on -- including the ones the fix just added -- and a round that only reworders prose the previous round introduced has found more diff, not another defect. Unresolved threads do not block a merge (GitHub gates on status checks and approvals, not thread resolution), while each additional push does force another wait for the bot to re-review the new HEAD. Fix what names a defect, a contract violation, or a real risk; reply to the rest, stop pushing, and say in the summary what was left open and why.
