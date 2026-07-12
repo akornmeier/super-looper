@@ -231,7 +231,9 @@ Read the returned `review_threads` to see what the round actually surfaced. A sh
 
 Unresolved threads also **do not block a merge**. GitHub gates merging on branch-protection status checks and required approvals, not on thread resolution -- and each push invalidates any per-commit review status, so another round means another mandatory wait for the bot to re-review the new HEAD. Looping for a green thread list therefore buys nothing a merge needs while paying full latency for it.
 
-So the loop's exit condition is **the findings stopped being substantive**, not **the bot stopped talking**. A finding is substantive when it names a defect, a contract violation, or a real risk: fix it and loop. When a round returns only restatements, style preferences, or commentary on prose introduced by the previous round, stop -- reply, and stop pushing. Say plainly in the step 9 summary which threads were left open and why.
+So the loop's exit condition is **the findings stopped being substantive**, not **the bot stopped talking**. A finding is substantive when it names a defect, a contract violation, or a real risk: fix it and loop. When a round returns only restatements, style preferences, or commentary on prose introduced by the previous round, stop.
+
+**What "stop" ends is the fix-push-wait cycle -- not step 7.** The final round is still handled in full: reply to every thread with quoted context and resolve it via GraphQL, exactly as any other round (`needs-human` items stay open, as always). The threads do not sit unanswered; what stops is *pushing another commit to chase them*. In the step 9 summary, name which findings were answered rather than fixed, and why -- a reader must never have to guess whether a thread was judged non-substantive or simply missed.
 
 **If new substantive threads remain**, check the fix-round count for this run:
 

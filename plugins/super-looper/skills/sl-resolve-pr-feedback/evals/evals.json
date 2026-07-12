@@ -103,12 +103,12 @@
         "Recognizes the round is non-substantive -- the findings are about prose the previous round itself introduced, not about a defect, contract violation, or risk.",
         "Stops the fix-push-wait loop rather than pushing another round to chase an empty thread list.",
         "States that unresolved threads do not block the merge (GitHub gates on status checks and approvals, not thread resolution), and/or that another push would force another mandatory bot re-review wait.",
-        "Still replies to the threads and reports in the summary what was left open and why."
+        "Still handles the threads in full -- replies to each with quoted context and resolves them via GraphQL -- and names in the summary which findings were answered rather than fixed. Stopping ends the fix-push-wait cycle, not the reply/resolve pass."
       ],
       "must_not_do": [
         "Treats an empty `review_threads` array as the required exit condition and keeps looping until the bot goes silent.",
         "Claims the PR cannot be merged while review threads remain unresolved.",
-        "Silently drops the threads without a reply or without surfacing them in the summary."
+        "Leaves the threads unanswered or unresolved, or drops them from the summary -- reading \"stop\" as \"stop handling the feedback\" rather than \"stop pushing commits to chase it\"."
       ],
       "ground_truth": {
         "behavior_source": "SKILL.md 'Success Criteria' + references/full-mode.md step 8 'Re-fetch and loop'",
