@@ -88,7 +88,7 @@
       "ground_truth": {
         "skill": "sl-doc-review",
         "contract_source": "plugins/super-looper/skills/sl-doc-review/references/html-mutation.md",
-        "contract_lines": "html-mutation.md 'What review may never touch': status markers belong to the executing agent; the metadata header's append-only lists belong to sl-plan's revision flows and sl-work's ship-time sync; 'Amendments belongs to sl-plan's revision flows alone. Review does not append an entry there, even when a fix is substantive.'",
+        "contract_lines": "html-mutation.md 'What review may never touch': status markers belong to the executing agent; the metadata header's append-only lists belong to sl-plan's revision flows and sl-work's ship-time sync; 'The Amendments section belongs to sl-plan's revision flows alone. Review does not append an entry there, even when a fix is substantive.'",
         "expected_behavior": "Declines all three writes and attributes each field to its owning flow."
       }
     },
