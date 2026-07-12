@@ -20,15 +20,17 @@ unchanged.
 An HTML plan is a shared artifact with several writers, and each field below
 belongs to someone else. Review is not that someone.
 
-- **Status markers** (`<code class="status">[]</code>`, `[wip]`, `[x]`, `[f]`)
-  belong to the executing agent. Never set, clear, or "tidy" one. A marker is a
-  claim about what shipped; review has no standing to make that claim.
+- **Status markers** (`<code class="status">[]</code>`,
+  `<code class="status">[wip]</code>`, `<code class="status">[x]</code>`,
+  `<code class="status">[f]</code>`) belong to the executing agent. Never set,
+  clear, or "tidy" one. A marker is a claim about what shipped; review has no
+  standing to make that claim.
 - **The metadata header's append-only lists** (`modified`, `commits`, `agent`,
   `session`, `back refs`, `forward refs`) belong to `sl-plan`'s revision flows
   and `sl-work`'s ship-time sync. Review appends nothing to them and removes
   nothing from them.
-- **Amendments** belongs to `sl-plan`'s revision flows alone. Review does not
-  append an entry there, even when a fix is substantive.
+- **The Amendments section** belongs to `sl-plan`'s revision flows alone. Review
+  does not append an entry there, even when a fix is substantive.
 - **Filled image slots.** The `<!-- image-slot:NAME ... -->` / `<!-- /image-slot:NAME -->`
   comment pair and the `<img>` between them are never edited by hand.
 
@@ -97,6 +99,11 @@ stamps it as `<section id="open-questions">`).
 
 - **Present:** append inside it, after its existing entries. Do not create a
   second one, wherever in the document it sits — its position was deliberate.
+  Its existing entries may not be `<details>` — older plans author open
+  questions as a plain `<ul>` of `<li>` items. **Leave that markup exactly as it
+  is.** Review does not refactor authored content into the current shape; a
+  section that mixes a pre-existing `<ul>` with newly appended `<details>` is
+  the correct outcome, not a defect to clean up.
 - **Absent:** create it. Insert **before** the `Notes` section if one exists,
   otherwise before `Amendments`, otherwise before the composition-signal
   `<footer>`, otherwise immediately before `</main>`. Never append after
@@ -117,9 +124,8 @@ subsection, and groups multiple Defer actions from one session together.
 
 ### Step 3: Append the entry
 
-One `<details>` per deferred finding — the same element the template already
-uses for an open question, so a deferred concern renders exactly like an
-authored one:
+One `<details>` per deferred finding — the element the current template uses for
+an open question, so a deferred concern renders like an authored one:
 
 ```html
 <details>

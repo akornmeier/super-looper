@@ -100,11 +100,11 @@
       "expected_terms": [
         { "term": "renumber", "tier": "must" },
         { "term": "escape", "tier": "must" },
-        { "term": "&amp;lt;", "tier": "should" },
+        { "term": "&lt;", "tier": "should" },
         { "term": "anchor", "tier": "should" },
         { "term": "gap", "tier": "should" },
         { "term": "id", "tier": "should" },
-        { "term": "&amp;amp;", "tier": "may" }
+        { "term": "&amp;", "tier": "may" }
       ],
       "expected_context": [
         "the agent refuses to renumber R4 to R3 — ids are anchor targets referenced from commits, PRs, and conversations, and gaps are intentional and never backfilled",
