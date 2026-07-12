@@ -749,10 +749,10 @@ Resolve gating before doing anything:
 When enabled, print a one-line notice naming the cost — `Generating <slot-count> images with gpt-image-2 — this calls OpenAI's paid API, capped at <cap> image(s) this run; with no OPENAI_API_KEY exported it charges nothing and reports skips instead` — where `<cap>` is the `plan_images_max` value when the config sets it and the script's default of 8 otherwise. Then invoke the bundled script **once** for the whole plan, as a single pinned command (no inline guard — the wrapper defeats the narrow allow-rule):
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path> --max-images <plan_images_max>
+python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path> [--max-images <plan_images_max>]
 ```
 
-Append `--max-images <plan_images_max>` only when the config sets the key; drop the flag entirely otherwise so the script's default of 8 applies.
+The bracketed flag is optional: append it only when the config sets `plan_images_max`, and drop it entirely otherwise so the script's default of 8 applies.
 
 Parse the JSON summary on stdout (`slots_found`, `filled`, `edited`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason the script gives. An over-cap skip reads as exactly that — the slot was not charged for, and raising `plan_images_max` or re-running fills it. When the skip reason is the absent key, that one line is: the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step). Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
 
