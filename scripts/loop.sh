@@ -518,6 +518,12 @@ if [ -n "$GUARD_PLAN_PATH" ]; then
 $GUARD_PLAN_PATH"
 fi
 claude_env+=( "LOOP_GOAL_GUARD_PATHS=$GOAL_GUARD_PATHS" )
+# The marker carve-out is scoped to the PLAN alone, never STRATEGY.md. The plan's
+# hash is marker-normalized (hash_plan); STRATEGY.md's is raw (hash_file), and it
+# carries no markers anyway. Letting the hook wave a marker-shaped edit through on
+# STRATEGY.md would put the two guards into disagreement -- the hook allows, the
+# raw checksum kills it at done_reached, and the run throws away all its work.
+claude_env+=( "LOOP_GOAL_GUARD_MARKER_PATH=$GUARD_PLAN_PATH" )
 
 claude_cmd=( "$CLAUDE_BIN" -p "$PROMPT" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
 
@@ -692,6 +698,42 @@ hash_file() {
   fi
 }
 
+# Hash a PLAN file's goal content rather than its raw bytes: status markers are
+# rewritten to their canonical idle form before hashing, so a marker moving
+# []->[wip]->[x] does not read as goal drift. Markers are progress state the run
+# itself produces; requirements, units, and decisions are the goal. Only the plan
+# is normalized -- STRATEGY.md keeps the raw hash_file above, because it carries
+# no markers and is the file the guard most exists to protect.
+#
+# The patterns are anchored on the COMPLETE marker token (element or code-span
+# delimiters included) and match only the literal values wip|x|f. So the only
+# bytes this frees are those 1-3 characters inside a marker that already exists:
+# adding a marker, deleting one, or putting anything else between the brackets
+# all change surrounding bytes and still trip the guard. See
+# docs/solutions/workflow/goal-guard-marker-region-carveout.md for the full
+# invariant audit before touching this.
+hash_plan() {
+  local f="$1"
+  if [ ! -f "$f" ]; then printf '%s' "$GUARD_ABSENT_SENTINEL"; return 0; fi
+  local normalized
+  normalized="$(normalize_markers "$f")" || { printf 'unreadable:%s' "$f"; return 0; }
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$normalized" | sha256sum 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
+  else
+    printf '%s' "$normalized" | shasum -a 256 2>/dev/null | awk '{print $1}' || printf 'unreadable:%s' "$f"
+  fi
+}
+
+# Rewrite every status marker to `[]`. HTML: <code class="status">[x]</code>.
+# Markdown: an inline code span holding exactly a marker, `[x]`. sed -E is the
+# portable ERE form across GNU and BSD (macOS) sed.
+normalize_markers() {
+  sed -E \
+    -e 's@<code class="status">\[(wip|x|f)\]</code>@<code class="status">[]</code>@g' \
+    -e 's@`\[(wip|x|f)\]`@`[]`@g' \
+    "$1" 2>/dev/null
+}
+
 # Classify a start/end hash mismatch as the change kind R2 distinguishes:
 # created (absent -> present), deleted (present -> absent), or modified.
 drift_kind_of() {
@@ -759,7 +801,7 @@ while :; do
   # compared on the done_reached path below.
   if [ "$resume_active" -ne 1 ]; then
     strategy_hash_start="$(hash_file "$STRATEGY_PATH")"
-    if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_file "$GUARD_PLAN_PATH")"; fi
+    if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_plan "$GUARD_PLAN_PATH")"; fi
   fi
 
   # Build this attempt's command. A resuming relaunch (a validated no-PR retry)
@@ -895,7 +937,9 @@ if [ "$strategy_hash_start" != "$strategy_hash_end" ]; then
   goal_drift_file="$STRATEGY_PATH"
   goal_drift_kind="$(drift_kind_of "$strategy_hash_start" "$strategy_hash_end")"
 elif [ -n "$GUARD_PLAN_PATH" ]; then
-  plan_hash_end="$(hash_file "$GUARD_PLAN_PATH")"
+  # hash_plan, not hash_file: a status-marker update is progress state the run
+  # produced, not a goal edit. Symmetric with the plan_hash_start snapshot (C3).
+  plan_hash_end="$(hash_plan "$GUARD_PLAN_PATH")"
   if [ "$plan_hash_start" != "$plan_hash_end" ]; then
     goal_drift_file="$GUARD_PLAN_PATH"
     goal_drift_kind="$(drift_kind_of "$plan_hash_start" "$plan_hash_end")"

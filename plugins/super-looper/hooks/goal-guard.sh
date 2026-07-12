@@ -24,9 +24,20 @@
 # relative-path and symlinked variants -- the hook denies with exit 2 and a
 # protocol message on stderr.
 #
+# MARKER CARVE-OUT: a status-marker update ([] -> [wip] -> [x]) is progress state
+# the run produced, not a goal edit, so an Edit whose old_string and new_string
+# normalize identically is allowed through. It is scoped to LOOP_GOAL_GUARD_MARKER_PATH
+# (the plan) alone -- never STRATEGY.md, which loop.sh hashes raw. The normalization
+# here MUST stay byte-identical to loop.sh's normalize_markers: if the two disagree,
+# this hook allows a write the authoritative checksum then kills at done_reached, and
+# the run throws away all its work. A Write (whole-file content) never qualifies.
+# Full invariant audit: docs/solutions/workflow/goal-guard-marker-region-carveout.md
+#
 # INPUT: PreToolUse hooks receive the tool call as JSON on stdin. Fields used:
-#   .tool_input.file_path -- the Write/Edit target path
-#   .cwd                  -- the session working directory (relative-path base)
+#   .tool_input.file_path  -- the Write/Edit target path
+#   .tool_input.old_string -- Edit only; pre-edit text (marker carve-out)
+#   .tool_input.new_string -- Edit only; post-edit text (marker carve-out)
+#   .cwd                   -- the session working directory (relative-path base)
 #
 # FAIL-OPEN: because loop.sh is authoritative, any inability to evaluate (jq
 # absent, unparseable payload, no file_path) exits 0 rather than blocking, so a
@@ -49,6 +60,32 @@ if [ -z "$target" ]; then
   exit 0
 fi
 cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)" || cwd=""
+
+# Rewrite every status marker to `[]`, matching loop.sh's normalize_markers
+# byte for byte. The two MUST agree: if the hook allows an edit the checksum
+# then kills at done_reached, the run does all its work and throws it away.
+normalize_markers() {
+  printf '%s' "$1" | sed -E \
+    -e 's@<code class="status">\[(wip|x|f)\]</code>@<code class="status">[]</code>@g' \
+    -e 's@`\[(wip|x|f)\]`@`[]`@g'
+}
+
+# A status-marker update is progress state the run produced, not a goal edit, so
+# it is allowed through even on a guarded plan. An Edit qualifies only when both
+# sides normalize to the same string -- i.e. nothing but marker values changed.
+# A Write (whole-file content) never qualifies: sl-work writes markers with Edit,
+# and a wholesale plan rewrite mid-run is not a marker update whatever it claims.
+# See docs/solutions/workflow/goal-guard-marker-region-carveout.md.
+is_marker_only_edit() {
+  _old="$(printf '%s' "$payload" | jq -r '.tool_input.old_string // empty' 2>/dev/null)" || return 1
+  _new="$(printf '%s' "$payload" | jq -r '.tool_input.new_string // empty' 2>/dev/null)" || return 1
+  # No old/new pair -> not an Edit (a Write, or an unparseable payload). Deny.
+  [ -n "$_old" ] || return 1
+  # An edit that changes nothing is not a marker update; fall through to deny
+  # rather than quietly blessing a no-op shaped like one.
+  [ "$_old" != "$_new" ] || return 1
+  [ "$(normalize_markers "$_old")" = "$(normalize_markers "$_new")" ]
+}
 
 # Canonicalize a possibly-nonexistent file path: absolutize against a base dir,
 # resolve symlinks in the directory chain via `cd ... && pwd -P`, then re-attach
@@ -102,10 +139,21 @@ deny() {
 # canonicalized, so a symlinked or relative variant on either side lines up).
 # The heredoc runs the loop in the current shell so `exit 2` in deny() exits the
 # hook (a pipe would run it in a subshell and only exit that subshell).
+# The marker carve-out is scoped to the plan alone. STRATEGY.md is hashed raw by
+# loop.sh, so allowing a marker-shaped edit there would let the hook bless a write
+# the authoritative checksum then kills at done_reached.
+canon_marker_path=""
+if [ -n "${LOOP_GOAL_GUARD_MARKER_PATH:-}" ]; then
+  canon_marker_path="$(canon_path "$LOOP_GOAL_GUARD_MARKER_PATH" "$base")"
+fi
+
 while IFS= read -r guard || [ -n "$guard" ]; do
   [ -z "$guard" ] && continue
   canon_guard="$(canon_path "$guard" "$base")"
   if [ "$canon_target" = "$canon_guard" ]; then
+    if [ -n "$canon_marker_path" ] && [ "$canon_target" = "$canon_marker_path" ] && is_marker_only_edit; then
+      exit 0
+    fi
     deny "$target"
   fi
 done <<EOF

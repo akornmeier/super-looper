@@ -289,6 +289,24 @@ These apply regardless of rendering format.
   up gaps."
 - **Plain prefix.** `R1.`, `U1.` as bullet prefixes. Do not bold; the prefix
   is visually distinctive on its own.
+- **Status markers on every unit and every Validation Commands item.**
+  Four states: `[]` idle, `[wip]` in progress, `[x]` complete, `[f]` failed.
+  Stamp every one as `[]` at create time — the executing agent owns them from
+  there. HTML plans carry the marker inside `<code class="status">`; markdown
+  plans carry it as a trailing inline code span on the unit heading:
+
+  ```markdown
+  ### U1. Cloak detection in preflight contract `[]`
+  ```
+
+  The same four-state vocabulary in both formats, deliberately. A GFM checkbox
+  (`- [ ]`) has two states and cannot express `[wip]` or `[f]` — the two that
+  carry the most information to someone reading a half-finished run. One
+  vocabulary also means the goal guard needs one normalization rule rather than
+  two, and the guard is exactly where a second, subtly different rule becomes a
+  hole. The guard normalizes markers before hashing, so an unattended run can
+  record progress without tripping goal drift; a bare GFM checkbox is not a
+  marker and is not normalized.
 - **Repo-relative paths.** Always. Never absolute paths in plan content;
   they break portability across machines, worktrees, teammates.
 - **No process exhaust.** No "captured at Phase X" notes, no `## Next Steps`

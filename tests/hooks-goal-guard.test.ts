@@ -317,3 +317,165 @@ describe("loop.sh forwards LOOP_GOAL_GUARD_PATHS through env -i", () => {
     expect(forwarded).toBe(`${ct}/STRATEGY.md\n${ct}/docs/plans/p.md`)
   })
 })
+
+// ---------------------------------------------------------------------------
+// (f) Marker carve-out. A status-marker update is progress state the run itself
+// produced, not a goal edit, so the hook lets it through. The carve-out is scoped
+// two ways, and both scopes are load-bearing:
+//   - to Edit (not Write) — a whole-file rewrite is never a marker update
+//   - to the PLAN (not STRATEGY.md) — loop.sh hashes STRATEGY.md raw, so blessing
+//     a marker-shaped edit there would let the hook allow a write the authoritative
+//     checksum then kills at done_reached, throwing away the whole run's work.
+// See docs/solutions/workflow/goal-guard-marker-region-carveout.md.
+// ---------------------------------------------------------------------------
+async function runHookMarker(payload: unknown, guardPaths: string, markerPath: string) {
+  const env: Record<string, string> = { ...(process.env as Record<string, string>) }
+  env.LOOP_GOAL_GUARD_PATHS = guardPaths
+  env.LOOP_GOAL_GUARD_MARKER_PATH = markerPath
+  const proc = Bun.spawn(["bash", HOOK], {
+    stdin: new TextEncoder().encode(JSON.stringify(payload)),
+    stdout: "pipe",
+    stderr: "pipe",
+    env,
+  })
+  const stderr = await new Response(proc.stderr).text()
+  const exitCode = await proc.exited
+  return { exitCode, stderr }
+}
+
+describe("marker carve-out on the plan", () => {
+  test("an Edit that flips only a marker is allowed", async () => {
+    const { plan, guard, root } = scaffold()
+    const { exitCode } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "### U1. Parse the thing `[]`",
+          new_string: "### U1. Parse the thing `[x]`",
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(0)
+  })
+
+  test("the HTML marker form is allowed too", async () => {
+    const { plan, guard, root } = scaffold()
+    const { exitCode } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: '<li>U1. Parse <code class="status">[wip]</code></li>',
+          new_string: '<li>U1. Parse <code class="status">[x]</code></li>',
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(0)
+  })
+
+  test("prose smuggled in alongside a marker flip is denied", async () => {
+    const { plan, guard, root } = scaffold()
+    // The marker normalizes away; the changed unit title does not.
+    const { exitCode, stderr } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "### U1. Parse the thing `[]`",
+          new_string: "### U1. Rewrite everything `[x]`",
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("BLOCKED")
+  })
+
+  test("a plain goal edit with no marker involved is denied", async () => {
+    const { plan, guard, root } = scaffold()
+    const { exitCode } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "R1. The system must validate input.",
+          new_string: "R1. The system must not validate input.",
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(2)
+  })
+
+  test("a whole-file Write to the plan is denied even when its content is marker-shaped", async () => {
+    const { plan, guard, root } = scaffold()
+    // A Write carries no old_string, so there is nothing to prove marker-only
+    // against. Treating it as a marker update would hand back every byte of the
+    // file — exactly the freedom the carve-out is scoped to withhold.
+    const { exitCode } = await runHookMarker(
+      { cwd: root, tool_input: { file_path: plan, content: "### U1. Parse the thing `[x]`\n" } },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(2)
+  })
+
+  test("a marker-shaped Edit to STRATEGY.md is denied — it is hashed raw", async () => {
+    const { strategy, plan, guard, root } = scaffold()
+    const { exitCode } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: strategy,
+          old_string: "Goal: ship the thing `[]`",
+          new_string: "Goal: ship the thing `[x]`",
+        },
+      },
+      guard,
+      plan, // the carve-out names the PLAN, not STRATEGY.md
+    )
+    expect(exitCode).toBe(2)
+  })
+
+  test("with no marker path armed, a marker Edit on the plan is denied (backward compatible)", async () => {
+    const { plan, guard, root } = scaffold()
+    const { exitCode } = await runHook(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "### U1. Parse the thing `[]`",
+          new_string: "### U1. Parse the thing `[x]`",
+        },
+      },
+      guard,
+    )
+    expect(exitCode).toBe(2)
+  })
+})
+
+// The two normalizers — loop.sh's normalize_markers and the hook's — MUST agree.
+// If they drift, the hook allows an edit the authoritative checksum then kills at
+// done_reached: the run does all its work and throws it away. Pin the sed program
+// itself rather than trusting prose to keep them in sync.
+describe("the two marker normalizers agree", () => {
+  test("loop.sh and goal-guard.sh carry byte-identical sed patterns", () => {
+    const loopSrc = fs.readFileSync(LOOP, "utf8")
+    const hookSrc = fs.readFileSync(HOOK, "utf8")
+    const patterns = [
+      `-e 's@<code class="status">\\[(wip|x|f)\\]</code>@<code class="status">[]</code>@g' \\`,
+      "-e 's@`\\[(wip|x|f)\\]`@`[]`@g'",
+    ]
+    for (const p of patterns) {
+      expect(loopSrc).toContain(p)
+      expect(hookSrc).toContain(p)
+    }
+  })
+})

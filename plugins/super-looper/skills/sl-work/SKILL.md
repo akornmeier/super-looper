@@ -63,9 +63,10 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    - If anything is unclear or ambiguous, ask clarifying questions now _(pipeline mode: skip — resolve from the plan's scope per the Pipeline mode block above)_
    - If clarifying questions were needed above, get user approval on the resolved answers. If no clarifications were needed, proceed without a separate approval step — plan scope is the plan's authority, not something to renegotiate
    - **Do not skip this** in interactive runs - better to ask questions now than build the wrong thing (in pipeline mode the clarifying step is skipped per the Pipeline mode block above)
-   - **Plan mutation splits by format.**
-     - **Markdown plans: do not edit the plan body during execution.** The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan. `sl-work` does not mutate the plan — whether it shipped is derived from git, not recorded in the doc. Legacy plans may contain `- [ ]` / `- [x]` marks on unit headings or a `status:` field — ignore them as state; per-unit completion is determined during execution by reading the current file state.
-     - **HTML plans are stateful tracked artifacts.** Their unit tasks carry advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]` failed — inside `<code class="status">` elements. An interactive, single-writer session maintains those markers as it executes; every other mode writes nothing. Markers are advisory: git remains the authoritative record of what shipped, and where a marker and git disagree, git wins and the marker is corrected. Prose, requirements, decisions, and the Amendments section are never `sl-work`'s to edit in either format.
+   - **Plans are stateful tracked artifacts, in both formats.** Unit tasks carry advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]` failed. HTML plans carry them inside `<code class="status">` elements; markdown plans carry them as a `` `[]` `` code span on the unit line. The vocabulary is the same in both.
+     - **The plan body outside those markers is never `sl-work`'s to edit.** Prose, requirements, decisions, and the Amendments section belong to the planning flows. A marker is the only thing execution writes.
+     - **Markers are advisory.** Git remains the authoritative record of what shipped. Where a marker and git disagree, git wins and the marker is corrected.
+     - **A plan with no markers has nothing to write.** Legacy plans may carry bare `- [ ]` / `- [x]` marks on unit headings or a `status:` field — these are **not** markers. Ignore them as state; per-unit completion is determined by reading the current file state. Never retrofit markers onto a plan that lacks them.
      - The write-suppression gate at the top of Phase 2 decides whether marker writes are active for this run. Do not write to the plan before reaching it.
 
 2. **Setup Environment**
@@ -206,19 +207,22 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
 
 > **Plan write-suppression gate — resolve this before executing any task.**
 >
-> Status-marker writes are active for this run **only when all three hold**:
+> Status-marker writes are active for this run when **both** hold:
 >
-> 1. The plan file is `.html`, and
-> 2. The session is interactive, and
-> 3. Execution is single-writer — inline or serial subagents, not parallel subagents and not worktree-isolated batches.
+> 1. The plan carries status markers (`<code class="status">[]</code>` in HTML, a `` `[]` `` code span on the unit line in markdown), and
+> 2. Execution is single-writer — inline or serial subagents, not parallel subagents and not worktree-isolated batches.
 >
-> Otherwise **marker writes are suppressed**. Suppression is absolute: the plan file receives **zero writes of any kind** — no markers, no metadata appends, no reformatting, not one byte. Suppression applies when:
+> Markers are active in **both formats and in both attended and unattended runs**. The goal guard hashes the plan's *goal content*, not its bytes: it normalizes every marker to `[]` before hashing, so a marker moving `[]` → `[wip]` → `[x]` is not goal drift. Everything else in the plan still is — a word of changed prose, a deleted requirement, a renumbered unit all still exit 8. Only the marker value is exempt, and only inside a marker that already exists.
 >
-> - **Running unattended** — the `mode:unattended` argument token, an LFG or other automated invocation, or any `disable-model-invocation` context. An unattended run's plan file is hashed before and after by the goal guard; any mutation reads as goal drift and aborts the run.
-> - **Executing via parallel subagents or worktree-isolated batches.** Concurrent writers to one file lose each other's edits; there is no single writer to own the markers.
-> - **The plan is markdown.** Markdown plans are decision artifacts and are never mutated.
+> **Marker writes must use `Edit`, never `Write`.** Under an unattended run the goal-guard hook allows an `Edit` whose two sides differ only in marker values; a whole-file `Write` to the plan is denied outright, whatever it contains.
+>
+> **Marker writes are suppressed** when execution is **parallel-subagent or worktree-isolated**. Concurrent writers to one file lose each other's edits, and there is no single writer to own the markers. This has nothing to do with the goal guard, and the guard's carve-out does not relax it. Suppression is absolute: the plan file receives **zero writes of any kind** — no markers, no metadata appends, no reformatting, not one byte.
+>
+> A plan with **no markers at all** (a legacy markdown plan, or any plan predating the marker contract) has nothing to write: treat markers as suppressed. Never retrofit markers onto a plan that has none — adding them changes bytes the guard does not normalize, and an unattended run would exit 8. Legacy `- [ ]` / `- [x]` marks and a `status:` field are **not** markers; ignore them as state exactly as before.
 >
 > In suppressed modes, progress lives where it has always lived: git commits and the task tracker. Never "catch up" the markers at the end of a suppressed run.
+>
+> Prose, requirements, decisions, and Amendments are never `sl-work`'s to edit in any mode or format.
 >
 > State the resolved decision once — markers active, or markers suppressed and why — before the first task.
 
@@ -252,13 +256,15 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    | `[wip]` → `[x]` | Task complete and its verification passes |
    | `[wip]` → `[f]` | The task cannot be made to pass and execution moves on |
 
-   Edit anchors must include the surrounding unit or task text — a marker token like `<code class="status">[]</code>` repeats throughout the file, so anchoring on the bare token edits an arbitrary occurrence. Anchor on the unit heading, the task heading, or the checklist item's own action text together with its marker.
+   Edit anchors must include the surrounding unit or task text — a marker token like `<code class="status">[]</code>` (or a markdown `` `[]` ``) repeats throughout the file, so anchoring on the bare token edits an arbitrary occurrence. Anchor on the unit heading, the task heading, or the checklist item's own action text together with its marker.
+
+   **Use `Edit`, never `Write`.** Under an unattended run the goal guard's hook allows an `Edit` whose two sides differ only in marker values and denies a whole-file `Write` to the plan outright. Anchoring on the unit text satisfies both rules at once: it targets the right marker *and* keeps the edit marker-only.
 
    The plan's global `Validation Commands` checklist carries the same markers and follows the same transitions: flip each item as its command runs during final validation (Phase 3), `[x]` on pass, `[f]` for a step that cannot be completed. Same anchor rule applies.
 
    `[f]` is informational only. Shipping gates on tests and verification, never on marker state — a plan full of `[x]` with failing tests does not ship, and a stray `[f]` never blocks Phase 3.
 
-   **Resume reconciliation** _(HTML plans, markers active)_
+   **Resume reconciliation** _(markers active, either format)_
 
    On a resume or re-run, recompute each unit's real state from code and verification **before executing it** — the same already-shipped detection the loop performs above. Then correct the stale markers the previous run left behind:
 
