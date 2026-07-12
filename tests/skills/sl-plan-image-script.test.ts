@@ -158,7 +158,7 @@ describe("generate-plan-images.py --max-images spend cap", () => {
     // The keyless early return used to swallow the cap notice, so a user with
     // more slots than the cap heard only "leaving 2 slot(s) as placeholders"
     // and never learned the other 3 were held back by the cap.
-    expect(stderr).toContain("Run cap of 2 image(s) reached - 3 slot(s) left unfilled")
+    expect(stderr).toContain("Run cap of 2 image(s) reached - 3 slot(s) left untouched")
     expect(stderr).toContain("leaving 2 slot(s) as placeholders")
   })
 
@@ -167,7 +167,7 @@ describe("generate-plan-images.py --max-images spend cap", () => {
 
     // targets is empty here, so the keyless branch never fires — the cap notice
     // is the only thing standing between the user and a silent no-op.
-    expect(stderr).toContain("Run cap of 0 image(s) reached - 5 slot(s) left unfilled")
+    expect(stderr).toContain("Run cap of 0 image(s) reached - 5 slot(s) left untouched")
   })
 
   test("a cap at or above the slot count adds no phantom skips", async () => {

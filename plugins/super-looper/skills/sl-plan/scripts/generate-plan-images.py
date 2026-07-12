@@ -246,7 +246,7 @@ def apply_cap(targets, max_images):
         return targets, []
     reason = (
         "over the run cap of " + str(max_images) + " image(s); nothing was charged for it"
-        + " (raise --max-images, or fill it in a later run)"
+        + " (raise --max-images, or process it in a later run)"
     )
     over = [{"slot": name, "reason": reason} for name in targets[max_images:]]
     return targets[:max_images], over
@@ -653,7 +653,7 @@ def main():
     if over_cap:
         sys.stderr.write(
             "Run cap of " + str(args.max_images) + " image(s) reached - "
-            + str(len(over_cap)) + " slot(s) left unfilled and uncharged.\n"
+            + str(len(over_cap)) + " slot(s) left untouched and uncharged.\n"
         )
 
     api_key = os.environ.get("OPENAI_API_KEY")
