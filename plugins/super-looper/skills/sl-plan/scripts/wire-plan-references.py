@@ -264,13 +264,29 @@ def main():
         return 2
 
     content = plan.read_text(encoding="utf-8")
-    repo_root = find_repo_root(plan.parent) or plan.resolve().parent
-    source = repo_relative(plan, repo_root)
-
     back_refs = parse_list(read_field(content, "back refs"))
     wired = []
     skipped = []
     warnings = []
+
+    # `back refs` are repo-relative, so without a repo root there is nothing to
+    # resolve them against. Falling back to the plan's own directory would
+    # resolve them somewhere else entirely and report a `source` that is not
+    # repo-relative — a confusing no-op dressed up as a real one. Say so instead.
+    repo_root = find_repo_root(plan.parent)
+    if repo_root is None:
+        warnings.append("no git repo root above the plan; back refs are repo-relative, so nothing was wired")
+        print(json.dumps({
+            "source": str(plan),
+            "back_refs": back_refs,
+            "wired": [],
+            "skipped": [{"target": ref, "reason": "no repo root to resolve this ref against"} for ref in back_refs],
+            "warnings": warnings,
+            "dry_run": args.dry_run,
+        }))
+        return 0
+
+    source = repo_relative(plan, repo_root)
 
     if read_field(content, "back refs") is None:
         warnings.append("plan has no 'back refs' field; nothing to wire")

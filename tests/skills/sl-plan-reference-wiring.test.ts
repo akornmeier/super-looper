@@ -13,10 +13,18 @@ const SCRIPT = path.join(
   "wire-plan-references.py",
 )
 
-async function run(args: string[], cwd?: string): Promise<{ exitCode: number; stdout: string }> {
+async function run(
+  args: string[],
+  cwd?: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const proc = Bun.spawn(["python3", SCRIPT, ...args], { stdout: "pipe", stderr: "pipe", cwd })
-  const exitCode = await proc.exited
-  return { exitCode, stdout: await new Response(proc.stdout).text() }
+  // Drain both pipes before awaiting exit: the script writes a line per wired
+  // ref, and an unread pipe can fill and deadlock the subprocess.
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
+  return { exitCode: await proc.exited, stdout, stderr }
 }
 
 function plan(title: string, backRefs: string, forwardRefs: string): string {
@@ -182,5 +190,27 @@ describe("wire-plan-references.py", () => {
     const report = JSON.parse(stdout)
     expect(report.back_refs).toEqual([])
     expect(report.wired).toEqual([])
+  })
+
+  test("no repo root is a warned no-op, not a wire against the plan's own directory", async () => {
+    const bare = await fs.mkdtemp(path.join(os.tmpdir(), "sl-plan-norepo-"))
+    try {
+      const target = path.join(bare, "a.html")
+      const source = path.join(bare, "b.html")
+      await fs.writeFile(target, plan("Upstream", "none", "none"))
+      await fs.writeFile(source, plan("Downstream", "docs/plans/a.html", "none"))
+      const before = await fs.readFile(target, "utf8")
+
+      const { exitCode, stdout } = await run([source], bare)
+
+      expect(exitCode).toBe(0)
+      const report = JSON.parse(stdout)
+      expect(report.wired).toEqual([])
+      expect(report.skipped).toHaveLength(1)
+      expect(report.warnings.join(" ")).toContain("no git repo root")
+      expect(await fs.readFile(target, "utf8")).toBe(before)
+    } finally {
+      await fs.rm(bare, { recursive: true, force: true })
+    }
   })
 })
