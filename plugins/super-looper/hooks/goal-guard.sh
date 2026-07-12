@@ -79,7 +79,7 @@ normalize_markers() {
 # waved through -- while loop.sh's authoritative hash (which hashes the
 # normalized stream, newlines included) still kills the run at done_reached.
 read_payload_field() {
-  _var="$1"
+  local _var="$1" _raw
   _raw="$(printf '%s' "$payload" | jq -r "$2" 2>/dev/null; printf 'X')" || return 1
   _raw="${_raw%X}"
   printf -v "$_var" '%s' "${_raw%$'\n'}"
