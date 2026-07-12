@@ -504,9 +504,13 @@ describe("marker carve-out on the plan", () => {
     expect(exitCode).toBe(0)
   })
 
+  // Arm the marker path explicitly-empty rather than leaving it unset: runHook
+  // inherits process.env, so an ambient LOOP_GOAL_GUARD_MARKER_PATH in a dev or
+  // CI shell would arm the carve-out and flip this to allow — a green-to-red
+  // that says nothing about the hook's behavior.
   test("with no marker path armed, a marker Edit on the plan is denied (backward compatible)", async () => {
     const { plan, guard, root } = scaffold()
-    const { exitCode } = await runHook(
+    const { exitCode } = await runHookMarker(
       {
         cwd: root,
         tool_input: {
@@ -516,6 +520,7 @@ describe("marker carve-out on the plan", () => {
         },
       },
       guard,
+      "",
     )
     expect(exitCode).toBe(2)
   })
