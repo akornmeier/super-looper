@@ -214,22 +214,18 @@ plan.
   intent the eventual commit message should reflect.
 - **`date`** — creation date in ISO 8601 (`YYYY-MM-DD`), ASCII digits only.
 
-No plan carries a **`status` field**. What follows from that splits by format,
-and the split is intentional design, not drift.
+Plans carry **no `status` field**, in either format: there is no
+`active → completed` document lifecycle. Whether a plan shipped is derived
+from git, not stored in the doc.
 
-**Markdown plans** are decision artifacts, not tracked work items. The rule
-holds in full: no `status` field, no `active → completed` lifecycle. `sl-work`
-does not mutate the plan at ship time; whether a plan shipped is derived from
-git, not stored in the doc.
-
-**HTML plans** are stateful tracked artifacts. Implementation-unit tasks carry
-advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]`
-failed — which `sl-work` updates during interactive single-writer execution
-(never unattended, never under parallel writers). Git remains
+Plans in **both formats** are stateful tracked artifacts at the unit level.
+Implementation-unit tasks carry advisory status markers — `[]` idle, `[wip]`
+in progress, `[x]` complete, `[f]` failed — which `sl-work` updates during
+single-writer execution (never under parallel writers). See the ID and
+content rules below for how each format renders the marker. Git remains
 authoritative; the markers are a projection of it. When marker and git
-disagree, git wins and the marker is corrected. HTML plans still add no
-`status` metadata field and no lifecycle: a marker is per-task state, not a
-document state.
+disagree, git wins and the marker is corrected. A marker is per-task state,
+not a document state — which is why it does not imply a `status` field.
 
 ### Optional but well-known
 
@@ -289,6 +285,24 @@ These apply regardless of rendering format.
   up gaps."
 - **Plain prefix.** `R1.`, `U1.` as bullet prefixes. Do not bold; the prefix
   is visually distinctive on its own.
+- **Status markers on every unit and every Validation Commands item.**
+  Four states: `[]` idle, `[wip]` in progress, `[x]` complete, `[f]` failed.
+  Stamp every one as `[]` at create time — the executing agent owns them from
+  there. HTML plans carry the marker inside `<code class="status">`; markdown
+  plans carry it as a trailing inline code span on the unit heading:
+
+  ```markdown
+  ### U1. Cloak detection in preflight contract `[]`
+  ```
+
+  The same four-state vocabulary in both formats, deliberately. A GFM checkbox
+  (`- [ ]`) has two states and cannot express `[wip]` or `[f]` — the two that
+  carry the most information to someone reading a half-finished run. One
+  vocabulary also means the goal guard needs one normalization rule rather than
+  two, and the guard is exactly where a second, subtly different rule becomes a
+  hole. The guard normalizes markers before hashing, so an unattended run can
+  record progress without tripping goal drift; a bare GFM checkbox is not a
+  marker and is not normalized.
 - **Repo-relative paths.** Always. Never absolute paths in plan content;
   they break portability across machines, worktrees, teammates.
 - **No process exhaust.** No "captured at Phase X" notes, no `## Next Steps`

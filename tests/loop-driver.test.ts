@@ -1084,6 +1084,34 @@ describe("goal-drift guard (R1-R3)", () => {
     expect(rec.goal_drift.change).toBe("modified")
   })
 
+  // The marker carve-out frees marker VALUES, nothing else. A trailing-newline-only
+  // edit changes no marker, so it must still read as drift — hashing a normalized
+  // stream captured in a shell variable would silently permit it, since command
+  // substitution strips trailing newlines.
+  test("a trailing-newline-only plan edit still trips the guard", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "printf '\\n\\n' >> docs/plans/p.md", // appends only newlines at EOF
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("modified")
+  })
+
   // Scenario 2: plan deleted => exit 8 with "deleted" wording, distinct from modified.
   test("plan deleted then DONE => exit 8 with 'deleted' wording", async () => {
     const target = mkdirInWork("target")
@@ -1103,6 +1131,113 @@ describe("goal-drift guard (R1-R3)", () => {
     const rec = readRecord(dir)
     expect(rec.typed_failure).toBe("goal-drift")
     expect(rec.goal_drift.change).toBe("deleted")
+  })
+
+  // Scenario 2b: the marker carve-out. The guard hashes the plan's GOAL CONTENT,
+  // not its bytes — every status marker normalizes to `[]` before hashing — so an
+  // unattended run may record progress without reading as goal drift. The two
+  // tests below are a matched pair and only mean something together: the first
+  // proves a marker write passes, the second proves the guard did not simply go
+  // blind. See docs/solutions/workflow/goal-guard-marker-region-carveout.md.
+  function writeCommittedMarkerPlan(target: string): string {
+    const rel = "docs/plans/p.md"
+    const p = path.join(target, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(
+      p,
+      "## Implementation Units\n### U1. Parse the thing `[]`\nR1. The system must validate input.\n",
+    )
+    commitAll(target, "plan")
+    return rel
+  }
+
+  test("plan markers flipped then DONE => guard passes; progress is not goal drift", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedMarkerPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    // `[]` -> `[x]`: exactly what sl-work writes when a unit completes.
+    const claude = claudeMutateStub(
+      "claude",
+      "sed -i.bak 's/`\\[\\]`/`[x]`/' docs/plans/p.md && rm -f docs/plans/p.md.bak",
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    // Assert the concrete success shape, not merely `not 8` — a run that died of a
+    // verification failure would also satisfy `not 8` and prove nothing about the guard.
+    expect(exitCode).toBe(0)
+    const rec = readRecord(dir)
+    expect(rec.outcome).toBe("success")
+    expect(rec.exit_code).toBe(0)
+    expect(rec.typed_failure).toBeNull()
+    expect(rec.route).toBe("DONE")
+    expect(rec.verification.result).toBe("green")
+    expect(rec.goal_drift).toBeNull()
+    // The marker write actually landed — the guard permitted it rather than the
+    // stub silently failing to write, which would make this test vacuous.
+    expect(fs.readFileSync(path.join(target, planRel), "utf8")).toContain("`[x]`")
+  })
+
+  test("a prose edit alongside a marker flip still exits 8 — the carve-out is not a hole", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    const planRel = writeCommittedMarkerPlan(target)
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    // Flip a marker AND quietly invert a requirement. The marker normalizes away;
+    // the requirement does not. Goal drift must still fire.
+    const claude = claudeMutateStub(
+      "claude",
+      "sed -i.bak -e 's/`\\[\\]`/`[x]`/' -e 's/must validate/must not validate/' docs/plans/p.md && rm -f docs/plans/p.md.bak",
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    expect(stderr.toLowerCase()).toContain("goal drift")
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.change).toBe("modified")
+  })
+
+  test("STRATEGY.md is hashed raw — a marker-shaped edit there is still drift", async () => {
+    const target = mkdirInWork("target")
+    gitInit(target, true)
+    // STRATEGY.md carries no markers, so its hash stays byte-exact. A change that
+    // merely *looks* like a marker must not slip through the plan's carve-out.
+    fs.writeFileSync(path.join(target, "STRATEGY.md"), "Goal: ship the thing `[]`\n")
+    const planRel = writeCommittedMarkerPlan(target)
+    commitAll(target, "strategy")
+    const plugin = mkdirInWork("plugin")
+    const dir = path.join(work, "records")
+    const { marker, env } = stubs()
+    const claude = claudeMutateStub(
+      "claude",
+      "sed -i.bak 's/`\\[\\]`/`[x]`/' STRATEGY.md && rm -f STRATEGY.md.bak",
+      `working...\n${SENTINEL}`,
+      0,
+      marker,
+    )
+    const { exitCode, stderr } = await runLoop(
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
+    )
+    expect(exitCode).toBe(8)
+    const rec = readRecord(dir)
+    expect(rec.typed_failure).toBe("goal-drift")
+    expect(rec.goal_drift.file).toContain("STRATEGY.md")
   })
 
   // Scenario 3: no STRATEGY.md at start or end => guard passes (sentinel equality).

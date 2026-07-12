@@ -148,7 +148,7 @@
       "expected_context": [
         "the agent forces `OUTPUT_FORMAT=md` at Phase 0.0 regardless of the repo config's HTML preference — pipeline override wins over every other format signal, including an explicit `output:html` argument and a resumed `.html` artifact",
         "the agent therefore does NOT load or stamp `references/html-plan-template.md` and does NOT run Phase 5.2b's image-fill step — there are no image slots in a markdown plan, so the bundled script is never invoked in a pipeline run",
-        "the agent gives the rationale: downstream automated consumers (sl-work and the loop driver) parse markdown reliably, and markdown plans carry no status markers, no append-only metadata lists, and no Amendments section"
+        "the agent gives the rationale: downstream automated consumers (sl-work and the loop driver) parse markdown reliably, and markdown plans carry no image slots, no append-only metadata lists, and no Amendments section (status markers are carried in both formats and are not a differentiator)"
       ],
       "ground_truth": {
         "skill": "sl-plan",
