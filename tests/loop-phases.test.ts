@@ -221,6 +221,28 @@ describe("between-phase plan sync", () => {
     expect(stderr).not.toContain("phase 1/")
   })
 
+  // Containment must resolve the plan FILE, not just its parent directory: an
+  // in-target name that symlinks out would otherwise pass the check, and the
+  // script would read external content and write the rewrite back through the link.
+  test("a --plan-file that symlinks outside the target is a usage error", async () => {
+    const t = target()
+    const outside = path.join(work, "outside-plan.md")
+    fs.writeFileSync(outside, "### U1. First\n")
+    const before = fs.readFileSync(outside, "utf8")
+
+    const link = path.join(t, "docs", "plans", "linked.md")
+    fs.mkdirSync(path.dirname(link), { recursive: true })
+    fs.symlinkSync(outside, link)
+
+    const { exitCode, stderr } = await runPhases(t, [], undefined, link)
+
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("must live inside --target")
+    expect(stderr).not.toContain("phase 1/")
+    // The external file was never read-and-rewritten through the link.
+    expect(fs.readFileSync(outside, "utf8")).toBe(before)
+  })
+
   test("commits are recorded from a detached-HEAD base, not lost to an empty range", async () => {
     // The base must be a commit SHA (what loop.sh records as BASE_REF), not a
     // branch name: `rev-parse --abbrev-ref HEAD` yields the literal "HEAD" when

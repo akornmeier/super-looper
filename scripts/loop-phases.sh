@@ -101,7 +101,25 @@ esac
 # ship, the plan would be rewritten on disk, and the sync commit would be silently
 # skipped. Resolve once, up front, and reject an out-of-target plan before any
 # phase runs rather than discovering it mid-chain.
-plan_abs="$( cd "$( dirname "$plan_path" )" && pwd -P )/$( basename "$plan_path" )"
+# Resolve the plan itself, not just its directory: `pwd -P` on the parent resolves
+# symlinked DIRECTORIES, but a symlinked FILE would keep its in-target name and sail
+# through the containment check below -- the script would then read external content
+# and write the rewritten plan back through the link. Plain `readlink` (no -f) is the
+# portable spelling across BSD and GNU.
+resolve_file() {
+  local p="$1" link hops=0
+  while [ -L "$p" ] && [ "$hops" -lt 40 ]; do
+    link="$( readlink "$p" )"
+    case "$link" in
+      /*) p="$link" ;;
+      *)  p="$( cd "$( dirname "$p" )" && pwd -P )/$link" ;;
+    esac
+    hops=$(( hops + 1 ))
+  done
+  printf '%s' "$( cd "$( dirname "$p" )" && pwd -P )/$( basename "$p" )"
+}
+
+plan_abs="$( resolve_file "$plan_path" )"
 case "$plan_abs" in
   "$target_abs"/*) PLAN_REL="${plan_abs#"$target_abs"/}" ;;
   *) die "--plan-file must live inside --target: $PLAN_FILE" ;;
