@@ -54,6 +54,7 @@ PLAN_FILE=""
 # plan's phases (observed: 16 "phases" named 20, 12, 61, ...). Do not rename back.
 PHASE_GROUPS=()
 PASSTHRU=()
+DRY_RUN=0
 
 die() { echo "loop-phases.sh: $*" >&2; exit "$EX_USAGE"; }
 
@@ -71,6 +72,12 @@ while [ $# -gt 0 ]; do
     --phase)
       die "--phase is loop.sh's per-run flag; loop-phases.sh derives it from --group."
       ;;
+    --dry-run)
+      # Forwarded so each phase prints the command it WOULD run -- but tracked here
+      # too. loop.sh --dry-run prints and exits 0 without shipping, and an exit 0 is
+      # this script's "the phase landed" signal: left untracked, a dry run would cut
+      # no branch, yet still record "phase ... shipped" into the plan and push it.
+      DRY_RUN=1; PASSTHRU+=( "$1" ); shift ;;
     --verify-cmd)
       # Consumes the rest of the args by contract -- must stay last.
       PASSTHRU+=( "$@" ); break ;;
@@ -233,6 +240,14 @@ for group in "${PHASE_GROUPS[@]}"; do
     exit "$rc"
   fi
 
+  # A dry run shipped nothing: no branch was cut, so there is no base for the next
+  # phase and nothing to record. Writing the plan here would be the corruption the
+  # flag exists to avoid. Print and move on.
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "[phases] phase $phase_index ($group): dry run — nothing shipped, plan not written." >&2
+    continue
+  fi
+
   # The branch lfg cut for this phase becomes the next phase's base.
   phase_branch="$( cd "$TARGET" && "$GIT_BIN" rev-parse --abbrev-ref HEAD )"
   landed+=( "$group" )
@@ -245,5 +260,10 @@ for group in "${PHASE_GROUPS[@]}"; do
 
   prev_branch="$phase_branch"
 done
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "[phases] dry run: ${#PHASE_GROUPS[@]} phase(s) would ship in order: ${PHASE_GROUPS[*]}. Nothing was written." >&2
+  exit 0
+fi
 
 echo "[phases] all ${#PHASE_GROUPS[@]} phase(s) shipped. Stacked PRs merge in order: ${landed[*]}" >&2

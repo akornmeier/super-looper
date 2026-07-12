@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { execSync } from "child_process"
 import fs from "fs"
 import os from "os"
 import path from "path"
@@ -63,6 +64,28 @@ set -euo pipefail
 tgt=""; phase=""
 while [ $# -gt 0 ]; do case "$1" in --target) tgt="$2"; shift 2;; --phase) phase="$2"; shift 2;; *) shift;; esac; done
 if [ "$phase" = "${failOn}" ]; then exit 5; fi
+cd "$tgt"
+b="feat/$(echo "$phase" | tr 'A-Z' 'a-z' | tr ',' '-')"
+git checkout -q -b "$b"
+echo "$phase" >> src.txt && git add -A && git commit -qm "feat: $phase"
+`,
+  )
+  fs.chmodSync(p, 0o755)
+  return p
+}
+
+// A loop.sh stub that behaves like the real one under --dry-run: print the command
+// it WOULD run and exit 0, cutting no branch and committing nothing. The plain stub
+// always ships, so it cannot exercise the dry-run path.
+function dryRunAwareLoop(): string {
+  const p = path.join(work, `loop-dry-${Math.random().toString(36).slice(2)}.sh`)
+  fs.writeFileSync(
+    p,
+    `#!/usr/bin/env bash
+set -euo pipefail
+tgt=""; phase=""; dry=0
+while [ $# -gt 0 ]; do case "$1" in --target) tgt="$2"; shift 2;; --phase) phase="$2"; shift 2;; --dry-run) dry=1; shift;; *) shift;; esac; done
+if [ "$dry" -eq 1 ]; then echo "[loop] DRY RUN: would ship $phase" >&2; exit 0; fi
 cd "$tgt"
 b="feat/$(echo "$phase" | tr 'A-Z' 'a-z' | tr ',' '-')"
 git checkout -q -b "$b"
@@ -241,6 +264,28 @@ describe("between-phase plan sync", () => {
     expect(stderr).not.toContain("phase 1/")
     // The external file was never read-and-rewritten through the link.
     expect(fs.readFileSync(outside, "utf8")).toBe(before)
+  })
+
+  // loop.sh --dry-run prints and exits 0 without shipping — and exit 0 is this
+  // script's "the phase landed" signal. Untracked, a dry run would cut no branch
+  // yet still write "phase ... shipped" into the plan and push it.
+  test("--dry-run ships nothing: no branches cut, plan byte-identical", async () => {
+    const t = target()
+    const planPath = path.join(t, "docs", "plans", "p.md")
+    const before = fs.readFileSync(planPath, "utf8")
+    const headBefore = execSync("git rev-parse HEAD", { cwd: t }).toString().trim()
+
+    const { exitCode, stderr } = await runPhases(t, ["--dry-run"], dryRunAwareLoop())
+
+    expect(exitCode).toBe(0)
+    expect(stderr).toContain("dry run")
+    // No phase branch was cut...
+    const branches = execSync("git branch", { cwd: t }).toString()
+    expect(branches).not.toContain("feat/")
+    // ...no sync commit was made...
+    expect(execSync("git rev-parse HEAD", { cwd: t }).toString().trim()).toBe(headBefore)
+    // ...and the plan was never written.
+    expect(fs.readFileSync(planPath, "utf8")).toBe(before)
   })
 
   test("commits are recorded from a detached-HEAD base, not lost to an empty range", async () => {
