@@ -44,11 +44,11 @@ After determining mode, read the matching reference and follow it. Each referenc
 ## Success Criteria
 
 - All unresolved review threads evaluated
-- Valid fixes committed and pushed
+- Fixes for the substantive findings committed and pushed -- a round with none is a legitimate reply-only finish, not a missing commit
 - Each thread replied to with quoted context
 - Threads resolved via GraphQL (except `needs-human`)
 - The remaining feedback is non-substantive -- **not** necessarily an empty thread list
 
-**Done means the findings stopped being substantive, not that the bot stopped talking.** A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on -- including the ones the fix just added -- and a round that only rewords prose the previous round introduced has found more diff, not another defect. Unresolved threads do not block a merge (GitHub gates on status checks and approvals, not thread resolution), while each additional push does force another wait for the bot to re-review the new HEAD.
+**Done means the findings stopped being substantive, not that the bot stopped talking.** A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on -- including the ones the fix just added -- and a round that only rewords prose the previous round introduced has found more diff, not another defect. Meanwhile each additional push forces another wait for the bot to re-review the new HEAD, so a round spent chasing prose costs a full re-review cycle and buys nothing.
 
 **Stopping ends the fix-push-wait cycle, not the handling.** A non-substantive round still gets the full reply-only pass: every thread answered with quoted context and resolved via GraphQL (except `needs-human`, which stays open by design). What stops is *shipping another commit to chase it*. Fix what names a defect, a contract violation, or a real risk; reply to and resolve the rest without pushing; and name in the summary which findings were answered rather than fixed, and why.

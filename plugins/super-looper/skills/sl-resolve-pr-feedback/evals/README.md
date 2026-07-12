@@ -10,7 +10,7 @@ The behavior exists because GitHub refuses to execute a workflow run it attribut
 
 These four are narrowly scoped to whether that refresh fires when — and only when — the stuck bot-blocked-gate condition is present, and stays inside honest-re-evaluation bounds (never fabricates a review, never bypasses a check).
 
-**2. The loop's exit condition (evals 5-6).** The skill stops when the findings stop being *substantive*, not when the bot stops talking. A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on — including the ones the fix just added — and unresolved threads never block a merge. Chasing an empty thread list therefore pays a full bot-re-review wait per round for something the merge does not require.
+**2. The loop's exit condition (evals 5-6).** The skill stops when the findings stop being *substantive*, not when the bot stops talking. A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on — including the ones the fix just added — while each push costs another mandatory bot re-review wait. Chasing an empty thread list therefore pays that wait per round to close threads that a reply-and-resolve pass already closes. (Whether an open thread blocks the merge is repo-dependent — only "require conversation resolution" branch protection makes it so — and the stop rule does not lean on the answer, since the final round is replied to *and resolved* either way.)
 
 The pair matters more than either half. Eval 5 checks the skill stops on a round that only rewords prose the previous round introduced; eval 6 checks it does *not* reach for that same reasoning to skip a genuine defect. A skill that passes 5 and fails 6 has traded a slow loop for a missed bug.
 

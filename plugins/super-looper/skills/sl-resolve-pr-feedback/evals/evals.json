@@ -1,6 +1,6 @@
 {
   "skill_name": "sl-resolve-pr-feedback",
-  "purpose": "Validate two narrow Full Mode step-8 behaviors. (1) The bot-blocked review gate: after the quiescence gate confirms an automated reviewer reviewed HEAD, the skill dispatches the repo's review-gate workflow to unstick a required review-status check that a bot-attributed review cannot post -- conditionally, best-effort, and without ever fabricating a passing review or bypassing a required check. (2) The loop's exit condition: the skill stops when the findings stop being substantive, not when the bot stops talking -- a review bot reviews the diff of each push, so every fix creates fresh surface for the next round, and unresolved threads never block a merge. Evals 5 and 6 are a matched pair: stopping on a prose-only round, and refusing to use that stop rule as cover for skipping a real defect.",
+  "purpose": "Validate two narrow Full Mode step-8 behaviors. (1) The bot-blocked review gate: after the quiescence gate confirms an automated reviewer reviewed HEAD, the skill dispatches the repo's review-gate workflow to unstick a required review-status check that a bot-attributed review cannot post -- conditionally, best-effort, and without ever fabricating a passing review or bypassing a required check. (2) The loop's exit condition: the skill stops when the findings stop being substantive, not when the bot stops talking -- a review bot reviews the diff of each push, so every fix creates fresh surface for the next round, while each push costs another mandatory bot re-review wait. (Whether an open thread blocks the merge is repo-dependent -- only \"require conversation resolution\" branch protection makes it so -- and the stop rule does not depend on the answer, since a non-substantive round is still replied to and resolved.) Evals 5 and 6 are a matched pair: stopping on a prose-only round, and refusing to use that stop rule as cover for skipping a real defect.",
   "non_purpose": "Not testing the skill's triage, fix, reply, or resolve behavior; not testing thread-relocation or the quiescence wait itself. The two narrow questions are (a) whether the post-quiescence merge-gate refresh fires when \u2014 and only when \u2014 the stuck bot-blocked-gate condition is present, staying inside honest-re-evaluation bounds, and (b) whether the loop exits on the right signal: substantive findings keep it running, a round of prose-only nits ends it, and neither round count nor fatigue is ever the reason a real defect goes unfixed.",
   "variance_protocol": {
     "runs_per_eval": 3,
@@ -102,13 +102,14 @@
       "must_do": [
         "Recognizes the round is non-substantive -- the findings are about prose the previous round itself introduced, not about a defect, contract violation, or risk.",
         "Stops the fix-push-wait loop rather than pushing another round to chase an empty thread list.",
-        "States that unresolved threads do not block the merge (GitHub gates on status checks and approvals, not thread resolution), and/or that another push would force another mandatory bot re-review wait.",
+        "Names a real cost of another round -- that each push forces another mandatory bot re-review wait -- and/or that the threads can be closed out by replying and resolving rather than by another commit. A statement about merge-blocking must be QUALIFIED (thread resolution gates only where the repo requires conversation resolution); an agent that qualifies it correctly, or omits it and cites the re-review cost instead, passes. Do not require the absolute claim.",
         "Still handles the threads in full -- replies to each with quoted context and resolves them via GraphQL -- and names in the summary which findings were answered rather than fixed. Stopping ends the fix-push-wait cycle, not the reply/resolve pass."
       ],
       "must_not_do": [
         "Treats an empty `review_threads` array as the required exit condition and keeps looping until the bot goes silent.",
         "Claims the PR cannot be merged while review threads remain unresolved.",
-        "Leaves the threads unanswered or unresolved, or drops them from the summary -- reading \"stop\" as \"stop handling the feedback\" rather than \"stop pushing commits to chase it\"."
+        "Leaves the threads unanswered or unresolved, or drops them from the summary -- reading \"stop\" as \"stop handling the feedback\" rather than \"stop pushing commits to chase it\".",
+        "Asserts as universal fact that unresolved threads never block a merge -- 'require conversation resolution' branch protection makes that false in some repos."
       ],
       "ground_truth": {
         "behavior_source": "SKILL.md 'Success Criteria' + references/full-mode.md step 8 'Re-fetch and loop'",
