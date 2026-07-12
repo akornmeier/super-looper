@@ -112,7 +112,7 @@ If the plan already has a `deepened: YYYY-MM-DD` frontmatter field and there is 
 
 - **Metadata header lists** (`modified`, `commits`, `agent`, `session`, `back refs`, `forward refs`) are append-only. Add entries; never overwrite or remove one. Appends are idempotent — a value already present is not added twice. An empty list renders as the literal `none`; the first append replaces it. Never rename a field.
 - **Status markers** (`[]`, `[wip]`, `[x]`, `[f]`) belong to the executing agent. Do not set, clear, or "tidy" them. New or split units start every marker at `[]`; a deleted unit's markers go with it.
-- **Filled image slots** survive edits — the `<!-- image-slot:NAME ... -->` / `<!-- /image-slot:NAME -->` comment pair and the single-line `<img>` between them are copied through unchanged. To change an image, re-run the fill script with `--regenerate <slot>` rather than editing the element.
+- **Filled image slots** survive edits — the `<!-- image-slot:NAME ... -->` / `<!-- /image-slot:NAME -->` comment pair and the single-line `<img>` between them are copied through unchanged. Never hand-edit the element. To change an image, re-run the fill script: `--regenerate <slot>` to redraw it from the slot's authored prompt, or `--edit <slot> --instruction "..."` to refine the existing image in place (see `references/html-plan-template.md`).
 - **Amendments** records every substantive revision: append one `<details>` entry, newest at the bottom, replacing the `No amendments yet.` empty-state paragraph on the first append. Earlier entries are never rewritten.
 
 The U-ID stability rule (Phase 3.5) is unchanged: reordering never renumbers, splitting keeps the original ID on the original concept, deletion leaves a gap.

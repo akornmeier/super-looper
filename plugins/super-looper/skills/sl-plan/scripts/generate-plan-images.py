@@ -11,11 +11,21 @@ detectable, skippable on re-run, and regenerable by name.
 
 Usage:
   python3 generate-plan-images.py <plan.html> [options]
+  python3 generate-plan-images.py <plan.html> --edit NAME --instruction "..."
   python3 generate-plan-images.py --self-test
 
 Options:
   --slot NAME         Fill only this slot (skipped when already filled).
   --regenerate NAME   Re-generate this slot even if it is already filled.
+  --edit NAME         Refine this slot's existing image in place: its embedded
+                      bytes are sent to the images *edit* endpoint along with
+                      --instruction, and the result replaces them. Requires the
+                      slot to be already filled. The slot's authored
+                      `prompt="..."` attribute is left untouched, so a later
+                      --regenerate still reproduces the original image from the
+                      plan's own prompt rather than from an edit instruction.
+  --instruction TEXT  The refinement to apply. Required with --edit, and only
+                      valid with it.
   --size WxH          Image size (default: 1536x1024).
   --quality TIER      auto | low | medium | high (default: high).
   --compression N     webp compression 0-100 (default: 80).
@@ -23,17 +33,19 @@ Options:
   --self-test         Run offline parser checks and exit. No network.
 
 Environment:
-  OPENAI_API_KEY  Required to generate. When unset the script reports every
-                  targeted slot as skipped, writes nothing, and exits 0.
+  OPENAI_API_KEY  Required to generate or edit. When unset the script reports
+                  every targeted slot as skipped, writes nothing, and exits 0.
 
 Output:
   A single JSON object on stdout:
     {"slots_found": N,
      "filled": ["hero", ...],
+     "edited": ["design", ...],
      "skipped": [{"slot": "problem", "reason": "..."}],
      "warnings": ["..."]}
-  Human-readable progress goes to stderr. Image failure never blocks the plan:
-  every failure mode degrades to a per-slot skip and exit 0.
+  `edited` lists slots refined by --edit; `filled` lists slots written by
+  generation. Human-readable progress goes to stderr. Image failure never
+  blocks the plan: every failure mode degrades to a per-slot skip and exit 0.
 
 Write safety:
   Before the first modification of a run the original is copied once to
@@ -55,6 +67,7 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 # Single override point for the pinned model id (K10). An unknown-model API
@@ -62,6 +75,7 @@ from pathlib import Path
 MODEL = "gpt-image-2"
 
 API_URL = "https://api.openai.com/v1/images/generations"
+EDIT_API_URL = "https://api.openai.com/v1/images/edits"
 TIMEOUT_SECS = 180
 
 DEFAULT_SIZE = "1536x1024"
@@ -74,6 +88,9 @@ VALID_QUALITY = ["auto", "low", "medium", "high"]
 OPEN_RE = re.compile(r'<!--\s*image-slot:([a-z0-9][a-z0-9-]*)\s+prompt="([^"]*)"\s*-->')
 FIGCAPTION_RE = re.compile(r"<figcaption\b[^>]*>.*?</figcaption>", re.DOTALL)
 IMG_RE = re.compile(r"<img\b", re.IGNORECASE)
+DATA_URI_RE = re.compile(
+    r'src="data:image/([a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]*)"', re.IGNORECASE
+)
 
 
 # ---------------------------------------------------------------- parsing
@@ -139,10 +156,29 @@ def parse_slots(content):
                 "indent": _indent_of(content, match.start()),
                 "filled": bool(IMG_RE.search(interior)),
                 "figcaption": caption.group(0) if caption else None,
+                "interior": interior,
             }
         )
 
     return slots, warnings
+
+
+def embedded_image(slot):
+    """Return (raw_bytes, subtype, None) for a filled slot, or (None, None, reason)."""
+    match = DATA_URI_RE.search(slot["interior"])
+    if not match:
+        # A slot can be "filled" (it has an <img>) yet carry an external src or
+        # an SVG someone hand-wrote. Editing needs bytes we can send; refuse
+        # rather than guess at fetching them.
+        return None, None, "slot has no embedded base64 image to edit"
+    subtype = match.group(1).lower()
+    try:
+        raw = base64.b64decode(re.sub(r"\s+", "", match.group(2)), validate=True)
+    except Exception:
+        return None, None, "slot's embedded image data is not valid base64"
+    if not raw:
+        return None, None, "slot's embedded image data is empty"
+    return raw, subtype, None
 
 
 def select_targets(slots, slot_name, regenerate_name):
@@ -173,6 +209,22 @@ def select_targets(slots, slot_name, regenerate_name):
         else:
             targets.append(slot["name"])
     return targets, skipped, warnings
+
+
+def select_edit_target(slots, edit_name):
+    """Return (target_names, skipped, warnings) for an --edit run."""
+    by_name = {s["name"]: s for s in slots}
+    if edit_name not in by_name:
+        return [], [], ["--edit named slot '" + edit_name + "' which does not exist in the plan"]
+    if not by_name[edit_name]["filled"]:
+        # Editing needs something to edit. Filling it is a different call with
+        # different semantics (the authored prompt, not an instruction), so
+        # point at that rather than silently generating.
+        return [], [{
+            "slot": edit_name,
+            "reason": "slot is empty; run without --edit to fill it before refining it",
+        }], []
+    return [edit_name], [], []
 
 
 def alt_text(slot):
@@ -214,27 +266,8 @@ def _error_reason(status, body):
     return reason
 
 
-def generate_image(api_key, prompt, model, size, quality, compression):
-    """Return (b64_string, None) on success or (None, reason) on any failure."""
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "size": size,
-        "quality": quality,
-        "n": 1,
-        "output_format": OUTPUT_FORMAT,
-        "output_compression": compression,
-    }
-    request = urllib.request.Request(
-        API_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": "Bearer " + api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
+def _call_api(request):
+    """Send `request` and return (b64_string, None) or (None, reason)."""
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECS) as response:
             body = response.read()
@@ -262,6 +295,80 @@ def generate_image(api_key, prompt, model, size, quality, compression):
         return None, "API returned malformed base64 image data"
 
     return base64.b64encode(raw).decode("ascii"), None
+
+
+def generate_image(api_key, prompt, model, size, quality, compression):
+    """Return (b64_string, None) on success or (None, reason) on any failure."""
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "size": size,
+        "quality": quality,
+        "n": 1,
+        "output_format": OUTPUT_FORMAT,
+        "output_compression": compression,
+    }
+    request = urllib.request.Request(
+        API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": "Bearer " + api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    return _call_api(request)
+
+
+def multipart_body(boundary, fields, image_bytes, image_subtype):
+    """Encode `fields` plus one `image` part as multipart/form-data bytes."""
+    marker = ("--" + boundary).encode("ascii")
+    chunks = []
+    for name, value in fields.items():
+        chunks.append(
+            marker
+            + b"\r\nContent-Disposition: form-data; name=\""
+            + name.encode("utf-8")
+            + b"\"\r\n\r\n"
+            + str(value).encode("utf-8")
+            + b"\r\n"
+        )
+    chunks.append(
+        marker
+        + b"\r\nContent-Disposition: form-data; name=\"image\"; filename=\"slot."
+        + image_subtype.encode("ascii")
+        + b"\"\r\nContent-Type: image/"
+        + image_subtype.encode("ascii")
+        + b"\r\n\r\n"
+        + image_bytes
+        + b"\r\n"
+    )
+    chunks.append(marker + b"--\r\n")
+    return b"".join(chunks)
+
+
+def edit_image(api_key, image_bytes, image_subtype, instruction, model, size, quality, compression):
+    """Refine an existing image. Same (b64, reason) contract as generate_image."""
+    boundary = "----slotedit" + uuid.uuid4().hex
+    fields = {
+        "model": model,
+        "prompt": instruction,
+        "size": size,
+        "quality": quality,
+        "n": 1,
+        "output_format": OUTPUT_FORMAT,
+        "output_compression": compression,
+    }
+    request = urllib.request.Request(
+        EDIT_API_URL,
+        data=multipart_body(boundary, fields, image_bytes, image_subtype),
+        headers={
+            "Authorization": "Bearer " + api_key,
+            "Content-Type": "multipart/form-data; boundary=" + boundary,
+        },
+        method="POST",
+    )
+    return _call_api(request)
 
 
 # ---------------------------------------------------------------- writing
@@ -387,6 +494,44 @@ def self_test():
     assert regen.count("<img") == 1, regen.count("<img")
     assert "<figcaption>Problem framing.</figcaption>" in regen
 
+    # --edit targets a filled slot; an empty one is skipped, not generated.
+    targets, skipped, warns = select_edit_target(slots, "problem")
+    assert targets == ["problem"] and skipped == [] and warns == []
+    targets, skipped, _ = select_edit_target(slots, "hero")
+    assert targets == [] and "empty" in skipped[0]["reason"], skipped
+    _, _, warns = select_edit_target(slots, "nope")
+    assert len(warns) == 1 and "nope" in warns[0]
+
+    # A filled slot yields its embedded bytes; an empty one has none to edit.
+    raw, subtype, reason = embedded_image(slots[1])
+    assert raw == base64.b64decode("AAAA") and subtype == "webp" and reason is None
+    _, _, reason = embedded_image(slots[0])
+    assert reason and "no embedded" in reason, reason
+
+    # An <img> pointing somewhere other than a data URI is not editable.
+    external, _ = parse_slots(SAMPLE.replace('src="data:image/webp;base64,AAAA"', 'src="hero.webp"'))
+    _, _, reason = embedded_image(external[1])
+    assert reason and "no embedded" in reason, reason
+
+    # An edit round-trips through fill_slot like any other write: one <img>,
+    # caption and comment pair intact.
+    edited = fill_slot(SAMPLE, slots[1], "RURJVA==")
+    assert "base64,RURJVA==" in edited and edited.count("<img") == 1
+    assert "<!-- /image-slot:problem -->" in edited
+    reparsed_edit, _ = parse_slots(edited)
+    assert embedded_image(reparsed_edit[1])[0] == base64.b64decode("RURJVA==")
+
+    # Multipart: every field is its own part, the image carries its subtype,
+    # and the body is terminated by the closing boundary.
+    body = multipart_body("BOUND", {"model": "gpt-image-2", "n": 1}, b"\x89PNGbytes", "webp")
+    assert body.count(b"--BOUND") == 4, body  # 2 fields + 1 image + closer
+    assert b'name="model"\r\n\r\ngpt-image-2\r\n' in body
+    assert b'name="n"\r\n\r\n1\r\n' in body
+    assert b'name="image"; filename="slot.webp"' in body
+    assert b"Content-Type: image/webp" in body
+    assert b"\x89PNGbytes" in body
+    assert body.endswith(b"--BOUND--\r\n")
+
     print("self-test ok")
     return 0
 
@@ -403,6 +548,8 @@ def main():
     parser.add_argument("plan", nargs="?", type=Path, help="Path to the HTML plan file")
     parser.add_argument("--slot", help="Fill only this slot")
     parser.add_argument("--regenerate", help="Re-generate this slot even if already filled")
+    parser.add_argument("--edit", help="Refine this slot's existing image in place (needs --instruction)")
+    parser.add_argument("--instruction", help="The refinement to apply; required with --edit")
     parser.add_argument("--size", default=DEFAULT_SIZE, help="Image size WxH (default: %(default)s)")
     parser.add_argument("--quality", default=DEFAULT_QUALITY, choices=VALID_QUALITY, help="Quality tier (default: %(default)s)")
     parser.add_argument("--compression", type=int, default=DEFAULT_COMPRESSION, help="webp compression 0-100 (default: %(default)s)")
@@ -415,8 +562,13 @@ def main():
 
     if args.plan is None:
         parser.error("plan file is required (or pass --self-test)")
-    if args.slot and args.regenerate:
-        parser.error("--slot and --regenerate are mutually exclusive; pass one")
+    selectors = [name for name, value in (("--slot", args.slot), ("--regenerate", args.regenerate), ("--edit", args.edit)) if value]
+    if len(selectors) > 1:
+        parser.error(" and ".join(selectors) + " are mutually exclusive; pass one")
+    if args.edit and not args.instruction:
+        parser.error("--edit requires --instruction describing the refinement to apply")
+    if args.instruction and not args.edit:
+        parser.error("--instruction is only valid with --edit")
     if not 0 <= args.compression <= 100:
         parser.error("--compression must be between 0 and 100")
     plan = args.plan.expanduser()
@@ -427,23 +579,37 @@ def main():
     content = plan.read_text(encoding="utf-8")
     slots, warnings = parse_slots(content)
 
-    targets, skipped, select_warnings = select_targets(slots, args.slot, args.regenerate)
+    if args.edit:
+        targets, skipped, select_warnings = select_edit_target(slots, args.edit)
+    else:
+        targets, skipped, select_warnings = select_targets(slots, args.slot, args.regenerate)
     warnings.extend(select_warnings)
     filled = []
+    edited = []
+    verb = "editing" if args.edit else "generating"
 
     def report():
-        print(json.dumps({"slots_found": len(slots), "filled": filled, "skipped": skipped, "warnings": warnings}))
+        print(json.dumps({
+            "slots_found": len(slots),
+            "filled": filled,
+            "edited": edited,
+            "skipped": skipped,
+            "warnings": warnings,
+        }))
         return 0
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key and targets:
+        action = "refine" if args.edit else "fill"
         for name in targets:
-            skipped.append({"slot": name, "reason": "OPENAI_API_KEY is not set; re-run with the key to fill this slot"})
+            skipped.append({"slot": name, "reason": "OPENAI_API_KEY is not set; re-run with the key to " + action + " this slot"})
         sys.stderr.write("OPENAI_API_KEY is not set - leaving " + str(len(targets)) + " slot(s) as placeholders.\n")
         return report()
 
     if targets:
-        sys.stderr.write("Generating " + str(len(targets)) + " image(s) with " + args.model + " at " + args.size + "...\n")
+        sys.stderr.write(
+            verb.capitalize() + " " + str(len(targets)) + " image(s) with " + args.model + " at " + args.size + "...\n"
+        )
 
     state = {"backed_up": False}
     for index, name in enumerate(targets, start=1):
@@ -454,8 +620,18 @@ def main():
             warnings.append("slot '" + name + "' disappeared mid-run; skipped")
             continue
 
-        sys.stderr.write("[" + str(index) + "/" + str(len(targets)) + "] " + name + ": generating...\n")
-        b64, reason = generate_image(api_key, slot["prompt"], args.model, args.size, args.quality, args.compression)
+        sys.stderr.write("[" + str(index) + "/" + str(len(targets)) + "] " + name + ": " + verb + "...\n")
+        if args.edit:
+            image_bytes, subtype, reason = embedded_image(slot)
+            if reason:
+                b64 = None
+            else:
+                b64, reason = edit_image(
+                    api_key, image_bytes, subtype, args.instruction,
+                    args.model, args.size, args.quality, args.compression,
+                )
+        else:
+            b64, reason = generate_image(api_key, slot["prompt"], args.model, args.size, args.quality, args.compression)
         if reason:
             sys.stderr.write("[" + str(index) + "/" + str(len(targets)) + "] " + name + ": skipped - " + reason + "\n")
             skipped.append({"slot": name, "reason": reason})
@@ -473,13 +649,13 @@ def main():
             skipped.append({"slot": name, "reason": "write failed: " + str(e)})
             continue
         content = new_content
-        filled.append(name)
+        (edited if args.edit else filled).append(name)
         kib = (len(b64) * 3 // 4) // 1024
         sys.stderr.write("[" + str(index) + "/" + str(len(targets)) + "] " + name + ": embedded (~" + str(kib) + " KiB)\n")
 
     if not slots:
         warnings.append("no image slots found in " + str(plan))
-    elif not targets and not args.slot and not args.regenerate:
+    elif not targets and not args.slot and not args.regenerate and not args.edit:
         sys.stderr.write("Nothing to do - every slot is already filled.\n")
 
     return report()

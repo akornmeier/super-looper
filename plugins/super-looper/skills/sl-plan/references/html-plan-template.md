@@ -118,6 +118,14 @@ Rules:
 - The script sets `alt` from the slot's `<figcaption>` text.
 - A slot the plan declares but never fills stays a comment pair — a plan with
   no API key is a complete plan with empty figures, never a broken one.
+- **A filled slot can be refined in place** rather than regenerated:
+  `--edit <slot> --instruction "..."` sends the slot's own embedded bytes to the
+  images edit endpoint with the instruction and writes the result back. The
+  authored `prompt="..."` attribute is deliberately left untouched, so it keeps
+  describing the image the plan asked for — which means `--regenerate` always
+  returns to that original intent rather than compounding edits. Prefer
+  `--edit` for "same image, one thing changed" and `--regenerate` for "wrong
+  image, start over".
 
 Prompt authoring rules:
 
