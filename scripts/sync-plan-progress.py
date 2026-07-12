@@ -235,6 +235,13 @@ def main():
     if not plan.is_file():
         sys.stderr.write("sync-plan-progress: plan not found: " + str(plan) + "\n")
         return 2
+    # Resolve before writing. `atomic_write` ends in os.replace(tmp, plan), which
+    # swaps the PATH -- so handed a symlink it would replace the link itself with a
+    # regular file, silently severing it while the real plan kept the stale content.
+    # Resolving means the read and the write land on the same real file, and the
+    # symlink survives as a symlink. `.suffix` is taken from the resolved name so a
+    # link with no extension cannot mis-select the markdown path for an HTML plan.
+    plan = plan.resolve()
 
     content = plan.read_text(encoding="utf-8")
     summary = args.date + " — phase " + args.phase + " shipped"
