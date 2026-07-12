@@ -212,7 +212,7 @@ Keep this a single pinned command, not an `if [ -f … ]` guard -- a compound gu
 
 **Two bounds keep the gate from hanging:**
 
-- **Per-wait timeout.** The script stops waiting and exits after ~5 minutes even if an active bot never reaches HEAD (hanging is the worst failure). On timeout it prints `timed-out waiting for: <logins>` -- **proceed anyway** (re-fetch), and note in the step 9 summary that a late bot round may still arrive, so the result does not imply full quiescence.
+- **Per-wait timeout.** The script stops waiting and exits after ~10 minutes even if an active bot never reaches HEAD (hanging is the worst failure). On timeout it prints `timed-out waiting for: <logins>` -- **proceed anyway** (re-fetch), and note in the step 9 summary that a late bot round may still arrive, so the result does not imply full quiescence.
 - **Max fix-round cap of 3** (below): after the third fix-verify cycle the recurring-pattern escalation fires instead of looping again.
 
 **Settle-window fallback (C).** Some reviewers post feedback that is *not* detectable as a re-review on HEAD -- a top-level comment with no SHA-tied review. For those the `commit.oid == HEAD` signal never trips, so do not wait on it forever: fall back to a **settle-window** -- after the gate returns, wait ~60s and re-fetch once via `get-pr-comments`; if no new threads appeared, conclude. This bounds the wait for non-SHA reviewers rather than blocking on a signal that will not come. Option A (poll-for-review-on-HEAD, above) is the primary, deterministic path; C is the documented secondary path for the non-SHA case.
@@ -225,9 +225,17 @@ Once the gate returns (quiescent or timed out), re-fetch feedback to confirm res
 bash "${CLAUDE_SKILL_DIR}/scripts/get-pr-comments" PR_NUMBER
 ```
 
-The `review_threads` array should be empty (except `needs-human` items).
+Read the returned `review_threads` to see what the round actually surfaced. A shrinking list is the normal shape; an empty one is neither required nor the signal to stop on.
 
-**If new threads remain**, check the fix-round count for this run:
+**An empty thread list is not the finish line, and waiting for one can cost more than it buys.** A review bot reviews *the diff of each push* -- so every fix creates fresh surface for the next round to comment on, including the lines the fix itself just added. A bot that comments on a code comment's wording, then on the docstring the reworded comment referenced, has not found a defect; it has found more diff. Rounds like that can continue as long as pushes do.
+
+Nor does an open thread necessarily block the merge. What gates a merge is branch protection: status checks and required approvals always, and thread resolution *only* where the repo enables "require conversation resolution" -- so check the repo rather than assuming either way. Note that the stop rule does not depend on the answer: a non-substantive round is still replied to **and resolved**, which satisfies a conversation-resolution gate without another commit. What another push does buy is another mandatory wait, since each push invalidates any per-commit review status and the bot must re-review the new HEAD.
+
+So the loop's exit condition is **the findings stopped being substantive**, not **the bot stopped talking**. A finding is substantive when it names a defect, a contract violation, or a real risk: fix it and loop. When a round returns only restatements, style preferences, or commentary on prose introduced by the previous round, stop.
+
+**What "stop" ends is the fix-push-wait cycle -- not step 7.** The final round is still handled in full: reply to every thread with quoted context and resolve it via GraphQL, exactly as any other round (`needs-human` items stay open, as always). The threads do not sit unanswered; what stops is *pushing another commit to chase them*. In the step 9 summary, name which findings were answered rather than fixed, and why -- a reader must never have to guess whether a thread was judged non-substantive or simply missed.
+
+**If new substantive threads remain**, check the fix-round count for this run:
 
 - **First, second, or third fix-verify cycle**: Repeat from step 2 for the remaining threads.
 

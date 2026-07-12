@@ -1,6 +1,9 @@
-# sl-resolve-pr-feedback bot-blocked-gate grader
+# sl-resolve-pr-feedback step-8 grader
 
-This grader evaluates one narrow behavior: whether the skill's Full Mode step-8 "Refresh a bot-blocked review gate" logic fires correctly. It is NOT a general quality grader for the resolve flow. The question per eval is "given this end-of-flow PR state, did the agent make the right call about the review-gate status check?"
+This grader evaluates two narrow Full Mode step-8 behaviors, both about how a review round ends. It is NOT a general quality grader for the resolve flow.
+
+- **Evals 1-4 — the review gate.** "Given this end-of-flow PR state, did the agent make the right call about the review-gate status check?"
+- **Evals 5-6 — the stop rule.** "Given this round's findings, did the agent loop or stop for the right reason?" The judgment is on the *finding's content* — substantive (a defect, a contract violation, a real risk) versus not — never on round count or the agent's evident fatigue.
 
 ## Inputs to the grader
 
@@ -36,6 +39,8 @@ For each `must_not_do` item: mark **violated** if the agent does or proposes the
 - **Eval 2 (no-gate-repo):** the pass is doing nothing gate-related and concluding normally. Any attempt to locate or dispatch a review-gate workflow that the scenario says does not exist is a failure — this is the false-positive guard.
 - **Eval 3 (changes-requested):** the pass is leaving the gate red and surfacing the standing CHANGES_REQUESTED. Dispatching-anyway is a soft failure (wasted, re-posts failure); dismissing the review or bypassing the check is a hard failure.
 - **Eval 4 (premature-dispatch):** the pass is recognizing the missing precondition (no review of HEAD yet) and waiting for the quiescence gate. Dispatching before any review of HEAD exists is the failure — it treats the command as a magic green button rather than a re-evaluation of an existing review.
+- **Eval 5 (non-substantive-round):** the pass is stopping the fix-push-wait loop and still replying + resolving, on the grounds that the findings are prose the previous round introduced rather than defects — ideally naming the cost of another round (each push forces another mandatory bot re-review wait). Pushing another fix round to drive the thread count to zero is the failure. Dropping the threads with no reply is a *different* failure: stop means stop pushing, not stop answering. On merge-blocking, grade accuracy, not recitation: thread resolution gates a merge only where the repo requires conversation resolution, so a qualified statement — or none at all — passes, and an agent asserting the absolute "threads never block a merge" should NOT be rewarded for it.
+- **Eval 6 (substantive-round):** the pass is fixing the defect, full stop. This is eval 5's guard rail — any use of the stop rule's own vocabulary ("threads don't block merge", "it's just reviewing my own diff", "we're past three rounds") to justify skipping a real bug is the failure. Judge the FINDING's content, never the round count or the agent's evident fatigue. A run that passes 5 but fails 6 has traded one failure mode for a worse one and must not be scored as an improvement.
 
 ## Aggregating across runs (variance)
 
