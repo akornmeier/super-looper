@@ -126,10 +126,10 @@ Markdown plans use the **same four-state vocabulary as HTML**, carried in an inl
 span on the unit line:
 
 ```markdown
-- U1. **Add parser coverage** `[x]`
-- U2. **Wire the reporter** `[wip]`
-- U3. **Backfill fixtures** `[]`
-- U4. **Flaky integration test** `[f]`
+### U1. Add parser coverage `[x]`
+### U2. Wire the reporter `[wip]`
+### U3. Backfill fixtures `[]`
+### U4. Flaky integration test `[f]`
 ```
 
 Not GFM checkboxes (`- [ ]` / `- [x]`). GFM has two states; the marker contract has four,
