@@ -95,12 +95,13 @@ esac
 # `git diff/add -- "$PLAN_REL"` with cwd=$TARGET. Git accepts an absolute pathspec
 # that resolves INSIDE the worktree (it resolves symlinks such as macOS
 # `/tmp` -> `/private/tmp` itself), but it is fatal on one that does not:
-# "fatal: ... is outside repository". That fatal is what makes an absolute
-# --plan-file dangerous rather than merely unsupported -- the `if ! git diff
-# --quiet` guard reads the nonzero exit as "nothing changed", so the phase would
-# ship, the plan would be rewritten on disk, and the sync commit would be silently
-# skipped. Resolve once, up front, and reject an out-of-target plan before any
-# phase runs rather than discovering it mid-chain.
+# "fatal: ... is outside repository". A fatal there does not fail the phase, it
+# corrupts the sync: `git diff --quiet` exits 0 for no-changes and nonzero for
+# changes, so `! git diff --quiet` reads the fatal's 128 as "there are changes",
+# enters the branch, and `git add` fails on the same bad pathspec -- degrading to
+# the "plan sync commit failed -- continuing" path. The phase ships and its
+# progress is never recorded. Resolve once, up front, and reject an out-of-target
+# plan before any phase runs rather than discovering it mid-chain.
 # Resolve the plan itself, not just its directory: `pwd -P` on the parent resolves
 # symlinked DIRECTORIES, but a symlinked FILE would keep its in-target name and sail
 # through the containment check below -- the script would then read external content

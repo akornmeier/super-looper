@@ -17,8 +17,11 @@ Usage:
   sync-plan-progress.py --self-test
 
 Appends are append-only and idempotent: a SHA already listed is not added twice,
-and a phase already recorded in Amendments is not recorded again. Exit 0 whenever
-the plan was readable -- a plan with no `commits` field is a skip, not a failure.
+and a phase already recorded in Amendments is not recorded again. The two appends
+are independent -- a plan with no `commits` field still gets its Amendments entry,
+and one with no Amendments section still gets its SHAs. A missing field skips only
+its own append. Exit 0 whenever the plan was readable, including when neither
+field is present and nothing is written.
 """
 
 import argparse
