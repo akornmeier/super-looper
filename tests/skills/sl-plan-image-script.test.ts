@@ -152,6 +152,24 @@ describe("generate-plan-images.py --max-images spend cap", () => {
     expect(await fs.readFile(plan, "utf8")).toBe(before)
   })
 
+  test("a keyless capped run still reports the cap on stderr", async () => {
+    const { stderr } = await run([plan, "--max-images", "2"])
+
+    // The keyless early return used to swallow the cap notice, so a user with
+    // more slots than the cap heard only "leaving 2 slot(s) as placeholders"
+    // and never learned the other 3 were held back by the cap.
+    expect(stderr).toContain("Run cap of 2 image(s) reached - 3 slot(s) left unfilled")
+    expect(stderr).toContain("leaving 2 slot(s) as placeholders")
+  })
+
+  test("a cap of 0 reports the cap even though no key was needed", async () => {
+    const { stderr } = await run([plan, "--max-images", "0"])
+
+    // targets is empty here, so the keyless branch never fires — the cap notice
+    // is the only thing standing between the user and a silent no-op.
+    expect(stderr).toContain("Run cap of 0 image(s) reached - 5 slot(s) left unfilled")
+  })
+
   test("a cap at or above the slot count adds no phantom skips", async () => {
     const { stdout } = await run([plan, "--max-images", "5"])
     const report = JSON.parse(stdout)

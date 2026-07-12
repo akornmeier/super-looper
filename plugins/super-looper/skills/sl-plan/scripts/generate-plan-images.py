@@ -646,6 +646,16 @@ def main():
         }))
         return 0
 
+    # Reported before the key check: a keyless run returns early, and a user who
+    # capped slots away deserves to hear about them on every exit path, not just
+    # the one that had a key. The two notices are additive, not overlapping —
+    # the cap held these slots back, the missing key held the rest back.
+    if over_cap:
+        sys.stderr.write(
+            "Run cap of " + str(args.max_images) + " image(s) reached - "
+            + str(len(over_cap)) + " slot(s) left unfilled and uncharged.\n"
+        )
+
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key and targets:
         action = "refine" if args.edit else "fill"
@@ -653,12 +663,6 @@ def main():
             skipped.append({"slot": name, "reason": "OPENAI_API_KEY is not set; re-run with the key to " + action + " this slot"})
         sys.stderr.write("OPENAI_API_KEY is not set - leaving " + str(len(targets)) + " slot(s) as placeholders.\n")
         return report()
-
-    if over_cap:
-        sys.stderr.write(
-            "Run cap of " + str(args.max_images) + " image(s) reached - "
-            + str(len(over_cap)) + " slot(s) left unfilled and uncharged.\n"
-        )
 
     if targets:
         sys.stderr.write(
