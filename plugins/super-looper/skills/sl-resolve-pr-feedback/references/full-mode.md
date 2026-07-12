@@ -235,6 +235,22 @@ The `review_threads` array should be empty (except `needs-human` items).
 
 PR comments and review bodies have no resolve mechanism, so they will still appear in the output. Verify they were replied to by checking the PR conversation.
 
+### Refresh a bot-blocked review gate
+
+Some repos gate merge on a custom status check that a workflow posts to assert "a non-author reviewed *this exact commit*" (this plugin's own repo uses a `pr-reviewed` status of this shape). GitHub refuses to execute a workflow run it attributes to a bot reviewer, so when the only reviewer on the PR is an automated one (Copilot, CodeRabbit), that reviewer's review cannot trigger the status-posting workflow -- the required check stays red or pending on HEAD even though a valid non-author review now exists, and a PR author cannot clear it by reviewing their own PR. The status only posts on the next slow scheduled backstop, if the repo has one.
+
+After the quiescence gate confirms the bot reviewed HEAD and threads are resolved, check whether merge is still blocked by a stuck review-status check of this kind (symptom: a required status like `pr-reviewed` sitting red/pending with a "no review by another party"-type description, while the bot's review is present on HEAD). If it is, and the repo exposes a manually-dispatchable workflow that posts that status, trigger it once so it re-evaluates HEAD -- a human-dispatched run executes where the bot-attributed one did not. Find the workflow name with `gh workflow list` if it is not obvious; for this plugin's repo it is:
+
+```bash
+gh workflow run "PR reviewed"
+```
+
+Constraints:
+
+- **Conditional and best-effort.** Only dispatch when the stuck-gate symptom is actually present. If the repo has no such workflow the command errors harmlessly -- do not treat that as a failure of the resolve flow.
+- **Never fabricate a passing review.** Do not dismiss a review, approve on the author's behalf, or otherwise bypass a required check to turn a gate green -- the dispatch only re-runs the repo's own honest evaluation of the existing reviews.
+- **A standing `CHANGES_REQUESTED` is not this case.** Re-dispatching re-posts failure for it, so leave the gate red and surface it to the user rather than trying to clear it.
+
 ## 9. Summary
 
 Present a concise summary of all work done. Group by verdict, one line per item describing *what was done* not just *where*. This is the primary output the user sees.
