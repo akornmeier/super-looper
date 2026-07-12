@@ -82,20 +82,45 @@ done
 [ -n "$TARGET" ]    || die "--target is required"
 [ -n "$PLAN_FILE" ] || die "--plan-file is required (a phase names units in a plan)"
 
+[ -d "$TARGET" ] || die "--target is not a directory: $TARGET"
+target_abs="$( cd "$TARGET" && pwd -P )"
+
 case "$PLAN_FILE" in
   /*) plan_path="$PLAN_FILE" ;;
   *)  plan_path="$TARGET/$PLAN_FILE" ;;
 esac
 [ -f "$plan_path" ] || die "plan file not found in the target: $PLAN_FILE"
 
+# Normalize the plan to a TARGET-RELATIVE pathspec. The sync below runs
+# `git diff/add -- "$PLAN_REL"` with cwd=$TARGET. Git accepts an absolute pathspec
+# that resolves INSIDE the worktree (it resolves symlinks such as macOS
+# `/tmp` -> `/private/tmp` itself), but it is fatal on one that does not:
+# "fatal: ... is outside repository". That fatal is what makes an absolute
+# --plan-file dangerous rather than merely unsupported -- the `if ! git diff
+# --quiet` guard reads the nonzero exit as "nothing changed", so the phase would
+# ship, the plan would be rewritten on disk, and the sync commit would be silently
+# skipped. Resolve once, up front, and reject an out-of-target plan before any
+# phase runs rather than discovering it mid-chain.
+plan_abs="$( cd "$( dirname "$plan_path" )" && pwd -P )/$( basename "$plan_path" )"
+case "$plan_abs" in
+  "$target_abs"/*) PLAN_REL="${plan_abs#"$target_abs"/}" ;;
+  *) die "--plan-file must live inside --target: $PLAN_FILE" ;;
+esac
+plan_path="$plan_abs"
+
 # Derive the phase list. An explicit --group wins; otherwise every U-ID in the
-# plan becomes its own phase, in the order the plan declares them. Matches a U-ID
-# at a heading/list position in markdown or as an `id="u3"` anchor in HTML.
+# plan becomes its own phase, in ascending U-ID order -- the contract the docs and
+# the plan's own dependency order state, and NOT the order the U-IDs happen to be
+# first mentioned in the file (a plan that references U10 before it declares U2
+# would otherwise ship the phases out of dependency order). Matches a U-ID at a
+# heading/list position in markdown or as an `id="u3"` anchor in HTML.
 if [ "${#PHASE_GROUPS[@]}" -eq 0 ]; then
   units="$(grep -oE '(^|[^A-Za-z])U[0-9]+\.|id="u[0-9]+"' "$plan_path" 2>/dev/null \
     | grep -oE 'U[0-9]+|u[0-9]+' \
     | tr '[:lower:]' '[:upper:]' \
-    | awk '!seen[$0]++' || true)"
+    | awk '!seen[$0]++ { n = $0; sub(/^U/, "", n); printf "%d\t%s\n", n, $0 }' \
+    | sort -n -k1,1 \
+    | cut -f2 || true)"
   [ -n "$units" ] || die "no implementation units (U-IDs) found in $PLAN_FILE; pass --group explicitly"
   while IFS= read -r u; do [ -n "$u" ] && PHASE_GROUPS+=( "$u" ); done <<EOF
 $units
@@ -118,7 +143,7 @@ PYTHON="${LOOP_PYTHON_BIN:-python3}"
 sync_plan() {
   _group="$1"
   _branch="$2"
-  _shas="$( cd "$TARGET" && "$GIT_BIN" log --format=%H "${head_before}..HEAD" 2>/dev/null || true )"
+  _shas="$( cd "$TARGET" && "$GIT_BIN" log --format=%H "${base_sha}..HEAD" 2>/dev/null || true )"
 
   _args=()
   while IFS= read -r _sha; do
@@ -136,9 +161,9 @@ EOF
       return 0
     }
 
-  if ( cd "$TARGET" && ! "$GIT_BIN" diff --quiet -- "$PLAN_FILE" ); then
+  if ( cd "$TARGET" && ! "$GIT_BIN" diff --quiet -- "$PLAN_REL" ); then
     ( cd "$TARGET" \
-        && "$GIT_BIN" add -- "$PLAN_FILE" \
+        && "$GIT_BIN" add -- "$PLAN_REL" \
         && "$GIT_BIN" commit -q -m "docs(plan): record phase $_group shipped on $_branch" ) \
       || { echo "[phases] plan sync commit failed for $_group — continuing." >&2; return 0; }
     ( cd "$TARGET" && "$GIT_BIN" push -q origin "$_branch" ) \
@@ -165,9 +190,14 @@ for group in "${PHASE_GROUPS[@]}"; do
     ( cd "$TARGET" && "$GIT_BIN" checkout -q "$prev_branch" ) \
       || die "could not check out the previous phase's branch: $prev_branch"
   fi
-  head_before="$( cd "$TARGET" && "$GIT_BIN" rev-parse --abbrev-ref HEAD )"
+  # The phase's base as a COMMIT SHA -- the same thing loop.sh records as BASE_REF
+  # (`git rev-parse HEAD`). A branch name (`rev-parse --abbrev-ref HEAD`) collapses
+  # to the literal "HEAD" under a detached HEAD, and `HEAD..HEAD` is empty: the
+  # phase's commits would never be recorded in the plan. A SHA is exact in both
+  # states and is not invalidated by a branch moving mid-phase.
+  base_sha="$( cd "$TARGET" && "$GIT_BIN" rev-parse HEAD )"
 
-  echo "[phases] phase $phase_index/${#PHASE_GROUPS[@]}: $group (base: $head_before)" >&2
+  echo "[phases] phase $phase_index/${#PHASE_GROUPS[@]}: $group (base: ${prev_branch:-$base_sha})" >&2
 
   set +e
   "$LOOP" "${PASSTHRU[@]}" --phase "$group"

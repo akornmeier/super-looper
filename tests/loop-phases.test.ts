@@ -73,9 +73,9 @@ echo "$phase" >> src.txt && git add -A && git commit -qm "feat: $phase"
   return p
 }
 
-async function runPhases(t: string, extra: string[] = [], loop?: string) {
+async function runPhases(t: string, extra: string[] = [], loop?: string, planFile = "docs/plans/p.md") {
   const proc = Bun.spawn(
-    ["bash", PHASES, "--target", t, "--plan-file", "docs/plans/p.md", ...extra],
+    ["bash", PHASES, "--target", t, "--plan-file", planFile, ...extra],
     {
       stdout: "pipe",
       stderr: "pipe",
@@ -106,6 +106,23 @@ describe("phase derivation", () => {
 
     expect(exitCode).toBe(0)
     expect(stderr).toContain("1 phase(s): U1,U2")
+  })
+
+  test("phases are ordered by U-ID number, not by first mention in the plan", async () => {
+    // A plan may reference a later unit before it declares an earlier one (a
+    // dependency note, a summary table). First-seen order would ship U10 before
+    // U2 — out of dependency order, and each phase stacks on the previous one, so
+    // the wrong order is baked into the branch chain.
+    const t = target(
+      "---\ntitle: P\ncommits: none\n---\n" +
+        "## Overview\nU10. depends on U2.\n" +
+        "## Implementation Units\n### U1. First\n### U2. Second\n### U10. Tenth\n" +
+        "## Amendments\n\n_No amendments yet._\n",
+    )
+    const { exitCode, stderr } = await runPhases(t)
+
+    expect(exitCode).toBe(0)
+    expect(stderr).toContain("3 phase(s): U1 U2 U10")
   })
 
   test("a plan with no U-IDs and no --group is a usage error, not a silent no-op", async () => {
@@ -177,6 +194,49 @@ describe("between-phase plan sync", () => {
     const commits = plan.match(/^commits: (.*)$/m)?.[1] ?? ""
     expect(commits.split(", ").filter(Boolean)).toHaveLength(2)
   })
+
+  test("an absolute --plan-file still records the phase's progress in the plan", async () => {
+    // The sync's git pathspecs run with cwd=$TARGET. An absolute path handed
+    // straight to `git diff/add --` can resolve outside the repository, and the
+    // `if ! git diff --quiet` guard reads git's fatal as "nothing changed" — the
+    // phase ships, the plan is rewritten, and the sync commit is silently skipped.
+    const t = target()
+    const { exitCode } = await runPhases(t, [], undefined, path.join(t, "docs/plans/p.md"))
+
+    expect(exitCode).toBe(0)
+    const plan = git(t, "show", "feat/u2:docs/plans/p.md")
+    expect(plan).toContain("phase U1 shipped")
+    expect(plan).toContain("phase U2 shipped")
+  })
+
+  test("a --plan-file outside the target is a usage error, not a partial run", async () => {
+    const t = target()
+    const outside = path.join(work, "elsewhere.md")
+    fs.writeFileSync(outside, "### U1. First\n")
+    const { exitCode, stderr } = await runPhases(t, [], undefined, outside)
+
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("must live inside --target")
+    // Nothing shipped: the failure is up front, before any phase ran.
+    expect(stderr).not.toContain("phase 1/")
+  })
+
+  test("commits are recorded from a detached-HEAD base, not lost to an empty range", async () => {
+    // The base must be a commit SHA (what loop.sh records as BASE_REF), not a
+    // branch name: `rev-parse --abbrev-ref HEAD` yields the literal "HEAD" when
+    // detached, and the `HEAD..HEAD` range is empty, so the phase's SHAs would
+    // silently never land in the plan's append-only `commits` metadata.
+    const t = target()
+    git(t, "checkout", "-q", "--detach", "HEAD")
+
+    const { exitCode } = await runPhases(t)
+    expect(exitCode).toBe(0)
+
+    const plan = git(t, "show", "feat/u2:docs/plans/p.md")
+    const commits = plan.match(/^commits: (.*)$/m)?.[1] ?? ""
+    expect(commits.split(", ").filter(Boolean)).toHaveLength(2)
+    expect(commits).not.toContain("none")
+  })
 })
 
 describe("sync-plan-progress.py", () => {
@@ -184,5 +244,48 @@ describe("sync-plan-progress.py", () => {
     const proc = Bun.spawn(["python3", SYNC, "--self-test"], { stdout: "pipe", stderr: "pipe" })
     expect(await proc.exited).toBe(0)
     expect(await new Response(proc.stdout).text()).toContain("self-test ok")
+  })
+
+  test("--self-test runs standalone, with no plan or phase metadata", async () => {
+    // The self-test path must stay reachable without the normal-mode flags --
+    // that is the whole reason they cannot be argparse `required=True`.
+    const proc = Bun.spawn(["python3", SYNC, "--self-test"], { stdout: "pipe", stderr: "pipe" })
+    expect(await proc.exited).toBe(0)
+  })
+
+  // Omitting a flag used to be silently tolerated: the amendment was written with
+  // a placeholder ("— phase ? shipped"), corrupting the plan instead of failing.
+  for (const omitted of ["--phase", "--branch", "--date"]) {
+    test(`omitting ${omitted} in normal mode is a usage error`, async () => {
+      const plan = path.join(target(), "docs/plans/p.md")
+      const before = fs.readFileSync(plan, "utf8")
+      const flags: Record<string, string> = {
+        "--phase": "U1",
+        "--branch": "feat/x",
+        "--date": "2026-07-12",
+      }
+      const args = Object.entries(flags)
+        .filter(([f]) => f !== omitted)
+        .flat()
+
+      const proc = Bun.spawn(["python3", SYNC, plan, ...args], { stdout: "pipe", stderr: "pipe" })
+      expect(await proc.exited).toBe(2) // argparse's usage-error convention
+      expect(await new Response(proc.stderr).text()).toContain(omitted)
+      expect(fs.readFileSync(plan, "utf8")).toBe(before) // the plan is untouched
+    })
+  }
+
+  test("all three flags present in normal mode records the phase", async () => {
+    const plan = path.join(target(), "docs/plans/p.md")
+    const proc = Bun.spawn(
+      // prettier-ignore
+      ["python3", SYNC, plan, "--phase", "U1", "--branch", "feat/x", "--date", "2026-07-12", "--commit", "abc123"],
+      { stdout: "pipe", stderr: "pipe" },
+    )
+    expect(await proc.exited).toBe(0)
+    const written = fs.readFileSync(plan, "utf8")
+    expect(written).toContain("2026-07-12 — phase U1 shipped")
+    expect(written).toContain("commits: abc123")
+    expect(written).not.toContain("phase ? shipped")
   })
 })

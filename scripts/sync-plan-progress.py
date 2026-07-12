@@ -202,6 +202,12 @@ def main():
         return self_test()
     if args.plan is None:
         p.error("plan file is required (or pass --self-test)")
+    # argparse's own `required=True` cannot express "required unless --self-test",
+    # so the normal-mode contract is enforced here. Without it a missing flag
+    # silently writes a placeholder amendment ("phase ? shipped").
+    missing = [n for n in ("phase", "branch", "date") if not getattr(args, n)]
+    if missing:
+        p.error("missing required argument(s): " + ", ".join("--" + n for n in missing))
 
     plan = args.plan.expanduser()
     if not plan.is_file():
@@ -209,8 +215,8 @@ def main():
         return 2
 
     content = plan.read_text(encoding="utf-8")
-    summary = (args.date or "") + " — phase " + (args.phase or "?") + " shipped"
-    detail = "Shipped by an unattended per-phase run on branch " + (args.branch or "?") + "."
+    summary = args.date + " — phase " + args.phase + " shipped"
+    detail = "Shipped by an unattended per-phase run on branch " + args.branch + "."
 
     updated, changed = sync(content, plan.suffix.lower() == ".html", args.commit, summary, detail)
     if changed:
