@@ -225,7 +225,7 @@ Once the gate returns (quiescent or timed out), re-fetch feedback to confirm res
 bash "${CLAUDE_SKILL_DIR}/scripts/get-pr-comments" PR_NUMBER
 ```
 
-The `review_threads` array should be empty (except `needs-human` items).
+Read the returned `review_threads` to see what the round actually surfaced. A shrinking list is the normal shape; an empty one is neither required nor the signal to stop on.
 
 **An empty thread list is not the finish line, and waiting for one can cost more than it buys.** A review bot reviews *the diff of each push* -- so every fix creates fresh surface for the next round to comment on, including the lines the fix itself just added. A bot that comments on a code comment's wording, then on the docstring the reworded comment referenced, has not found a defect; it has found more diff. Rounds like that can continue as long as pushes do.
 

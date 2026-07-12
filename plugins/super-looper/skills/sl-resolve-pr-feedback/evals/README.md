@@ -12,7 +12,7 @@ These four are narrowly scoped to whether that refresh fires when — and only w
 
 **2. The loop's exit condition (evals 5-6).** The skill stops when the findings stop being *substantive*, not when the bot stops talking. A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on — including the ones the fix just added — and unresolved threads never block a merge. Chasing an empty thread list therefore pays a full bot-re-review wait per round for something the merge does not require.
 
-The pair matters more than either half. Eval 5 checks the skill stops on a round that only reworders prose the previous round introduced; eval 6 checks it does *not* reach for that same reasoning to skip a genuine defect. A skill that passes 5 and fails 6 has traded a slow loop for a missed bug.
+The pair matters more than either half. Eval 5 checks the skill stops on a round that only rewords prose the previous round introduced; eval 6 checks it does *not* reach for that same reasoning to skip a genuine defect. A skill that passes 5 and fails 6 has traded a slow loop for a missed bug.
 
 ## Files
 
