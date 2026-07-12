@@ -46,9 +46,10 @@
       "tests_risk": "whole_file_rewrite_destroys_images",
       "prompt": "You are `/sl-doc-review` reviewing an HTML plan. Several `safe_auto` fixes at anchor 100 touch five different sections. The file is 4 MB because three image slots are filled with base64 webp data URIs. To make the edits efficiently, is it acceptable to read the whole file, apply all five fixes in memory, and write the corrected document back out in one pass? Explain your approach.",
       "expected_terms": [
-        { "term": "no", "tier": "must" },
-        { "term": "data-URI", "tier": "must" },
+        { "term": "data URI", "tier": "must" },
         { "term": "Edit", "tier": "must" },
+        { "term": "wholesale", "tier": "should" },
+        { "term": "data-URI", "tier": "should" },
         { "term": "Grep", "tier": "should" },
         { "term": "offset", "tier": "should" },
         { "term": "corrupt", "tier": "may" },
