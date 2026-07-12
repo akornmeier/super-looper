@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.6.1...super-looper-v0.7.0) (2026-07-12)
+
+
+### Features
+
+* **plan:** cap paid image calls per run with --max-images ([#41](https://github.com/akornmeier/super-looper/issues/41)) ([d3af2d4](https://github.com/akornmeier/super-looper/commit/d3af2d45b1a586c356ce584852903d7d4b671bbf))
+* **plan:** refine a filled image slot in place with --edit ([e983447](https://github.com/akornmeier/super-looper/commit/e983447509ee84959c5686162ca4d0aa37b0f95c))
+* **plan:** wire reciprocal forward refs from a plan's back refs ([#43](https://github.com/akornmeier/super-looper/issues/43)) ([ca6514e](https://github.com/akornmeier/super-looper/commit/ca6514e0417aac59f33f944d829032102924d804))
+
+
+### Bug Fixes
+
+* **doc-review:** add an HTML-safe mutation path ([#44](https://github.com/akornmeier/super-looper/issues/44)) ([2c9fbc6](https://github.com/akornmeier/super-looper/commit/2c9fbc69868f66d9a308dcd7b1a099a37c65aa3e))
+* **loop:** hash the plan's goal content, not its bytes ([#45](https://github.com/akornmeier/super-looper/issues/45)) ([22a20fc](https://github.com/akornmeier/super-looper/commit/22a20fc6baff56ab00648583df94d40d0b003955))
+* **resolve-pr-feedback:** stop on non-substantive rounds, not on silence ([#47](https://github.com/akornmeier/super-looper/issues/47)) ([4f9b059](https://github.com/akornmeier/super-looper/commit/4f9b059c06e8c1bd61641aece22c46179afd5ee8))
+
 ## [0.6.1](https://github.com/akornmeier/super-looper/compare/super-looper-v0.6.0...super-looper-v0.6.1) (2026-07-12)
 
 
