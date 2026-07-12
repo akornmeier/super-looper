@@ -2,7 +2,7 @@
 name: sl-plan
 description: "Create structured plans for multi-step tasks -- software features, research workflows, events, study plans, or any goal that benefits from breakdown. Also deepens existing plans with interactive sub-agent review. Use when the user says 'plan this', 'create a plan', 'how should we build', 'break this down', or when a brainstorm doc is ready for planning. Use 'deepen the plan' or 'deepening pass' for the deepening flow. For exploratory requests, prefer sl-brainstorm first."
 argument-hint: "[optional: feature description, requirements doc path, plan path to deepen, or any task to plan] [output:html]"
-allowed-tools: Bash(python3 *generate-plan-images.py*)
+allowed-tools: Bash(python3 *generate-plan-images.py*), Bash(python3 *wire-plan-references.py*)
 ---
 
 # Create Technical Plan
@@ -755,6 +755,22 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path> [--max
 The bracketed flag is optional: append it only when the config sets `plan_images_max`, and drop it entirely otherwise so the script's default of 8 applies.
 
 Parse the JSON summary on stdout (`slots_found`, `filled`, `edited`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason the script gives. An over-cap skip reads as exactly that — the slot was not charged for, and raising `plan_images_max` or re-running fills it. When the skip reason is the absent key, that one line is: the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step). Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
+
+#### 5.2c Wire Reciprocal References (HTML mode only)
+
+A plan declares what it descends from (`back refs`). Nothing declares what descends from it — `forward refs` on an upstream plan can only be written by the downstream plan, so without this step the link is navigable in one direction only.
+
+**Gate — interactive runs only.** Skip this step entirely in pipeline mode, under LFG, or in any `disable-model-invocation` context. This is the one step in the skill that writes to a file **other than** the plan being composed, and a target plan may be the plan under an active LFG loop-driver run — which hashes it per attempt. Mutating it mid-run reads as goal drift and aborts that run (exit 8). The script cannot see the loop; this gate is the only thing standing between the two.
+
+Skip silently when the plan's `back refs` is `none` — there is nothing to wire.
+
+Otherwise invoke the bundled script as a single pinned command:
+
+```bash
+python3 "${CLAUDE_SKILL_DIR}/scripts/wire-plan-references.py" <plan-path>
+```
+
+The script appends this plan's repo-relative path to each target's `forward refs`, idempotently — never touching any other field, never modifying the plan itself, and never inventing a `forward refs` field where none exists. Parse the JSON summary (`wired`, `skipped`, `warnings`) and report each wired target as one compact line. Every skip reason is benign and final: a missing target, a markdown artifact (which has no `forward refs` field and must not be given one), or a target that already lists this plan. Do not hand-edit a target plan when the script skips it — a skip is the contract holding, not a failure to route around. Any non-JSON outcome means no wiring happened; say so in one line and continue.
 
 #### 5.3 Confidence Check and Deepening
 
