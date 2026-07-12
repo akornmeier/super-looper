@@ -1170,9 +1170,15 @@ describe("goal-drift guard (R1-R3)", () => {
       ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
-    expect(exitCode).not.toBe(8)
+    // Assert the concrete success shape, not merely `not 8` — a run that died of a
+    // verification failure would also satisfy `not 8` and prove nothing about the guard.
+    expect(exitCode).toBe(0)
     const rec = readRecord(dir)
-    expect(rec.typed_failure).not.toBe("goal-drift")
+    expect(rec.outcome).toBe("success")
+    expect(rec.exit_code).toBe(0)
+    expect(rec.typed_failure).toBeNull()
+    expect(rec.route).toBe("DONE")
+    expect(rec.verification.result).toBe("green")
     expect(rec.goal_drift).toBeNull()
     // The marker write actually landed — the guard permitted it rather than the
     // stub silently failing to write, which would make this test vacuous.

@@ -70,6 +70,21 @@ normalize_markers() {
     -e 's@`\[(wip|x|f)\]`@`[]`@g'
 }
 
+# Read a string field off the payload into the named variable, preserving its
+# trailing newlines. Command substitution strips them, so the value cannot be
+# returned on stdout: a sentinel byte is appended and stripped, and then the one
+# newline `jq -r` adds to terminate its own output is removed. What remains is
+# the field's real bytes. Without this, an Edit whose only non-marker change is
+# a newline at the end of old_string/new_string would compare equal here and be
+# waved through -- while loop.sh's authoritative hash (which hashes the
+# normalized stream, newlines included) still kills the run at done_reached.
+read_payload_field() {
+  _var="$1"
+  _raw="$(printf '%s' "$payload" | jq -r "$2" 2>/dev/null; printf 'X')" || return 1
+  _raw="${_raw%X}"
+  printf -v "$_var" '%s' "${_raw%$'\n'}"
+}
+
 # A status-marker update is progress state the run produced, not a goal edit, so
 # it is allowed through even on a guarded plan. An Edit qualifies only when both
 # sides normalize to the same string -- i.e. nothing but marker values changed.
@@ -77,14 +92,16 @@ normalize_markers() {
 # and a wholesale plan rewrite mid-run is not a marker update whatever it claims.
 # See docs/solutions/workflow/goal-guard-marker-region-carveout.md.
 is_marker_only_edit() {
-  _old="$(printf '%s' "$payload" | jq -r '.tool_input.old_string // empty' 2>/dev/null)" || return 1
-  _new="$(printf '%s' "$payload" | jq -r '.tool_input.new_string // empty' 2>/dev/null)" || return 1
+  read_payload_field _old '.tool_input.old_string // empty' || return 1
+  read_payload_field _new '.tool_input.new_string // empty' || return 1
   # No old/new pair -> not an Edit (a Write, or an unparseable payload). Deny.
   [ -n "$_old" ] || return 1
   # An edit that changes nothing is not a marker update; fall through to deny
   # rather than quietly blessing a no-op shaped like one.
   [ "$_old" != "$_new" ] || return 1
-  [ "$(normalize_markers "$_old")" = "$(normalize_markers "$_new")" ]
+  # Compare the normalized streams byte for byte. `[ "$(...)" = "$(...)" ]` would
+  # strip trailing newlines off both sides and call a newline change identical.
+  cmp -s <(normalize_markers "$_old") <(normalize_markers "$_new")
 }
 
 # Canonicalize a possibly-nonexistent file path: absolutize against a base dir,

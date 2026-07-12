@@ -178,7 +178,7 @@ First, strip any `mode:unattended` argument token from `<input_document>` if pre
    1. Review the subagent's diff — verify changes match the unit's scope and `Files:` list
    2. Run the relevant test suite to confirm the tree is healthy
    3. If tests fail, diagnose and fix before proceeding — do not dispatch dependent units on a broken tree
-   4. Update the task list (markdown plan: do not edit the plan body — progress is carried by the commit; HTML plan in an interactive run: also flip the unit's status markers, since the orchestrator is the only writer in serial mode)
+   4. Update the task list, and flip the unit's status markers in either format when marker writes are active per the Phase 2 gate — serial subagents are single-writer, so the orchestrator is the only writer and owns the markers
    5. Release the subagent (`TaskStop` with its name) once its work is accepted — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI
    6. Dispatch the next unit
 

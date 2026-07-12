@@ -90,7 +90,7 @@ Resolution steps:
 If the user references an existing plan file or there is an obvious recent matching plan in `docs/plans/`:
 - Read it
 - Confirm whether to update it in place or create a new plan
-- If updating, revise only the still-relevant sections. Plans do not carry per-unit progress state — progress is derived from git by `sl-work`, so there is no progress to preserve across edits
+- If updating, revise only the still-relevant sections. Per-unit status markers are progress state owned by the executing agent — preserve them exactly as found across edits (see the marker rule below)
 
 **Deepen intent:** The word "deepen" (or "deepening") in reference to a plan is the primary trigger for the deepening fast path. When the user says "deepen the plan", "deepen my plan", "run a deepening pass", or similar, the target document is a **plan** in `docs/plans/`, not a requirements document. Use any path, keyword, or context the user provides to identify the right plan. If a path is provided, verify it is actually a plan document. If the match is not obvious, confirm with the user before proceeding.
 
@@ -114,6 +114,8 @@ If the plan already has a `deepened: YYYY-MM-DD` frontmatter field and there is 
 - **Status markers** (`[]`, `[wip]`, `[x]`, `[f]`) belong to the executing agent. Do not set, clear, or "tidy" them. New or split units start every marker at `[]`; a deleted unit's markers go with it.
 - **Filled image slots** survive edits — the `<!-- image-slot:NAME ... -->` / `<!-- /image-slot:NAME -->` comment pair and the single-line `<img>` between them are copied through unchanged. Never hand-edit the element. To change an image, re-run the fill script: `--regenerate <slot>` to redraw it from the slot's authored prompt, or `--edit <slot> --instruction "..."` to refine the existing image in place (see `references/html-plan-template.md`).
 - **Amendments** records every substantive revision: append one `<details>` entry, newest at the bottom, replacing the `No amendments yet.` empty-state paragraph on the first append. Earlier entries are never rewritten.
+
+Markdown plans are stateful in one respect too: their unit status markers are governed by the same rule as the HTML markers above — preserve them verbatim when resuming, updating, or deepening a `.md` plan, and start any new or split unit at `[]`. The append-only metadata lists, image slots, and Amendments section remain HTML-only.
 
 The U-ID stability rule (Phase 3.5) is unchanged: reordering never renumbers, splitting keeps the original ID on the original concept, deletion leaves a gap.
 
@@ -509,7 +511,7 @@ The tree is a scope declaration showing the expected output shape. It is not a c
 
 #### 3.5 Define Each Implementation Unit
 
-Each unit is a level-3 heading carrying a stable U-ID prefix matching the format used for R/A/F/AE in requirements docs: `### U1. [Name]`. Number sequentially within the plan starting at U1. Do not render units as bulleted list items or prefix them with `- [ ]` / `- [x]` checkbox markers. List-based unit titles fragment in every standard renderer because the per-unit fields (`**Goal:**`, `**Files:**`, `**Approach:**`, etc.) are written flush-left, which terminates CommonMark list continuation and detaches the fields from the unit they describe. Headings render correctly everywhere, are the right semantic match for sections containing multi-block content, and give each unit an anchor link. The plan is a decision artifact; execution progress is derived from git by `sl-work` rather than stored in the plan body.
+Each unit is a level-3 heading carrying a stable U-ID prefix matching the format used for R/A/F/AE in requirements docs: `### U1. [Name]`. Number sequentially within the plan starting at U1. Do not render units as bulleted list items or prefix them with `- [ ]` / `- [x]` checkbox markers. List-based unit titles fragment in every standard renderer because the per-unit fields (`**Goal:**`, `**Files:**`, `**Approach:**`, etc.) are written flush-left, which terminates CommonMark list continuation and detaches the fields from the unit they describe. Headings render correctly everywhere, are the right semantic match for sections containing multi-block content, and give each unit an anchor link. Each unit heading ends with a status marker — a trailing `` `[]` `` code span in markdown, `<code class="status">[]</code>` in HTML — stamped `[]` at create time and thereafter owned by the executing agent (`references/plan-sections.md`). Prose, requirements, and decisions still belong to the plan; the marker is the only per-unit state `sl-work` writes, and git remains authoritative for what actually shipped.
 
 **Stability rule.** Once assigned, a U-ID is never renumbered. Reordering units leaves their IDs in place (e.g., U1, U3, U5 in their new order is correct; renumbering to U1, U2, U3 is not). Splitting a unit keeps the original U-ID on the original concept and assigns the next unused number to the new unit. Deletion leaves a gap; gaps are fine. This rule matters most during deepening (Phase 5.3), which is the most likely accidental-renumber vector.
 

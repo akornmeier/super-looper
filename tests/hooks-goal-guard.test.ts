@@ -444,6 +444,66 @@ describe("marker carve-out on the plan", () => {
     expect(exitCode).toBe(2)
   })
 
+  test("a marker flip that also changes trailing newlines is denied", async () => {
+    const { plan, guard, root } = scaffold()
+    // The marker normalizes away, but the added newline does not: loop.sh hashes
+    // the normalized stream with its newlines intact, so allowing this here would
+    // hand the run a write the authoritative checksum kills at done_reached.
+    const { exitCode, stderr } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "### U1. Parse the thing `[]`\n",
+          new_string: "### U1. Parse the thing `[x]`\n\n",
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("BLOCKED")
+  })
+
+  test("a trailing-newline-only edit is denied", async () => {
+    const { plan, guard, root } = scaffold()
+    // No marker involved at all -- the only change is a newline at the end. It
+    // must not read as a no-op (which would deny for the wrong reason) nor as a
+    // marker-only edit; either way the hook denies, matching loop.sh's hash.
+    const { exitCode } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "### U1. Parse the thing `[x]`\n",
+          new_string: "### U1. Parse the thing `[x]`\n\n",
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(2)
+  })
+
+  test("a marker flip with matching trailing newlines is still allowed", async () => {
+    const { plan, guard, root } = scaffold()
+    // The carve-out survives the newline fix: newline-preserving capture must not
+    // turn every marker Edit that happens to end in a newline into a denial.
+    const { exitCode } = await runHookMarker(
+      {
+        cwd: root,
+        tool_input: {
+          file_path: plan,
+          old_string: "### U1. Parse the thing `[]`\n",
+          new_string: "### U1. Parse the thing `[x]`\n",
+        },
+      },
+      guard,
+      plan,
+    )
+    expect(exitCode).toBe(0)
+  })
+
   test("with no marker path armed, a marker Edit on the plan is denied (backward compatible)", async () => {
     const { plan, guard, root } = scaffold()
     const { exitCode } = await runHook(

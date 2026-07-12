@@ -214,22 +214,18 @@ plan.
   intent the eventual commit message should reflect.
 - **`date`** — creation date in ISO 8601 (`YYYY-MM-DD`), ASCII digits only.
 
-No plan carries a **`status` field**. What follows from that splits by format,
-and the split is intentional design, not drift.
+Plans carry **no `status` field**, in either format: there is no
+`active → completed` document lifecycle. Whether a plan shipped is derived
+from git, not stored in the doc.
 
-**Markdown plans** are decision artifacts, not tracked work items. The rule
-holds in full: no `status` field, no `active → completed` lifecycle. `sl-work`
-does not mutate the plan at ship time; whether a plan shipped is derived from
-git, not stored in the doc.
-
-**HTML plans** are stateful tracked artifacts. Implementation-unit tasks carry
-advisory status markers — `[]` idle, `[wip]` in progress, `[x]` complete, `[f]`
-failed — which `sl-work` updates during interactive single-writer execution
-(never unattended, never under parallel writers). Git remains
+Plans in **both formats** are stateful tracked artifacts at the unit level.
+Implementation-unit tasks carry advisory status markers — `[]` idle, `[wip]`
+in progress, `[x]` complete, `[f]` failed — which `sl-work` updates during
+single-writer execution (never under parallel writers). See the ID and
+content rules below for how each format renders the marker. Git remains
 authoritative; the markers are a projection of it. When marker and git
-disagree, git wins and the marker is corrected. HTML plans still add no
-`status` metadata field and no lifecycle: a marker is per-task state, not a
-document state.
+disagree, git wins and the marker is corrected. A marker is per-task state,
+not a document state — which is why it does not imply a `status` field.
 
 ### Optional but well-known
 
