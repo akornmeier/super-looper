@@ -72,7 +72,7 @@ Use these signals to decide:
 - Repo-relative file paths to create/modify/test
 - Prose framing focused on technical decisions, sequencing, and implementer-facing detail
 
-These signals read the same in HTML: an HTML plan carries the identical field names in its visible metadata `<dl>` (`<dt>type</dt><dd>feat</dd>`) and the identical section headings in `<h2>`, with R-IDs and U-IDs as both `id` attributes and visible text. Classify on the same shape, ignoring the markup wrapper.
+These signals read the same in HTML: an HTML plan carries the identical field names in its visible metadata and the identical section headings in `<h2>`, with R-IDs and U-IDs as both `id` attributes and visible text. Classify on the same shape, ignoring the markup wrapper — the metadata is visible text whatever element holds it, a `<dl>` of `<dt>`/`<dd>` pairs in current plans (`<dt>type</dt><dd>feat</dd>`) and chip spans in older ones (`<span class="chip">type: feat</span>`). Classifying on the element rather than the text misses the older shape.
 
 **Tie-breaker rule.** When the content signals are mixed or sparse, fall back to path: `docs/brainstorms/` → `requirements`, `docs/plans/` → `plan`. When neither path location applies, treat the dominant content shape as authoritative; if shape is genuinely ambiguous, default to `requirements` (the more conservative classification — it activates fewer plan-specific feasibility checks).
 
