@@ -244,14 +244,11 @@ def apply_cap(targets, max_images):
     """Trim `targets` to the spend cap. Returns (allowed, skipped_over_cap)."""
     if len(targets) <= max_images:
         return targets, []
-    over = [
-        {
-            "slot": name,
-            "reason": "over the run cap of " + str(max_images) + " image(s); nothing was charged for it"
-            " (raise --max-images, or fill it in a later run)",
-        }
-        for name in targets[max_images:]
-    ]
+    reason = (
+        "over the run cap of " + str(max_images) + " image(s); nothing was charged for it"
+        + " (raise --max-images, or fill it in a later run)"
+    )
+    over = [{"slot": name, "reason": reason} for name in targets[max_images:]]
     return targets[:max_images], over
 
 
