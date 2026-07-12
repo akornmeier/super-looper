@@ -80,7 +80,11 @@ normalize_markers() {
 # normalized stream, newlines included) still kills the run at done_reached.
 read_payload_field() {
   local _var="$1" _raw
-  _raw="$(printf '%s' "$payload" | jq -r "$2" 2>/dev/null; printf 'X')" || return 1
+  # The trailing sentinel byte protects the field's own EOF newlines from command
+  # substitution's strip -- but it also becomes the subshell's last command, so
+  # jq's status must be carried out explicitly or `|| return 1` never fires and a
+  # jq failure collapses into an empty string.
+  _raw="$(printf '%s' "$payload" | jq -r "$2" 2>/dev/null; _rc=${PIPESTATUS[1]}; printf 'X'; exit "$_rc")" || return 1
   _raw="${_raw%X}"
   printf -v "$_var" '%s' "${_raw%$'\n'}"
 }
