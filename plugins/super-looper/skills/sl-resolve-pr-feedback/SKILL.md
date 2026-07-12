@@ -47,7 +47,7 @@ After determining mode, read the matching reference and follow it. Each referenc
 - Fixes for the substantive findings committed and pushed -- a round with none is a legitimate reply-only finish, not a missing commit
 - Each thread replied to with quoted context
 - Threads resolved via GraphQL (except `needs-human`)
-- The remaining feedback is non-substantive -- **not** necessarily an empty thread list
+- Every remaining thread is either non-substantive or an intentionally-open `needs-human` escalation -- **not** necessarily an empty thread list
 
 **Done means the findings stopped being substantive, not that the bot stopped talking.** A review bot reviews the diff of each push, so every fix hands the next round new lines to comment on -- including the ones the fix just added -- and a round that only rewords prose the previous round introduced has found more diff, not another defect. Meanwhile each additional push forces another wait for the bot to re-review the new HEAD, so a round spent chasing prose costs a full re-review cycle and buys nothing.
 
