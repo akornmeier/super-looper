@@ -70,6 +70,15 @@ a visible `<dl>`. Field names are fixed — never rename one.
   replaces `none` with the entry.
 - `date` is the creation date. planf3's `created` name is not used — the field
   contract forbids renaming.
+- **`back refs` and `forward refs` are two ends of one link.** A plan can only
+  declare what it descends *from*; the reciprocal `forward refs` entry has to be
+  written into the *upstream* plan by the downstream one, which is why it stays
+  `none` on its own. `scripts/wire-plan-references.py` closes the loop: it reads
+  a plan's `back refs` and appends that plan's path to each target's
+  `forward refs`, idempotently, touching no other field in any file. It runs
+  interactive-only — a target plan may be under an active loop run, where any
+  mutation reads as goal drift. Markdown artifacts are skipped rather than given
+  a `forward refs` field their own contract does not define.
 
 ## Status markers
 
