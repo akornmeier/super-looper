@@ -720,9 +720,13 @@ hash_plan() {
   # so an edit that only added or removed newlines at EOF would hash the same
   # and slip past the guard -- a carve-out wider than the marker values this
   # normalization is meant to free.
+  # `set -o pipefail` (top of file) already fails the pipeline on ANY stage --
+  # sed, the hasher, or awk -- so let its status stand rather than forcing the
+  # subshell to exit with sed's alone, which would wave through a hasher that
+  # failed but still printed something.
   local hasher out
   if command -v sha256sum >/dev/null 2>&1; then hasher=sha256sum; else hasher="shasum -a 256"; fi
-  out="$(normalize_markers "$f" | $hasher 2>/dev/null | awk '{print $1}'; exit "${PIPESTATUS[0]}")" \
+  out="$(normalize_markers "$f" | $hasher 2>/dev/null | awk '{print $1}')" \
     || { printf 'unreadable:%s' "$f"; return 0; }
   if [ -z "$out" ]; then printf 'unreadable:%s' "$f"; return 0; fi
   printf '%s' "$out"
