@@ -742,15 +742,19 @@ Resolve gating before doing anything:
 
 **Config.** Read `plan_images` from the config already loaded at Phase 0.0. An active (non-commented) key valued `on` or `off` decides; missing, commented, or invalid falls through to the default `on`. If `off`, skip this step silently.
 
+**Spend cap.** Also read `plan_images_max` — a non-negative integer capping how many paid API calls one run may dispatch. Missing, commented, or invalid falls through to the script's own default (8). Pass it through as `--max-images N` when the config sets it; otherwise omit the flag and let the script default apply. Never raise the cap on the user's behalf: a plan whose slot count exceeds it is the case the cap exists for, and the script reports each over-cap slot as an uncharged skip.
+
 **Key detection belongs to the script.** Never shell-check `OPENAI_API_KEY` — the script already resolves the key and reports a per-slot skip when it is absent or invalid. A separate `[ -n "$OPENAI_API_KEY" ]` test is an unpinned Bash call that prompts for permission and creates a second source of truth for key handling.
 
-When enabled, print a one-line notice naming the cost — `Generating N images with gpt-image-2 — this calls OpenAI's paid API; with no OPENAI_API_KEY exported it charges nothing and reports skips instead` — then invoke the bundled script **once** for the whole plan, as a single pinned command (no inline guard — the wrapper defeats the narrow allow-rule):
+When enabled, print a one-line notice naming the cost — `Generating <slot-count> images with gpt-image-2 — this calls OpenAI's paid API, capped at <cap> image(s) this run; with no OPENAI_API_KEY exported it charges nothing and reports skips instead` — where `<cap>` is the `plan_images_max` value when the config sets it and the script's default of 8 otherwise. Then invoke the bundled script **once** for the whole plan, as a single pinned command (no inline guard — the wrapper defeats the narrow allow-rule):
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path>
+python3 "${CLAUDE_SKILL_DIR}/scripts/generate-plan-images.py" <plan-path> [--max-images <plan_images_max>]
 ```
 
-Parse the JSON summary on stdout (`slots_found`, `filled`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason the script gives. When the skip reason is the absent key, that one line is: the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step). Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
+The bracketed flag is optional: append it only when the config sets `plan_images_max`, and drop it entirely otherwise so the script's default of 8 applies.
+
+Parse the JSON summary on stdout (`slots_found`, `filled`, `edited`, `skipped`, `warnings`) and report each filled and skipped slot as one compact line, naming the skip reason the script gives. An over-cap skip reads as exactly that — the slot was not charged for, and raising `plan_images_max` or re-running fills it. When the skip reason is the absent key, that one line is: the slots stay as placeholder comments and the plan is complete without them; filling them later means exporting `OPENAI_API_KEY` and re-running this skill on the plan (a resume with unfilled slots re-enters this step). Treat **any** non-JSON outcome the same way as a skip: a non-zero exit, unparseable stdout, an unresolved `${CLAUDE_SKILL_DIR}` (the command fails loudly), or a missing `python3` all mean the slots stay as placeholder comments — say so in one line and continue. **Failures never block.** Absent key, invalid key, rate limit, network error, and unknown model all degrade to per-slot skips with the file left valid — a plan with placeholder slots is a complete plan. Do not retry, do not read or write image bytes, and continue to 5.3 either way.
 
 #### 5.3 Confidence Check and Deepening
 

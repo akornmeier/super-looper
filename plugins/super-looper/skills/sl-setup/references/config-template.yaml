@@ -33,6 +33,7 @@
 # brainstorm_output: html        # md | html (default: md)
 # ideate_output: md              # md | html (default: html -- ideation docs are human-facing, so HTML is the default; set md to opt out)
 # plan_images: on                # on | off (default: on -- fills HTML plan image slots via OpenAI's paid images API; slots stay placeholders when OPENAI_API_KEY is absent; off skips generation entirely)
+# plan_images_max: 8             # non-negative integer (default: 8 -- hard cap on paid image calls per run; slots past the cap are reported as uncharged skips, not silently dropped. 0 charges nothing and just reports what a run would have cost)
 
 # --- sl-promote ---
 # Written automatically when you decline the Spiral setup offer in /sl-promote.

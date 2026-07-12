@@ -114,6 +114,75 @@ describe("generate-plan-images.py --edit", () => {
   })
 })
 
+describe("generate-plan-images.py --max-images spend cap", () => {
+  const FIVE_SLOTS = Array.from({ length: 5 }, (_, i) => {
+    const n = i + 1
+    return `<figure>\n  <!-- image-slot:s${n} prompt="Diagram ${n}" -->\n  <figcaption>Slot ${n}.</figcaption>\n  <!-- /image-slot:s${n} -->\n</figure>`
+  }).join("\n")
+
+  beforeEach(async () => {
+    await fs.writeFile(plan, `${FIVE_SLOTS}\n`)
+  })
+
+  test("slots past the cap are reported as uncharged skips, not silently dropped", async () => {
+    const { exitCode, stdout } = await run([plan, "--max-images", "2"])
+
+    expect(exitCode).toBe(0)
+    const report = JSON.parse(stdout)
+    expect(report.slots_found).toBe(5)
+
+    const overCap = report.skipped.filter((s: { reason: string }) => s.reason.includes("over the run cap"))
+    expect(overCap.map((s: { slot: string }) => s.slot)).toEqual(["s3", "s4", "s5"])
+    // Silence here would read as "these slots don't exist" rather than "these
+    // slots cost money you capped" — the whole point of the cap is that the
+    // user learns what it held back.
+    expect(overCap[0].reason).toContain("nothing was charged")
+    expect(report.skipped).toHaveLength(5) // 3 over cap + 2 no-key
+  })
+
+  test("a cap of 0 dispatches nothing and names every slot a run would pay for", async () => {
+    const before = await fs.readFile(plan, "utf8")
+    const { exitCode, stdout } = await run([plan, "--max-images", "0"])
+
+    expect(exitCode).toBe(0)
+    const report = JSON.parse(stdout)
+    expect(report.filled).toEqual([])
+    expect(report.skipped.map((s: { slot: string }) => s.slot)).toEqual(["s1", "s2", "s3", "s4", "s5"])
+    expect(report.skipped.every((s: { reason: string }) => s.reason.includes("over the run cap"))).toBe(true)
+    expect(await fs.readFile(plan, "utf8")).toBe(before)
+  })
+
+  test("a keyless capped run still reports the cap on stderr", async () => {
+    const { stderr } = await run([plan, "--max-images", "2"])
+
+    // The keyless early return used to swallow the cap notice, so a user with
+    // more slots than the cap heard only "leaving 2 slot(s) as placeholders"
+    // and never learned the other 3 were held back by the cap.
+    expect(stderr).toContain("Run cap of 2 image(s) reached - 3 slot(s) left untouched")
+    expect(stderr).toContain("leaving 2 slot(s) as placeholders")
+  })
+
+  test("a cap of 0 reports the cap even though no key was needed", async () => {
+    const { stderr } = await run([plan, "--max-images", "0"])
+
+    // targets is empty here, so the keyless branch never fires — the cap notice
+    // is the only thing standing between the user and a silent no-op.
+    expect(stderr).toContain("Run cap of 0 image(s) reached - 5 slot(s) left untouched")
+  })
+
+  test("a cap at or above the slot count adds no phantom skips", async () => {
+    const { stdout } = await run([plan, "--max-images", "5"])
+    const report = JSON.parse(stdout)
+    expect(report.skipped.some((s: { reason: string }) => s.reason.includes("over the run cap"))).toBe(false)
+  })
+
+  test("a negative cap is a usage error", async () => {
+    const { exitCode, stderr } = await run([plan, "--max-images", "-1"])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain("--max-images must be 0 or greater")
+  })
+})
+
 describe("generate-plan-images.py flag validation", () => {
   test("--edit without --instruction is a usage error", async () => {
     const { exitCode, stderr } = await run([plan, "--edit", "design"])
