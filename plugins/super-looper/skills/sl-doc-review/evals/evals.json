@@ -1,0 +1,123 @@
+{
+  "skill_name": "sl-doc-review",
+  "purpose": "Validate one narrow load-bearing assumption: sl-doc-review mutates an HTML document safely. When the document under review is `.html`, the skill must reach for `references/html-mutation.md` rather than the markdown mechanics in `references/open-questions-defer.md`; must never rewrite the file wholesale or anchor an edit across a data-URI line; must not touch fields another agent owns (status markers, append-only metadata, Amendments); must preserve id stability and escape interpolated finding text; and must express a Defer entry in the plan template's own markup. These are the properties the HTML plan's single-file invariant, image slots, and marker contract depend on.",
+  "non_purpose": "Not testing persona selection, confidence anchoring, dedup, cross-persona promotion, routing tiers, the walk-through menu, or headless-envelope formatting. Those are format-agnostic and unchanged by HTML support. The narrow assumption is HTML mutation discipline only.",
+  "variance_protocol": {
+    "runs_per_eval": 3,
+    "stability_metric": "stddev of must-tier term recall across runs",
+    "pass_threshold": "must-tier recall >= 80% mean AND stddev < 20% AND runs_passed >= 2 of 3"
+  },
+  "grading_pipeline": {
+    "stage_1": "Programmatic substring match per criticality tier (must / should / may). Pass = all 'must' terms appear (case-insensitive substring) in the response text.",
+    "stage_2": "LLM grader (see grader.md) — judges whether the response makes the correct mutation decision with the contract rationale. For the negative cases, judges whether a prohibited behavior (whole-file rewrite, data-URI-spanning anchor, marker/metadata/Amendments write, id renumber, raw markdown into HTML) appears as an affirmative recommendation."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "html-doc-routes-to-html-mutation",
+      "tests_risk": "markdown_mechanics_applied_to_html",
+      "prompt": "You are `/sl-doc-review`. The user ran you on `docs/plans/2026-07-09-001-feat-planf3-html-plan-adoption-plan.html` — an HTML plan with embedded base64 webp images. Synthesis is complete. One finding is `safe_auto` at confidence anchor 100 with a concrete `suggested_fix`, and the user chose Defer on a second finding. Describe exactly how you apply the fix and how you append the deferred entry.",
+      "expected_terms": [
+        { "term": "html-mutation.md", "tier": "must" },
+        { "term": "data URI", "tier": "must" },
+        { "term": "Edit", "tier": "must" },
+        { "term": "data-URI", "tier": "should" },
+        { "term": "details", "tier": "should" },
+        { "term": "Open Questions", "tier": "should" },
+        { "term": "escape", "tier": "should" },
+        { "term": "single line", "tier": "should" },
+        { "term": "open-questions-defer.md", "tier": "may" },
+        { "term": "summary", "tier": "may" }
+      ],
+      "expected_context": [
+        "the agent loads `references/html-mutation.md` because the document is `.html`, and does NOT use the markdown heading/bullet mechanics from `references/open-questions-defer.md`",
+        "the fix is applied with a targeted Edit whose anchor does not span a data-URI line, never a whole-file rewrite",
+        "the Defer entry is appended as a default-closed `<details>` with a `<summary>` inside the Open Questions section, not as a markdown `##` heading or `- **bold**` bullet"
+      ],
+      "ground_truth": {
+        "skill": "sl-doc-review",
+        "contract_source": "plugins/super-looper/skills/sl-doc-review/references/html-mutation.md",
+        "contract_lines": "SKILL.md Phase 1 'Document format': 'When the document is `.html`, read `references/html-mutation.md` before applying any fix or Defer entry... the markdown mechanics in `references/open-questions-defer.md` do not apply to it.' html-mutation.md 'Never edit across a data-URI line' and 'Defer: appending to Open Questions' Steps 1-4. open-questions-defer.md header gate: 'Markdown documents only.'",
+        "expected_behavior": "Routes to the HTML mutation reference on the `.html` extension; applies the fix with a bounded Edit; appends the deferred finding as a `<details>`/`<summary>` entry in the plan template's own markup."
+      }
+    },
+    {
+      "id": 2,
+      "name": "refuses-to-rewrite-file-wholesale",
+      "tests_risk": "whole_file_rewrite_destroys_images",
+      "prompt": "You are `/sl-doc-review` reviewing an HTML plan. Several `safe_auto` fixes at anchor 100 touch five different sections. The file is 4 MB because three image slots are filled with base64 webp data URIs. To make the edits efficiently, is it acceptable to read the whole file, apply all five fixes in memory, and write the corrected document back out in one pass? Explain your approach.",
+      "expected_terms": [
+        { "term": "data URI", "tier": "must" },
+        { "term": "Edit", "tier": "must" },
+        { "term": "wholesale", "tier": "should" },
+        { "term": "data-URI", "tier": "should" },
+        { "term": "Grep", "tier": "should" },
+        { "term": "offset", "tier": "should" },
+        { "term": "corrupt", "tier": "may" },
+        { "term": "context", "tier": "may" }
+      ],
+      "expected_context": [
+        "the agent refuses the whole-file read-and-rewrite outright",
+        "it explains that a filled image slot's `<img>` is a single line of hundreds of KB, so carrying it through a rewrite floods context and risks truncating or corrupting the image",
+        "it proposes targeted Edit calls anchored on surrounding prose/markup, locating targets with Grep plus scoped offset reads that skip the data-URI lines"
+      ],
+      "ground_truth": {
+        "skill": "sl-doc-review",
+        "contract_source": "plugins/super-looper/skills/sl-doc-review/references/html-mutation.md",
+        "contract_lines": "html-mutation.md 'Never edit across a data-URI line': 'Never rewrite the file wholesale. No read-all-then-write-all, no reformatting pass, no prettifier... Never let an edit's anchor text begin, end, or span across a data-URI line.' SKILL.md Phase 1: 'Reading a large HTML document: do not read it whole.'",
+        "expected_behavior": "Refuses the wholesale rewrite and names the data-URI single-line hazard as the reason; substitutes targeted, bounded Edit calls."
+      }
+    },
+    {
+      "id": 3,
+      "name": "does-not-touch-other-agents-fields",
+      "tests_risk": "review_writes_fields_it_does_not_own",
+      "prompt": "You are `/sl-doc-review` reviewing an HTML plan. While applying fixes you notice: (a) unit U3's status marker still reads `[]` even though the work looks done, (b) the Amendments section has no entry for the substantive fix you are about to apply, and (c) the metadata `modified` list is stale. Which of these do you update as part of the review, and why?",
+      "expected_terms": [
+        { "term": "status marker", "tier": "must" },
+        { "term": "Amendments", "tier": "must" },
+        { "term": "sl-plan", "tier": "should" },
+        { "term": "sl-work", "tier": "should" },
+        { "term": "append-only", "tier": "should" },
+        { "term": "metadata", "tier": "may" },
+        { "term": "shipped", "tier": "may" }
+      ],
+      "expected_context": [
+        "the agent updates NONE of the three — all are fields other agents own",
+        "status markers belong to the executing agent (sl-work); a marker is a claim about what shipped and review has no standing to make it",
+        "Amendments and the append-only metadata lists (`modified`, `commits`, `agent`, `session`, back/forward refs) belong to sl-plan's revision flows and sl-work's ship-time sync, not to review"
+      ],
+      "ground_truth": {
+        "skill": "sl-doc-review",
+        "contract_source": "plugins/super-looper/skills/sl-doc-review/references/html-mutation.md",
+        "contract_lines": "html-mutation.md 'What review may never touch': status markers belong to the executing agent; the metadata header's append-only lists belong to sl-plan's revision flows and sl-work's ship-time sync; 'The Amendments section belongs to sl-plan's revision flows alone. Review does not append an entry there, even when a fix is substantive.'",
+        "expected_behavior": "Declines all three writes and attributes each field to its owning flow."
+      }
+    },
+    {
+      "id": 4,
+      "name": "preserves-ids-and-escapes-text",
+      "tests_risk": "id_renumber_or_unescaped_interpolation",
+      "prompt": "You are `/sl-doc-review` applying fixes to an HTML plan. Two fixes are queued: (a) a finding notes the requirements list jumps from R2 to R4 with no R3, and suggests renumbering R4 to R3 so the list is contiguous; (b) a deferred finding whose title is `Guard <script> & iframe embeds` must be appended to Open Questions. How do you handle each?",
+      "expected_terms": [
+        { "term": "renumber", "tier": "must" },
+        { "term": "escape", "tier": "must" },
+        { "term": "&lt;", "tier": "should" },
+        { "term": "anchor", "tier": "should" },
+        { "term": "gap", "tier": "should" },
+        { "term": "id", "tier": "should" },
+        { "term": "&amp;", "tier": "may" }
+      ],
+      "expected_context": [
+        "the agent refuses to renumber R4 to R3 — ids are anchor targets referenced from commits, PRs, and conversations, and gaps are intentional and never backfilled",
+        "the agent escapes `<` and `&` in the deferred finding's title before writing it into the document, because an unescaped `<` swallows the rest of the element when rendered"
+      ],
+      "ground_truth": {
+        "skill": "sl-doc-review",
+        "contract_source": "plugins/super-looper/skills/sl-doc-review/references/html-mutation.md",
+        "contract_lines": "html-mutation.md 'Preserve ids and their visible text': 'Never renumber an existing id, even when the review's finding is that the numbering has a gap. Gaps are intentional and are never backfilled.' 'Escape interpolated text': 'Escape them as `&amp;`, `&lt;`, `&gt;` before writing them into the document. An unescaped `<` silently swallows the rest of the element.'",
+        "expected_behavior": "Rejects the renumber and names the anchor-stability reason; escapes the interpolated finding text before writing it."
+      }
+    }
+  ]
+}

@@ -95,6 +95,8 @@ When findings land in `gated_auto` / `manual` tiers, the user picks how to handl
 
 The walk-through itself supports an "auto-resolve the rest" escape mid-flow if the user has reviewed enough to trust the rest.
 
+Both markdown and HTML documents can be reviewed **and edited**. The review half is format-agnostic — the same personas, the same confidence anchors, the same routing. The *mutation* half is not, and that asymmetry is the whole design. In markdown, a bad edit produces a visibly wrong line. In an HTML plan, a filled image slot is a single line carrying hundreds of kilobytes of base64, so a whole-file rewrite or an edit anchored across that line destroys the image and floods context — silently, and only visible once the page is rendered. So HTML mutation is bounded by explicit rules: targeted edits only (never a wholesale rewrite), never an anchor spanning a data-URI line, no renumbering of `id`-anchored requirements or units, escaped interpolation, and hands off the fields other agents own — status markers belong to `sl-work`, and Amendments and the append-only metadata lists belong to `sl-plan`. A deferred finding lands as a `<details>` entry in the plan template's own markup, not as a markdown bullet stranded in a rendered page.
+
 ### 5. Bulk-action preview before mass changes
 
 When the user picks "Auto-resolve with best judgment" or "Append to Open Questions" — or escapes mid walk-through to "Auto-resolve the rest" — the skill shows a preview of every change before applying. The preview includes the section, finding title, action (apply / skip / defer / acknowledge), and brief rationale. The user confirms or cancels. This is the safety valve for bulk operations: the user sees what's about to land before it does.

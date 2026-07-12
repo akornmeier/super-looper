@@ -247,6 +247,7 @@ Run this pass on the merged set across all personas. Record the count dropped as
 Apply only `safe_auto` findings **at confidence anchor `100`** to the document in a single pass. This matches the 3.7 routing table: anchor `100` + `safe_auto` silent-applies; anchor `75` + `safe_auto` was demoted to `gated_auto` in 3.7 and enters the walk-through instead; anchor `50` + any `autofix_class` routes to FYI and must never auto-apply.
 
 - Edit the document inline using the Edit tool
+- **If the document is `.html`, read `references/html-mutation.md` first.** Never rewrite an HTML document wholesale and never anchor an edit across a data-URI line — a filled image slot's `<img>` is a single line that can run to hundreds of kilobytes, and an anchor that crosses it corrupts the image. That reference also names the fields review must not touch (status markers, append-only metadata, Amendments) and the id-stability and escaping rules a fix must honor.
 - Track what was changed for the "Applied fixes" section in the rendered output (`safe_auto` is the internal enum; the rendered section header reads "Applied fixes")
 - Do not ask for approval — these have one clear correct fix AND evidence directly confirms (anchor `100`)
 - Do NOT silent-apply any `safe_auto` finding at anchor `75` or `50`. If a finding reaches this step with `autofix_class: safe_auto` and anchor below `100`, the 3.7 routing rule was not applied correctly; re-run 3.7 for that finding before continuing.

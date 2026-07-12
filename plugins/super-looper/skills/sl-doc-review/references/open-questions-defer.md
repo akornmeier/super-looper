@@ -4,6 +4,8 @@ This reference defines the Defer action's in-doc append mechanic. When the user 
 
 Interactive mode only. Invoked by `references/walkthrough.md` (per-finding Defer option) and `references/bulk-preview.md` (routing option C Proceed).
 
+**Markdown documents only.** The heading, subsection, and bullet mechanics below are markdown syntax; writing them into a rendered HTML page produces literal `##` and `- **` text on screen. When the document under review is `.html`, use `references/html-mutation.md` instead — it carries the same append intent (same findings, same field sources, same compound-key dedup) expressed in the plan template's own markup.
+
 ---
 
 ## Append flow
