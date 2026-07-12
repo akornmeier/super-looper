@@ -70,6 +70,7 @@ TARGET=""
 SEED=""
 SEED_FILE=""
 PLAN_FILE=""
+PHASE=""
 HANDOFF_FILE=""
 PLUGIN_DIR="$REPO_ROOT"
 MODEL="opus"
@@ -94,6 +95,10 @@ Required (pick ONE task source):
                             target so a retry's reset does not delete it.
 
 Options:
+  --phase <units>           Execute ONLY these plan units this run, e.g. "U1,U2"
+                            (valid only with --plan-file). One run, one PR, one
+                            phase. Normally set by scripts/loop-phases.sh rather
+                            than by hand.
   --handoff-file <path>     Handoff doc carried as orienting context for the run
                             (valid only with --plan-file).
   --plugin-dir <path>       Pinned Super Looper checkout (default: this repo root).
@@ -128,6 +133,7 @@ while [ $# -gt 0 ]; do
     --seed) require_val --seed "$#"; SEED="$2"; shift 2 ;;
     --seed-file) require_val --seed-file "$#"; SEED_FILE="$2"; shift 2 ;;
     --plan-file) require_val --plan-file "$#"; PLAN_FILE="$2"; shift 2 ;;
+    --phase) require_val --phase "$#"; PHASE="$2"; shift 2 ;;
     --handoff-file) require_val --handoff-file "$#"; HANDOFF_FILE="$2"; shift 2 ;;
     --plugin-dir) require_val --plugin-dir "$#"; PLUGIN_DIR="$2"; shift 2 ;;
     --model) require_val --model "$#"; MODEL="$2"; shift 2 ;;
@@ -183,6 +189,9 @@ if [ -n "$PLAN_FILE" ] && [ -n "$SEED_FILE" ]; then
 fi
 
 # --handoff-file rides along with a plan; it is meaningless without one.
+if [ -n "$PHASE" ] && [ -z "$PLAN_FILE" ]; then
+  fail "$EX_USAGE" "--phase is only valid with --plan-file; a phase names units in a plan."
+fi
 if [ -n "$HANDOFF_FILE" ] && [ -z "$PLAN_FILE" ]; then
   fail "$EX_USAGE" "--handoff-file is only valid with --plan-file."
 fi
@@ -232,6 +241,14 @@ if [ -n "$PLAN_FILE" ]; then
   # (the agent's CWD); existence is validated after canonicalization below.
   PROMPT="$LOOP_PLAN_PROMPT_PREFIX
 plan:$PLAN_FILE"
+  # Phase scoping: the plan is the same, but only these units ship this run. The
+  # rest of the plan stays context, not work -- an agent that "helpfully" finishes
+  # a later unit lands it in the wrong PR and breaks the stack's review boundaries.
+  if [ -n "$PHASE" ]; then
+    PROMPT="$PROMPT
+
+Execute ONLY these implementation units from the plan this run: $PHASE. The plan's other units are context for understanding this phase; they are NOT this run's work and must not be implemented, committed, or included in the pull request. Another run ships them. Open one pull request covering exactly the named units, then finish."
+  fi
   if [ -n "$HANDOFF_FILE" ]; then
     PROMPT="$PROMPT
 
@@ -540,6 +557,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   if [ -n "$PLAN_FILE" ]; then
     echo "[dry-run] mode: plan-input (skips planning)"
     echo "[dry-run] plan-file: $PLAN_FILE"
+    if [ -n "$PHASE" ]; then echo "[dry-run] phase: $PHASE"; fi
     if [ -n "$HANDOFF_FILE" ]; then echo "[dry-run] handoff-file: $HANDOFF_FILE"; fi
   else
     echo "[dry-run] mode: seed"
