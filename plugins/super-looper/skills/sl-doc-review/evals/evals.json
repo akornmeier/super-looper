@@ -19,8 +19,9 @@
       "prompt": "You are `/sl-doc-review`. The user ran you on `docs/plans/2026-07-09-001-feat-planf3-html-plan-adoption-plan.html` — an HTML plan with embedded base64 webp images. Synthesis is complete. One finding is `safe_auto` at confidence anchor 100 with a concrete `suggested_fix`, and the user chose Defer on a second finding. Describe exactly how you apply the fix and how you append the deferred entry.",
       "expected_terms": [
         { "term": "html-mutation.md", "tier": "must" },
-        { "term": "data-URI", "tier": "must" },
+        { "term": "data URI", "tier": "must" },
         { "term": "Edit", "tier": "must" },
+        { "term": "data-URI", "tier": "should" },
         { "term": "details", "tier": "should" },
         { "term": "Open Questions", "tier": "should" },
         { "term": "escape", "tier": "should" },
