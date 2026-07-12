@@ -107,6 +107,26 @@ def repo_relative(path, repo_root):
         return str(path)
 
 
+def confine(ref, repo_root):
+    """Resolve a repo-relative back ref inside the repo, or None when it escapes.
+
+    `back refs` entries are repo-relative by contract. An absolute path, or a
+    relative one that climbs out (`../../outside.html`), would point this writer
+    at a file outside the repo — so both are refused rather than resolved.
+    Resolution happens before the check, so a symlink that lands outside the
+    repo is refused too.
+    """
+    if Path(ref).is_absolute():
+        return None
+    root = Path(repo_root).resolve()
+    target = (root / ref).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None
+    return target
+
+
 def find_repo_root(start):
     try:
         out = subprocess.run(
@@ -197,6 +217,16 @@ def self_test():
     assert read_field(wired, "back refs") == read_field(TARGET, "back refs")
     assert read_field(wired, "title") == read_field(TARGET, "title")
 
+    # Back refs are repo-relative by contract. Anything that resolves outside
+    # the repo root is refused, so this writer can never touch a file the plan
+    # had no business naming.
+    root = Path(tempfile.gettempdir()).resolve() / "wire-plan-references-selftest-repo"
+    assert confine("docs/plans/a.html", root) == root / "docs" / "plans" / "a.html"
+    assert confine("docs/plans/../plans/a.html", root) == root / "docs" / "plans" / "a.html"
+    assert confine("/etc/passwd", root) is None
+    assert confine("../../outside.html", root) is None
+    assert confine("docs/../../outside.html", root) is None
+
     # A missing field is a no-op, never an invented one.
     bare = "<dl><dt>title</dt> <dd>Bare</dd></dl>"
     same, changed = append_entry(bare, "forward refs", "docs/plans/b.html")
@@ -246,7 +276,10 @@ def main():
         warnings.append("plan has no 'back refs' field; nothing to wire")
 
     for ref in back_refs:
-        target = (repo_root / ref) if not Path(ref).is_absolute() else Path(ref)
+        target = confine(ref, repo_root)
+        if target is None:
+            skipped.append({"target": ref, "reason": "not a repo-relative path inside the repo root"})
+            continue
 
         if not target.is_file():
             skipped.append({"target": ref, "reason": "target file does not exist"})

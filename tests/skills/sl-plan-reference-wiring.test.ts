@@ -140,6 +140,39 @@ describe("wire-plan-references.py", () => {
     expect(await fs.readFile(planPath("a.html"), "utf8")).toBe(before)
   })
 
+  test("an absolute back ref is refused, not written to", async () => {
+    const outside = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "sl-plan-outside-")), "outside.html")
+    await fs.writeFile(outside, plan("Outside", "none", "none"))
+    await fs.writeFile(planPath("b.html"), plan("Downstream", outside, "none"))
+
+    const { exitCode, stdout } = await run([planPath("b.html")], repo)
+
+    expect(exitCode).toBe(0)
+    expect(JSON.parse(stdout).wired).toEqual([])
+    expect(JSON.parse(stdout).skipped[0].reason).toContain("repo-relative")
+    // The file outside the repo is untouched — this writer only ever writes inside it.
+    expect(field(await fs.readFile(outside, "utf8"), "forward refs")).toBe("none")
+    await fs.rm(path.dirname(outside), { recursive: true, force: true })
+  })
+
+  test("a back ref that escapes the repo root with ../ is refused, not written to", async () => {
+    const outside = path.join(repo, "..", `escape-${path.basename(repo)}.html`)
+    await fs.writeFile(outside, plan("Outside", "none", "none"))
+    // Repo-relative in form, but it climbs out of the repo root once resolved.
+    await fs.writeFile(
+      planPath("b.html"),
+      plan("Downstream", `docs/plans/../../../${path.basename(outside)}`, "none"),
+    )
+
+    const { exitCode, stdout } = await run([planPath("b.html")], repo)
+
+    expect(exitCode).toBe(0)
+    expect(JSON.parse(stdout).wired).toEqual([])
+    expect(JSON.parse(stdout).skipped[0].reason).toContain("repo-relative")
+    expect(field(await fs.readFile(outside, "utf8"), "forward refs")).toBe("none")
+    await fs.rm(outside, { force: true })
+  })
+
   test("a plan with no back refs wires nothing", async () => {
     await fs.writeFile(planPath("b.html"), plan("Standalone", "none", "none"))
 
