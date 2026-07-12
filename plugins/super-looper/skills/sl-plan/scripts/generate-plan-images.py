@@ -29,6 +29,10 @@ Options:
   --size WxH          Image size (default: 1536x1024).
   --quality TIER      auto | low | medium | high (default: high).
   --compression N     webp compression 0-100 (default: 80).
+  --max-images N      Hard cap on API calls this run (default: 8). Slots past
+                      the cap are reported as skips and cost nothing. `0`
+                      dispatches nothing, which makes it a dry run: the report
+                      names every slot the run *would* have paid for.
   --model ID          Override the pinned model id.
   --self-test         Run offline parser checks and exit. No network.
 
@@ -82,6 +86,15 @@ DEFAULT_SIZE = "1536x1024"
 DEFAULT_QUALITY = "high"
 DEFAULT_COMPRESSION = 80
 OUTPUT_FORMAT = "webp"
+
+# Spend cap, counted in API calls rather than estimated dollars. A USD cap would
+# need a local price table keyed by model x size x quality, and a stale table
+# does not fail loudly — it silently enforces the wrong cap while still looking
+# authoritative. An image count is exactly verifiable and maps onto the only
+# thing this script controls: how many paid calls it dispatches. The cap sits
+# above the template's own guidance (hero + one per major section), so it binds
+# on runaway plans, not on well-formed ones.
+DEFAULT_MAX_IMAGES = 8
 
 VALID_QUALITY = ["auto", "low", "medium", "high"]
 
@@ -225,6 +238,21 @@ def select_edit_target(slots, edit_name):
             "reason": "slot is empty; run without --edit to fill it before refining it",
         }], []
     return [edit_name], [], []
+
+
+def apply_cap(targets, max_images):
+    """Trim `targets` to the spend cap. Returns (allowed, skipped_over_cap)."""
+    if len(targets) <= max_images:
+        return targets, []
+    over = [
+        {
+            "slot": name,
+            "reason": "over the run cap of " + str(max_images) + " image(s); nothing was charged for it"
+            " (raise --max-images, or fill it in a later run)",
+        }
+        for name in targets[max_images:]
+    ]
+    return targets[:max_images], over
 
 
 def alt_text(slot):
@@ -521,6 +549,22 @@ def self_test():
     reparsed_edit, _ = parse_slots(edited)
     assert embedded_image(reparsed_edit[1])[0] == base64.b64decode("RURJVA==")
 
+    # The spend cap trims targets in order and accounts for every dropped slot.
+    allowed, over = apply_cap(["a", "b", "c"], 2)
+    assert allowed == ["a", "b"], allowed
+    assert [o["slot"] for o in over] == ["c"], over
+    assert "nothing was charged" in over[0]["reason"]
+
+    # A cap at or above the target count is a no-op — no phantom skips.
+    allowed, over = apply_cap(["a", "b"], 2)
+    assert allowed == ["a", "b"] and over == []
+    allowed, over = apply_cap(["a"], 8)
+    assert allowed == ["a"] and over == []
+
+    # Cap 0 dispatches nothing: a dry run that still names what it would cost.
+    allowed, over = apply_cap(["a", "b"], 0)
+    assert allowed == [] and [o["slot"] for o in over] == ["a", "b"], over
+
     # Multipart: every field is its own part, the image carries its subtype,
     # and the body is terminated by the closing boundary.
     body = multipart_body("BOUND", {"model": "gpt-image-2", "n": 1}, b"\x89PNGbytes", "webp")
@@ -553,6 +597,7 @@ def main():
     parser.add_argument("--size", default=DEFAULT_SIZE, help="Image size WxH (default: %(default)s)")
     parser.add_argument("--quality", default=DEFAULT_QUALITY, choices=VALID_QUALITY, help="Quality tier (default: %(default)s)")
     parser.add_argument("--compression", type=int, default=DEFAULT_COMPRESSION, help="webp compression 0-100 (default: %(default)s)")
+    parser.add_argument("--max-images", type=int, default=DEFAULT_MAX_IMAGES, help="Hard cap on paid API calls this run; 0 is a dry run (default: %(default)s)")
     parser.add_argument("--model", default=MODEL, help="Model id (default: %(default)s)")
     parser.add_argument("--self-test", action="store_true", help="Run offline parser checks and exit")
     args = parser.parse_args()
@@ -571,6 +616,8 @@ def main():
         parser.error("--instruction is only valid with --edit")
     if not 0 <= args.compression <= 100:
         parser.error("--compression must be between 0 and 100")
+    if args.max_images < 0:
+        parser.error("--max-images must be 0 or greater (0 dispatches nothing)")
     plan = args.plan.expanduser()
     if not plan.is_file():
         sys.stderr.write("generate-plan-images: plan file not found: " + str(plan) + "\n")
@@ -584,6 +631,10 @@ def main():
     else:
         targets, skipped, select_warnings = select_targets(slots, args.slot, args.regenerate)
     warnings.extend(select_warnings)
+    # The cap is enforced here, before the key check and before any request is
+    # built, so an over-cap slot is never one bug away from being dispatched.
+    targets, over_cap = apply_cap(targets, args.max_images)
+    skipped.extend(over_cap)
     filled = []
     edited = []
     verb = "editing" if args.edit else "generating"
@@ -605,6 +656,12 @@ def main():
             skipped.append({"slot": name, "reason": "OPENAI_API_KEY is not set; re-run with the key to " + action + " this slot"})
         sys.stderr.write("OPENAI_API_KEY is not set - leaving " + str(len(targets)) + " slot(s) as placeholders.\n")
         return report()
+
+    if over_cap:
+        sys.stderr.write(
+            "Run cap of " + str(args.max_images) + " image(s) reached - "
+            + str(len(over_cap)) + " slot(s) left unfilled and uncharged.\n"
+        )
 
     if targets:
         sys.stderr.write(
