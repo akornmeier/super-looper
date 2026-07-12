@@ -52,12 +52,26 @@ def parse_list(raw):
     return [e.strip() for e in text.split(",") if e.strip()]
 
 
+def new_shas(shas, existing):
+    """SHAs not already listed, de-duplicated within the batch, order preserved.
+
+    Deduping against `existing` alone is not enough: a caller passing the same SHA
+    twice in one invocation would append it twice, which is exactly the corruption
+    the append-only `commits` list is supposed to be immune to.
+    """
+    fresh = []
+    for s in shas:
+        if s not in existing and s not in fresh:
+            fresh.append(s)
+    return fresh
+
+
 def append_html_commits(content, shas):
     match = _html_field_re("commits").search(content)
     if not match:
         return content, False
     existing = parse_list(match.group(2))
-    fresh = [s for s in shas if s not in existing]
+    fresh = new_shas(shas, existing)
     if not fresh:
         return content, False
     updated = ", ".join(existing + fresh)
@@ -102,7 +116,7 @@ def append_md_commits(content, shas):
     if not match:
         return content, False
     existing = parse_list(match.group(2))
-    fresh = [s for s in shas if s not in existing]
+    fresh = new_shas(shas, existing)
     if not fresh:
         return content, False
     line = "commits: " + ", ".join(existing + fresh)
@@ -179,6 +193,14 @@ def self_test():
     assert "phase U1 shipped" in mout
     magain, changed = sync(mout, False, ["abc123"], "2026-07-11 — phase U1 shipped", "Branch feat/x.")
     assert not changed and magain == mout
+
+    # A SHA repeated within ONE invocation is appended once. Deduping against the
+    # existing list alone would let a duplicated --commit corrupt the append-only
+    # list -- the one thing it is supposed to be immune to.
+    dup, changed = sync(html_plan, True, ["abc123", "abc123"], "2026-07-11 — phase U1 shipped", "Branch feat/x.")
+    assert changed and "<dd>abc123</dd>" in dup, dup
+    mdup, changed = sync(md_plan, False, ["abc123", "abc123"], "s", "d")
+    assert changed and "commits: abc123\n" in mdup, mdup
 
     # A plan with no commits field and no Amendments section is a skip, not a crash.
     bare, changed = sync("# Plan\n", False, ["abc"], "s", "d")
