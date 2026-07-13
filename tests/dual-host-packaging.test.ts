@@ -181,6 +181,8 @@ describe("dual-host plugin packaging", () => {
       "agents/openai.yaml",
       "references/state-engine.md",
       "references/worker-contract.md",
+      "references/agent-contract.md",
+      "references/verifier-contract.md",
       "references/runtime-claude.md",
       "references/runtime-codex.md",
       "scripts/run-state.py",

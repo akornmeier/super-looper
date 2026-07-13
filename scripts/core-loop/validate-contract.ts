@@ -7,19 +7,27 @@ import {
   runStateSchema,
   workerResultSchema,
 } from "../../src/core-loop/contracts"
+import {
+  agentResultSchema,
+  verifierResultSchema,
+  workflowStateSchema,
+} from "../../src/workflows/contracts"
 
 const schemas = {
   plan: executionPlanSchema,
   "run-state": runStateSchema,
   "phase-packet": phasePacketSchema,
   "worker-result": workerResultSchema,
+  "agent-result": agentResultSchema,
+  "verifier-result": verifierResultSchema,
+  "workflow-state": workflowStateSchema,
 } as const
 
 type ContractName = keyof typeof schemas
 
 function usage(): never {
   process.stderr.write(
-    "Usage: bun run scripts/core-loop/validate-contract.ts <plan|run-state|phase-packet|worker-result> <json-file>\n",
+    "Usage: bun run scripts/core-loop/validate-contract.ts <plan|run-state|phase-packet|worker-result|agent-result|verifier-result|workflow-state> <json-file>\n",
   )
   process.exit(2)
 }

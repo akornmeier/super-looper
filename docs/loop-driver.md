@@ -76,14 +76,15 @@ silent fallback to planning.
   bar.
 - **Command mode.** `--verify-cmd <cmd...>` runs a local command **in the target
   directory**; success requires it to exit `0`. Use for targets without Actions.
-- **U5 plan mode requires command mode.** `sl-run` deliberately stops before
+- **U6 plan mode requires command mode.** `sl-run` deliberately stops at
+  `review_ready` before
   commit/PR delivery at this boundary, so GitHub-CI verification is unavailable
   until closeout lands. Omitting `--verify-cmd` fails fast with exit 4.
 - **No verification available** (no remote *and* no `--verify-cmd`) → the driver
   **fails fast** (`exit 4`). There is no unverified success path.
 
 `DONE` is a **routing** signal, not a success signal. In `sl-run` plan mode the
-driver additionally requires a matching durable `completed` run state before it
+driver additionally requires a matching durable `review_ready` run state before it
 accepts the sentinel. In legacy mode, `lfg` emits
 `<promise>DONE</promise>` in every exit path — including when it gives up on red
 CI. The driver detects `DONE` only to know the run *finished* (matching the last

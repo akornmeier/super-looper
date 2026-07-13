@@ -598,6 +598,10 @@ const PLATFORM_VAR_ACKNOWLEDGED = new Map<string, string>([
     "Claude-only runtime adapter: renderer commands are pinned via allowed-tools rather than wrapped in an inline guard. The adapter states that unresolved CLAUDE_SKILL_DIR fails loudly, the renderer action is reported as skipped, and the already-complete plan is preserved; Codex selects its absolute-path adapter instead.",
   ],
   [
+    "plugins/super-looper/skills/sl-run/references/runtime-claude.md#CLAUDE_SKILL_DIR",
+    "Claude-only runtime adapter: kernel operations are single pinned commands rather than compound existence guards. The adapter states that unresolved CLAUDE_SKILL_DIR stops with an unavailable installed-path error and forbids retrying with a project-relative path; Codex selects its absolute-path adapter instead.",
+  ],
+  [
     "plugins/super-looper/skills/sl-host-smoke/references/runtime-claude.md#CLAUDE_SKILL_DIR",
     "Claude-only runtime adapter: host detection selects this file only on Claude Code, where CLAUDE_SKILL_DIR resolves. An unresolved path makes the pinned Bash call fail loudly and the adapter explicitly reports a failed diagnostic rather than silently missing the bundled script; Codex selects runtime-codex.md and resolves its absolute skill source path instead.",
   ],

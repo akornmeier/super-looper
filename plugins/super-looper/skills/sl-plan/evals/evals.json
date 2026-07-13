@@ -114,6 +114,30 @@
         "contract_lines": "Output Mode and Optional HTML renderer.",
         "expected_behavior": "HTML compatibility remains explicit and stateful; images remain off; pipeline always emits Markdown."
       }
+    },
+    {
+      "id": 5,
+      "name": "verification-is-kernel-compatible",
+      "tests_risk": "planner_emits_shell_choreography_or_ambiguous_inspection",
+      "prompt": "Show the Verification section you would write for a unit that must run formatting, typechecking, and tests, then inspect a generated UI artifact. The plan will be executed by sl-run's deterministic workflow kernel.",
+      "expected_terms": [
+        {"term": "separate list item", "tier": "must"},
+        {"term": "Inspect ", "tier": "must"},
+        {"term": "argument vector", "tier": "must"},
+        {"term": "&&", "tier": "should"},
+        {"term": "shell", "tier": "should"}
+      ],
+      "expected_context": [
+        "formatting, typechecking, and tests appear as separate argv-compatible command entries rather than one shell pipeline or compound command",
+        "the UI evidence begins with the literal Inspect prefix so the kernel forwards it to semantic verification instead of executing it",
+        "the response rejects shell operators, redirects, substitution, environment-assignment prefixes, and shell -c in executable entries"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md and references/plan-contract.md",
+        "contract_lines": "Draft the execution contract; Canonical execution-plan contract body shape.",
+        "expected_behavior": "One argv-compatible command per Verification item; semantic evidence uses Inspect."
+      }
     }
   ]
 }

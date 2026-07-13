@@ -1,112 +1,98 @@
 ---
 name: sl-run
-description: "Execute or resume a canonical sl-plan Markdown artifact through dependency-ordered phases with one worker at a time, durable atomic run state, independent phase verification, goal-drift protection, and honest terminal status. Use when the user says run, execute, continue, or resume a plan, provides plan:path or state:path, or asks for the streamlined implementation loop."
+description: "Execute or resume a canonical sl-plan artifact through a serial code-owned developer workflow with bounded implementation agents, direct deterministic checks, same-session repair when supported, independent semantic verification, durable state, goal-drift protection, and a review-ready stop. Use when the user says run, execute, continue, or resume a plan, provides plan:path or state:path, or asks for the streamlined implementation workflow."
 ---
 
-# Run a phased plan
+# Run a code-owned workflow
 
-Coordinate execution; do not become the implementation worker. Use one worker at a time in U5. Parallel or multi-worker phase teams belong to `sl-run`'s later team-execution capability and are not available in this version.
+Act as the host adapter and user interface, not the workflow engine or implementation worker. The bundled kernel selects every transition. Perform only the `next_action` it emits, return the requested typed result, then ask the kernel what follows.
 
-Select `references/runtime-claude.md` on Claude Code or `references/runtime-codex.md` on Codex before the first script call or worker dispatch. Read `references/state-engine.md` for state operations and `references/worker-contract.md` before dispatching work.
+Before the first script call or dispatch, select `references/runtime-claude.md` on Claude Code or `references/runtime-codex.md` on Codex. Read `references/state-engine.md`, `references/agent-contract.md`, and `references/verifier-contract.md` before executing nodes.
 
 ## Invariants
 
-- Treat the checked-in plan and `STRATEGY.md` as immutable goals for the whole run. Never edit either file, including status markers.
-- Make the parent coordinator the only run-state writer. Workers never call the state engine or edit plan, strategy, state, packets, or results.
-- Deliver only the current unit's phase packet. Do not send the full plan, strategy, session transcript, or accumulated worker narratives.
-- Dispatch at most one implementation worker at a time. Do not begin another unit until its result is recorded.
-- A worker's completed result is not a phase pass. Independently run the phase's verification commands and completion gate from the coordinator.
-- Never infer completion from prose. Advance only through successful state-engine operations.
-- Stop honestly on goal drift, malformed state/result, branch mismatch, unreachable recorded commit, worker failure, or failed independent verification.
-- Do not commit, push, create a pull request, watch CI, write learnings, or update strategy in U5. Later closeout phases own those actions.
+- Treat the checked-in plan and `STRATEGY.md` as immutable goals. Never edit either file, including status markers.
+- Make the kernel the only run-state writer and transition authority. Agents never edit plan, strategy, state, packets, or results.
+- Send only the packet named by kernel output. Do not send the whole plan, strategy, session transcript, or accumulated agent narratives.
+- Keep execution serial in U6. Never have more than one implementation, repair, or verifier agent active.
+- Run required formatter, linter, typecheck, test, and contract commands only through kernel `run-checks`. Agent-reported verification is not a gate.
+- Resume the responsible agent only when the runtime supplied a stable handle and supports continuation. Otherwise dispatch a fresh repair agent with the repair packet and record the degraded continuity.
+- Use a fresh independent verifier. An implementation or repair agent cannot certify its own phase.
+- Stop honestly on goal drift, malformed state/result, unsafe command syntax, branch mismatch, unreachable head, exhausted repair budget, or failed verification.
+- Do not commit, push, create a pull request, watch CI, write learnings, update strategy, or approve the review packet in U6.
 
 ## Resolve input
 
 Recognize only literal prefixes:
 
-- `plan:<repo-relative-path>` starts a new run.
+- `plan:<repo-relative-path>` starts a new kernel run.
 - `state:<absolute-run-state-path>` resumes a run.
-- `state-path:<absolute-run-state-path>` selects the initialization destination and is valid only with `plan:`.
+- `state-path:<absolute-run-state-path>` selects initialization output and is valid only with `plan:`.
 - `mode:interactive` or `mode:unattended` selects policy; direct use defaults to interactive.
-- `run-id:<id>` and `base-ref:<ref>` are supervisor inputs for deterministic unattended runs.
+- `run-id:<id>` and `base-ref:<ref>` are supervisor inputs.
 
-Preserve other colon-bearing text. Require exactly one of `plan:` or `state:`; `state-path:` is not a resume input. Resolve the repository root before initialization. A plan must use the canonical Markdown contract produced by `sl-plan`; HTML is a review artifact and cannot initialize `sl-run`.
+Preserve other colon-bearing text. Require exactly one of `plan:` or `state:`. Resolve the repository root before initialization. Accept only canonical Markdown from `sl-plan`, never HTML.
 
 ## Start or resume
 
 For `plan:`:
 
-1. Confirm the target worktree and plan path. In interactive mode, surface unrelated pre-existing changes before dispatch; do not discard them. In unattended mode, fail closed if they overlap the first unit's owned scope.
-2. Invoke state-engine `init`, passing the target, plan, optional `run-id`, `base-ref`, and supervisor-provided state path.
-3. Keep the returned absolute `state_path`. It is the sole resume handle.
+1. Surface unrelated existing changes in interactive mode. In unattended mode, fail closed when they overlap the first unit.
+2. Invoke `init` with `--kernel`, plus target, plan, optional run ID, base ref, state path, and a repair cap of one.
+3. Keep the returned absolute `state_path` as the sole resume handle.
 
 For `state:`:
 
-1. Invoke state-engine `resume` before reading or changing implementation files.
-2. If `next_action` is `reconcile-in-progress-unit`, do not redispatch it. The prior worker may have changed the worktree without returning a result. Report the packet path and state path, inspect the worktree only when the user authorizes recovery, and require an explicit reconciliation decision.
-3. At a phase boundary, continue from `start-next`; completed gates must not run again.
+1. Invoke `resume` before inspecting or changing implementation files.
+2. Never redispatch when it reports `reconcile-in-progress-agent` or `reconcile-in-progress-verifier`. The prior process may have changed the worktree without recording a result. Require an explicit reconciliation decision in interactive mode; unattended mode stops honestly.
+3. Continue directly from `start-next`, `run-checks`, or `await-engineer-review` when the kernel reports that action. Completed nodes and phase gates do not repeat.
 
-Any state-engine exit `8` is terminal goal drift. Report the named file and expected/actual hash; do not reinitialize against the changed goal in the same run.
+Exit `8` is terminal goal drift. Report the changed file and expected/actual hash; never reinitialize against the changed goal in the same run.
 
-## Execution loop
+## Execute emitted actions
 
-Repeat until the state is terminal:
+Repeat until the kernel reaches `review_ready`, `blocked`, or `failed`:
 
-### 1. Start one ready unit
+### `start-next`
 
-Invoke `start-next`. Read the emitted phase-packet JSON. If the engine says the phase is ready for verification, skip to step 4. If no dependency-ready work exists, stop with the engine's typed failure.
+Invoke `start-next`. It writes one bounded phase packet and returns `dispatch-agent` with role `implementation`.
 
-### 2. Dispatch one worker
+### `dispatch-agent`
 
-Use the selected runtime adapter to dispatch one general implementation worker. Give it:
+Dispatch one general implementation or repair agent through the selected runtime adapter. Supply the target root, repository instructions for the owned scope, the exact packet path, and `references/agent-contract.md`. Write its exact JSON return to a uniquely named `incoming-agent-*.json` staging file in the run directory, then invoke `record-agent`. Never write the kernel-reserved `agent-result-*` files.
 
-- the target repository root;
-- the complete phase packet, and nothing broader;
-- repository instructions that apply to its owned scope;
-- the exact worker-result schema from `references/worker-contract.md`.
+The agent may inspect adjacent code and run diagnostics while implementing, but its command claims do not advance state. Do not copy successful logs into its context.
 
-Authorize edits only inside `owned_scope`. The worker may inspect adjacent code needed to follow established patterns and may run unit verification commands. It must return one JSON object and no completion claim beyond its unit.
+### `resume-agent`
 
-### 3. Record the result
+Resume the session handle named by kernel output and give it only the repair packet and referenced failure logs. Require a `role: repair` result. If continuation is unavailable despite a previously resumable handle, dispatch a fresh repair agent, set its returned session capability honestly, and record the fallback.
 
-Write the returned JSON to a temporary file inside the run-state directory, then invoke `record-worker`. The engine validates identity, paths, status, branch/head safety, and stores the immutable result.
+### `run-checks`
 
-- `completed`: continue. Start the next dependency-ready unit in the same phase, if any.
-- `blocked`: stop. Interactive mode asks for the smallest decision or authority needed; unattended mode returns a blocked terminal report without guessing.
-- `failed`: stop at the recorded failed terminal. U5 has no automatic repair pass.
+Invoke kernel `run-checks`; do not run the plan commands yourself. The kernel parses each command entry into an argument vector, rejects shell control flow, applies a timeout, stores stdout/stderr by pointer, and classifies pass/fail. Entries beginning with `Inspect ` remain semantic requirements and travel to the independent verifier instead of being executed as programs.
 
-Never hand-edit a malformed result into apparent validity. Ask the same worker once to return schema-correct JSON only; if it still fails, record/report failure.
+A failure returns `resume-agent` or `dispatch-agent` within the one-repair budget. Passing unit checks returns `start-next` or `dispatch-verifier`.
 
-### 4. Verify the phase independently
+### `dispatch-verifier`
 
-After every unit in the current phase is recorded completed:
+Dispatch one fresh agent with only the verifier packet and `references/verifier-contract.md`. It inspects the integrated phase and returns semantic gate evidence. Write the exact JSON return to a uniquely named `incoming-verifier-*.json` staging file in the run directory and invoke `record-verifier`. Never write the kernel-reserved `verifier-result-*` files.
 
-1. Read the structured plan copy in the run-state directory for the phase completion gate.
-2. Run the phase's verification commands from the coordinator, not through the implementation worker.
-3. Inspect observable completion-gate evidence. A command's exit zero is evidence only for what that command covers.
-4. Invoke `verify-phase --status passed` with concrete evidence only when every gate passes. Otherwise invoke `verify-phase --status failed` with the failed command or missing evidence.
+A failed verifier may route one identified unit through the remaining repair budget. A passing final verifier produces `review_ready` and `review-packet.json`.
 
-The engine completes the run automatically only after every phase has passed independent verification.
+## Surface status
 
-### 5. Surface status
-
-After every state transition, report this compact tuple from engine output:
+After each operation, report only this compact tuple plus a blocker when present:
 
 ```text
 status=<status> phase=<current_phase|none> unit=<current_unit|none>
-completed_gates=<ids|none> next=<next_action>
+node=<current_node|none> completed_gates=<ids|none> next=<next_action>
 state=<absolute state_path> terminal_reason=<reason|none>
 ```
 
-Do not replace it with a narrative progress estimate.
+Interactive mode asks only for safe recovery or new authority. Unattended mode never asks or widens scope.
 
-## Interaction policy
+## Stop at review-ready
 
-Interactive and unattended modes execute the same states and gates.
+`review_ready` means implementation, direct code checks, and independent semantic verification passed. It is not engineer approval or delivery. Report the state and review-packet paths and perform no closeout action.
 
-- **Interactive:** ask only for a decision that changes safe execution, recovery from a mid-unit interruption, or new authority. Continue routine ready units without ceremony.
-- **Unattended:** never ask questions or widen scope. Fail closed on ambiguity, blocked work, unsafe dirty-worktree overlap, or missing verification. When the engine reports completed, output `<promise>DONE</promise>` as the final non-empty line for the process supervisor. Never emit that sentinel for blocked or failed state.
-
-## Completion
-
-A successful U5 run means implementation and independent phase gates completed. It does not mean the work was committed, reviewed, pushed, or delivered. Report the durable state path and leave closeout to a later explicit workflow.
+In unattended mode, emit `<promise>DONE</promise>` as the final non-empty line only after durable `review_ready` state. Never emit it for blocked, failed, or merely narrated completion.

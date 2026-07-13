@@ -1,5 +1,6 @@
 import path from "node:path"
 import { z } from "zod"
+import { workflowStateSchema } from "../workflows/contracts"
 
 const idSchema = z
   .string()
@@ -218,8 +219,17 @@ export const runStateSchema = z
         head_sha: z.string().regex(/^[a-f0-9]{7,64}$/),
       })
       .strict(),
-    status: z.enum(["initialized", "running", "blocked", "completed", "failed", "cancelled"]),
+    status: z.enum([
+      "initialized",
+      "running",
+      "blocked",
+      "review_ready",
+      "completed",
+      "failed",
+      "cancelled",
+    ]),
     current_phase: idSchema.nullable(),
+    workflow: workflowStateSchema.optional(),
     phases: z.array(runPhaseStateSchema).min(1),
     usage: z
       .object({
@@ -285,6 +295,14 @@ export const runStateSchema = z
     }
     if (state.status === "completed" && state.phases.some((phase) => phase.status !== "completed")) {
       ctx.addIssue({ code: "custom", message: "completed run requires every phase completed", path: ["phases"] })
+    }
+    if (state.status === "review_ready") {
+      if (state.phases.some((phase) => phase.status !== "completed")) {
+        ctx.addIssue({ code: "custom", message: "review-ready run requires every phase completed", path: ["phases"] })
+      }
+      if (state.workflow?.stage !== "review-ready" || state.workflow.review.status !== "ready") {
+        ctx.addIssue({ code: "custom", message: "review-ready run requires a ready workflow review packet", path: ["workflow"] })
+      }
     }
   })
 

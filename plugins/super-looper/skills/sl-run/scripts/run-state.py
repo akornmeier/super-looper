@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic state engine for the sl-run coordinator.
+"""Deterministic workflow kernel and state engine for sl-run.
 
-The parent coordinator is the only caller allowed to mutate run-state.json.
-Workers receive phase packets and return worker-result JSON; they never call this
-script or edit the plan, strategy, or state.
+The kernel is the only caller allowed to mutate run-state.json. Agents receive
+bounded packets and return typed JSON; they never call this script or edit the
+plan, strategy, state, packets, or results.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Any, Iterator
 
 
@@ -34,6 +36,16 @@ UNIT_RE = re.compile(
     r"^### U\d+\.\s+.+?\s+`([a-z0-9-]+)`\s+`(\[\]|\[wip\]|\[x\]|\[f\])`\s*$",
     re.MULTILINE,
 )
+TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+KERNEL_STAGES = {
+    "idle",
+    "awaiting-worker",
+    "checking",
+    "awaiting-repair",
+    "awaiting-verifier",
+    "review-ready",
+    "failed",
+}
 
 
 class RunError(Exception):
@@ -398,12 +410,104 @@ def current_unit(state: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str
     return phase, unit
 
 
+def workflow(state: dict[str, Any]) -> dict[str, Any]:
+    value = state.get("workflow")
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise RunError(EX_STATE, "run was not initialized for the workflow kernel")
+    if value.get("stage") not in KERNEL_STAGES:
+        raise RunError(EX_INVALID, "workflow state has an unsupported stage", stage=value.get("stage"))
+    return value
+
+
+def workflow_key(phase_id: str, unit_id: str) -> str:
+    return f"{phase_id}/{unit_id}"
+
+
+def node_id(kind: str, phase_id: str, unit_id: str | None, attempt: int) -> str:
+    parts = [kind, phase_id]
+    if unit_id:
+        parts.append(unit_id)
+    parts.append(str(attempt))
+    return ".".join(parts)
+
+
+def append_node(
+    state: dict[str, Any],
+    *,
+    identifier: str,
+    kind: str,
+    status: str,
+    attempt: int,
+    phase_id: str | None,
+    unit_id: str | None,
+    input_paths: list[str] | None = None,
+    output_paths: list[str] | None = None,
+    session_handle: str | None = None,
+    evidence: list[dict[str, Any]] | None = None,
+    next_action: str | None = None,
+    started_at: str | None = None,
+) -> dict[str, Any]:
+    flow = workflow(state)
+    timestamp = now()
+    node = {
+        "id": identifier,
+        "kind": kind,
+        "status": status,
+        "attempt": attempt,
+        "phase_id": phase_id,
+        "unit_id": unit_id,
+        "input_paths": input_paths or [],
+        "output_paths": output_paths or [],
+        "session_handle": session_handle,
+        "evidence": evidence or [],
+        "next": next_action,
+        "started_at": started_at or timestamp,
+        "ended_at": timestamp if status in {"passed", "failed", "blocked"} else None,
+    }
+    flow["nodes"].append(node)
+    flow["current_node"] = identifier if status in {"pending", "running"} else None
+    return node
+
+
+def finish_current_node(
+    state: dict[str, Any],
+    status: str,
+    *,
+    output_paths: list[str] | None = None,
+    session_handle: str | None = None,
+    evidence: list[dict[str, Any]] | None = None,
+    next_action: str | None = None,
+) -> dict[str, Any]:
+    flow = workflow(state)
+    identifier = flow.get("current_node")
+    node = next((item for item in reversed(flow["nodes"]) if item["id"] == identifier), None)
+    if not node or node["status"] not in {"pending", "running"}:
+        raise RunError(EX_STATE, "workflow has no active node to finish")
+    node["status"] = status
+    node["output_paths"] = output_paths or node["output_paths"]
+    node["session_handle"] = session_handle
+    node["evidence"] = evidence or []
+    node["next"] = next_action
+    node["ended_at"] = now()
+    flow["current_node"] = None
+    return node
+
+
 def summary(state: dict[str, Any], state_path: Path, **extra: Any) -> dict[str, Any]:
     phase, unit = current_unit(state)
-    if state["status"] in {"completed", "failed", "cancelled"}:
+    flow = state.get("workflow")
+    if state["status"] in TERMINAL_STATUSES:
         next_action = "none"
+    elif flow and flow["stage"] == "review-ready":
+        next_action = "await-engineer-review"
     elif state["status"] == "blocked":
         next_action = "resolve-blocker"
+    elif flow and flow["stage"] in {"awaiting-worker", "awaiting-repair"}:
+        next_action = "reconcile-in-progress-agent"
+    elif flow and flow["stage"] == "checking":
+        next_action = "run-checks"
+    elif flow and flow["stage"] == "awaiting-verifier":
+        next_action = "reconcile-in-progress-verifier"
     elif unit:
         next_action = "reconcile-in-progress-unit"
     elif phase and all(item["status"] == "completed" for item in phase["units"]):
@@ -415,6 +519,7 @@ def summary(state: dict[str, Any], state_path: Path, **extra: Any) -> dict[str, 
         "status": state["status"],
         "current_phase": phase["id"] if phase else None,
         "current_unit": unit["id"] if unit else None,
+        "current_node": flow.get("current_node") if flow else None,
         "completed_gates": [item["id"] for item in state["phases"] if item["status"] == "completed"],
         "next_action": next_action,
         "state_path": str(state_path),
@@ -433,9 +538,11 @@ def initial_state(
     base_ref: str,
     head: str,
     plan: dict[str, Any],
+    kernel: bool = False,
+    max_repair_attempts: int = 1,
 ) -> dict[str, Any]:
     timestamp = now()
-    return {
+    state = {
         "schema_version": 1,
         "run_id": run_id,
         "plan": {"path": plan_rel, "sha256": plan_hash},
@@ -472,6 +579,18 @@ def initial_state(
         "updated_at": timestamp,
         "terminal": None,
     }
+    if kernel:
+        state["workflow"] = {
+            "schema_version": 1,
+            "stage": "idle",
+            "current_node": None,
+            "max_repair_attempts": max_repair_attempts,
+            "repair_attempts": {},
+            "sessions": {},
+            "nodes": [],
+            "review": {"status": "not-ready", "packet_path": None},
+        }
+    return state
 
 
 def command_init(args: argparse.Namespace) -> None:
@@ -495,7 +614,18 @@ def command_init(args: argparse.Namespace) -> None:
     branch = git(target, "rev-parse", "--abbrev-ref", "HEAD")
     head = git(target, "rev-parse", "HEAD")
     base_ref = args.base_ref or head
-    state = initial_state(run_id, plan_rel, sha256(plan_path), strategy_state, branch, base_ref, head, plan)
+    state = initial_state(
+        run_id,
+        plan_rel,
+        sha256(plan_path),
+        strategy_state,
+        branch,
+        base_ref,
+        head,
+        plan,
+        kernel=args.kernel,
+        max_repair_attempts=args.max_repair_attempts,
+    )
     meta = {
         "schema_version": 1,
         "target": str(target),
@@ -541,6 +671,9 @@ def command_start_next(args: argparse.Namespace) -> None:
             state["status"] = "running"
         if state["status"] != "running":
             raise RunError(EX_STATE, "run is not ready to start work", status=state["status"])
+        flow = state.get("workflow")
+        if flow and flow["stage"] != "idle":
+            raise RunError(EX_STATE, "workflow kernel is not ready to start another unit", stage=flow["stage"])
 
         phase_state, active_unit = current_unit(state)
         if active_unit:
@@ -604,6 +737,20 @@ def command_start_next(args: argparse.Namespace) -> None:
         }
         packet_path = state_path.parent / f"phase-packet-{phase['id']}-{unit['id']}.json"
         atomic_write(packet_path, packet)
+        if flow:
+            identifier = node_id("agent.implementation", phase["id"], unit["id"], 0)
+            append_node(
+                state,
+                identifier=identifier,
+                kind="agent",
+                status="running",
+                attempt=0,
+                phase_id=phase["id"],
+                unit_id=unit["id"],
+                input_paths=[str(packet_path)],
+                next_action="record-agent",
+            )
+            flow["stage"] = "awaiting-worker"
         atomic_write(state_path, state)
     emit(
         summary(
@@ -611,7 +758,8 @@ def command_start_next(args: argparse.Namespace) -> None:
             state_path,
             packet_path=str(packet_path),
             worker_id=unit_state["worker_id"],
-            next_action="dispatch-worker",
+            next_action="dispatch-agent" if flow else "dispatch-worker",
+            agent_role="implementation" if flow else None,
         )
     )
 
@@ -714,6 +862,513 @@ def command_record_worker(args: argparse.Namespace) -> None:
     emit(summary(state, state_path, worker_result_path=str(stored_result)))
 
 
+AGENT_KEYS = {
+    "schema_version",
+    "run_id",
+    "phase_id",
+    "unit_id",
+    "role",
+    "status",
+    "session",
+    "changed_files",
+    "evidence",
+    "risks",
+    "unresolved",
+}
+
+
+def validate_agent_result(value: dict[str, Any]) -> None:
+    if set(value) != AGENT_KEYS:
+        raise RunError(EX_INVALID, "agent result fields do not match the workflow contract")
+    if value["schema_version"] != 1 or value["role"] not in {"implementation", "repair"}:
+        raise RunError(EX_INVALID, "agent result has an invalid schema version or role")
+    if value["status"] not in {"completed", "blocked", "failed"}:
+        raise RunError(EX_INVALID, "agent result has an invalid status")
+    session = value["session"]
+    if session is not None:
+        if set(session) != {"handle", "resumable"}:
+            raise RunError(EX_INVALID, "agent session fields do not match the workflow contract")
+        if not isinstance(session["handle"], str) or not session["handle"] or not isinstance(session["resumable"], bool):
+            raise RunError(EX_INVALID, "agent session has invalid values")
+    for field in ("changed_files", "evidence", "risks", "unresolved"):
+        if not isinstance(value[field], list) or not all(isinstance(item, str) and item for item in value[field]):
+            raise RunError(EX_INVALID, f"agent result field must be an array of strings: {field}")
+    for changed in value["changed_files"]:
+        changed_path = Path(changed)
+        if changed_path.is_absolute() or "\\" in changed or re.match(r"^[A-Za-z]:", changed) or ".." in changed_path.parts:
+            raise RunError(EX_INVALID, "agent result contains a path outside the repository", path=changed)
+
+
+def fail_kernel_run(
+    state: dict[str, Any], phase: dict[str, Any], unit: dict[str, Any] | None, reason: str
+) -> None:
+    timestamp = now()
+    if unit:
+        unit["status"] = "failed"
+    phase["status"] = "failed"
+    state["current_phase"] = None
+    state["status"] = "failed"
+    state["terminal"] = {"status": "failed", "reason": reason, "ended_at": timestamp}
+    flow = workflow(state)
+    flow["stage"] = "failed"
+    flow["current_node"] = None
+    state["updated_at"] = timestamp
+
+
+def command_record_agent(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    result_path = Path(args.result).resolve()
+    if result_path.name.startswith("agent-result-"):
+        raise RunError(EX_INVALID, "agent result input uses a kernel-reserved filename; use incoming-agent-*.json")
+    result = read_json(result_path, "agent result")
+    validate_agent_result(result)
+    with state_lock(state_path):
+        state, plan, meta = load_bundle(state_path)
+        target = check_resume(state, meta)
+        flow = workflow(state)
+        expected_role = "implementation" if flow["stage"] == "awaiting-worker" else "repair"
+        if flow["stage"] not in {"awaiting-worker", "awaiting-repair"}:
+            raise RunError(EX_STATE, "workflow is not awaiting an implementation or repair result", stage=flow["stage"])
+        if result["role"] != expected_role:
+            raise RunError(EX_INVALID, "agent role does not match the active workflow node", expected=expected_role, actual=result["role"])
+        phase, unit = current_unit(state)
+        if not phase or not unit:
+            raise RunError(EX_STATE, "no agent-owned unit is in progress")
+        for field, actual in (("run_id", state["run_id"]), ("phase_id", phase["id"]), ("unit_id", unit["id"])):
+            if result[field] != actual:
+                raise RunError(EX_INVALID, f"agent result {field} does not match active work", expected=actual, actual=result[field])
+        phase_contract = phase_definition(plan, phase["id"])
+        unit_contract = unit_definition(phase_contract, unit["id"])
+        for changed in result["changed_files"]:
+            if not path_is_owned(changed, unit_contract["files_or_area"]):
+                raise RunError(
+                    EX_INVALID,
+                    "agent result claims a file outside the unit owned scope",
+                    path=changed,
+                    owned_scope=unit_contract["files_or_area"],
+                )
+
+        key = workflow_key(phase["id"], unit["id"])
+        session = result["session"]
+        if session:
+            flow["sessions"][key] = session
+        attempt = flow["repair_attempts"].get(key, 0) if expected_role == "repair" else 0
+        stored_result = state_path.parent / f"agent-result-{phase['id']}-{unit['id']}-{attempt}.json"
+        if stored_result.exists():
+            raise RunError(EX_STATE, "immutable agent result already exists", path=str(stored_result))
+        atomic_write(stored_result, result)
+
+        node_status = {"completed": "passed", "blocked": "blocked", "failed": "failed"}[result["status"]]
+        finish_current_node(
+            state,
+            node_status,
+            output_paths=[str(stored_result)],
+            session_handle=session["handle"] if session else None,
+            evidence=[{"summary": item, "path": None, "command": None, "exit_code": None} for item in result["evidence"]],
+            next_action="run-checks" if result["status"] == "completed" else None,
+        )
+        unit["worker_id"] = session["handle"] if session else unit["worker_id"]
+        unit["changed_files"] = sorted(set(unit["changed_files"] + result["changed_files"]))
+        unit["evidence"].extend(result["evidence"])
+        unit["unresolved"] = result["unresolved"]
+        head = git(target, "rev-parse", "HEAD")
+        if head != state["git"]["head_sha"]:
+            phase["commits"].append(head)
+            state["git"]["head_sha"] = head
+
+        if result["status"] == "completed":
+            flow["stage"] = "checking"
+        elif result["status"] == "blocked":
+            phase["status"] = "blocked"
+            state["current_phase"] = None
+            state["status"] = "blocked"
+            flow["stage"] = "failed"
+        else:
+            fail_kernel_run(state, phase, unit, f"agent failed: {phase['id']}/{unit['id']}")
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+    extra = {"agent_result_path": str(stored_result)}
+    if result["status"] == "completed":
+        extra["next_action"] = "run-checks"
+    emit(summary(state, state_path, **extra))
+
+
+def safe_argv(command: str) -> list[str]:
+    if not command.strip() or "\n" in command or "\r" in command or "`" in command or "$(" in command:
+        raise RunError(EX_INVALID, "verification command is empty or requires shell evaluation", command=command)
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars="|&;<>()")
+        lexer.whitespace_split = True
+        argv = list(lexer)
+    except ValueError as error:
+        raise RunError(EX_INVALID, "verification command cannot be parsed as argv", command=command) from error
+    controls = {"|", "||", "&", "&&", ";", ";;", "<", "<<", ">", ">>", "(", ")"}
+    if not argv or any(token in controls for token in argv):
+        raise RunError(EX_INVALID, "verification command requires unsupported shell control flow", command=command)
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", argv[0]):
+        raise RunError(EX_INVALID, "verification command cannot begin with an environment assignment", command=command)
+    if Path(argv[0]).name in {"sh", "bash", "zsh", "dash", "fish", "ksh"} and "-c" in argv[1:]:
+        raise RunError(EX_INVALID, "verification command cannot invoke a shell command string", command=command)
+    return argv
+
+
+def execute_check(command: str, target: Path, state_path: Path, node_name: str, timeout_seconds: int) -> dict[str, Any]:
+    argv = safe_argv(command)
+    stdout_path = state_path.parent / f"{node_name}.stdout.log"
+    stderr_path = state_path.parent / f"{node_name}.stderr.log"
+    started = time.monotonic()
+    timed_out = False
+    exit_code: int | None = None
+    with stdout_path.open("wb") as stdout_handle, stderr_path.open("wb") as stderr_handle:
+        try:
+            result = subprocess.run(
+                argv,
+                cwd=target,
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+    duration_ms = int((time.monotonic() - started) * 1000)
+    return {
+        "argv": argv,
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "duration_ms": duration_ms,
+        "stdout_path": str(stdout_path),
+        "stderr_path": str(stderr_path),
+    }
+
+
+def route_repair(
+    state: dict[str, Any],
+    state_path: Path,
+    phase: dict[str, Any],
+    unit: dict[str, Any],
+    reason: str,
+    evidence_paths: list[str],
+) -> tuple[str | None, str | None]:
+    flow = workflow(state)
+    key = workflow_key(phase["id"], unit["id"])
+    attempts = flow["repair_attempts"].get(key, 0)
+    if attempts >= flow["max_repair_attempts"]:
+        fail_kernel_run(state, phase, unit, f"repair budget exhausted: {phase['id']}/{unit['id']}")
+        return None, None
+    attempt = attempts + 1
+    flow["repair_attempts"][key] = attempt
+    unit["status"] = "in_progress"
+    phase["status"] = "in_progress"
+    state["status"] = "running"
+    state["current_phase"] = phase["id"]
+    session = flow["sessions"].get(key)
+    repair_packet = {
+        "schema_version": 1,
+        "run_id": state["run_id"],
+        "phase_id": phase["id"],
+        "unit_id": unit["id"],
+        "attempt": attempt,
+        "reason": reason,
+        "failure_evidence_paths": evidence_paths,
+        "changed_files": unit["changed_files"],
+        "session": session,
+    }
+    packet_path = state_path.parent / f"repair-packet-{phase['id']}-{unit['id']}-{attempt}.json"
+    atomic_write(packet_path, repair_packet)
+    identifier = node_id("agent.repair", phase["id"], unit["id"], attempt)
+    append_node(
+        state,
+        identifier=identifier,
+        kind="agent",
+        status="running",
+        attempt=attempt,
+        phase_id=phase["id"],
+        unit_id=unit["id"],
+        input_paths=[str(packet_path), *evidence_paths],
+        session_handle=session["handle"] if session else None,
+        next_action="record-agent",
+    )
+    flow["stage"] = "awaiting-repair"
+    action = "resume-agent" if session and session["resumable"] else "dispatch-agent"
+    return action, str(packet_path)
+
+
+def command_run_checks(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    with state_lock(state_path):
+        state, plan, meta = load_bundle(state_path)
+        target = check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "checking":
+            raise RunError(EX_STATE, "workflow is not ready to run deterministic checks", stage=flow["stage"])
+        phase, unit = current_unit(state)
+        if not phase or not unit:
+            raise RunError(EX_STATE, "no implementation unit is ready for deterministic checks")
+        phase_contract = phase_definition(plan, phase["id"])
+        unit_contract = unit_definition(phase_contract, unit["id"])
+        key = workflow_key(phase["id"], unit["id"])
+        attempt = flow["repair_attempts"].get(key, 0)
+        identifier = node_id("code.checks", phase["id"], unit["id"], attempt)
+        append_node(
+            state,
+            identifier=identifier,
+            kind="code",
+            status="running",
+            attempt=attempt,
+            phase_id=phase["id"],
+            unit_id=unit["id"],
+            next_action="classify-checks",
+        )
+        commands = [
+            command
+            for command in unit_contract["verification"]
+            if not command.lower().startswith("inspect ")
+        ]
+        inspection_requirements = [
+            command
+            for command in unit_contract["verification"]
+            if command.lower().startswith("inspect ")
+        ]
+        results = [
+            execute_check(command, target, state_path, f"{identifier}.{index}", args.timeout)
+            for index, command in enumerate(commands, start=1)
+        ]
+        results_path = state_path.parent / f"check-results-{phase['id']}-{unit['id']}-{attempt}.json"
+        atomic_write(
+            results_path,
+            {
+                "schema_version": 1,
+                "results": results,
+                "inspection_requirements": inspection_requirements,
+            },
+        )
+        failed = [item for item in results if item["timed_out"] or item["exit_code"] != 0]
+        evidence = [
+            {
+                "summary": "command timed out" if item["timed_out"] else f"command exited {item['exit_code']}",
+                "path": item["stderr_path"] if item["exit_code"] else item["stdout_path"],
+                "command": item["argv"],
+                "exit_code": item["exit_code"],
+            }
+            for item in results
+        ]
+        if not results:
+            evidence.append(
+                {
+                    "summary": "no deterministic commands configured; semantic inspection remains verifier-owned",
+                    "path": None,
+                    "command": None,
+                    "exit_code": None,
+                }
+            )
+        if failed:
+            finish_current_node(
+                state,
+                "failed",
+                output_paths=[str(results_path)],
+                evidence=evidence,
+                next_action="repair",
+            )
+            failure_paths = [path for item in failed for path in (item["stdout_path"], item["stderr_path"])]
+            next_action, packet_path = route_repair(
+                state,
+                state_path,
+                phase,
+                unit,
+                "deterministic checks failed",
+                failure_paths,
+            )
+        else:
+            finish_current_node(
+                state,
+                "passed",
+                output_paths=[str(results_path)],
+                evidence=evidence,
+                next_action="start-next-or-verify",
+            )
+            unit["status"] = "completed"
+            unit["evidence"].append(f"deterministic checks passed: {results_path}")
+            if all(item["status"] == "completed" for item in phase["units"]):
+                verifier_attempt = sum(
+                    1
+                    for item in flow["nodes"]
+                    if item["kind"] == "agent" and item["phase_id"] == phase["id"] and item["unit_id"] is None
+                )
+                verifier_packet = {
+                    "schema_version": 1,
+                    "run_id": state["run_id"],
+                    "phase_id": phase["id"],
+                    "phase_goal": phase_contract["goal"],
+                    "completion_gate": phase_contract["completion_gate"],
+                    "units": [
+                        {
+                            "id": item["id"],
+                            "changed_files": item["changed_files"],
+                            "evidence": item["evidence"],
+                            "unresolved": item["unresolved"],
+                            "inspection_requirements": [
+                                requirement
+                                for requirement in unit_definition(phase_contract, item["id"])["verification"]
+                                if requirement.lower().startswith("inspect ")
+                            ],
+                        }
+                        for item in phase["units"]
+                    ],
+                }
+                verifier_path = state_path.parent / f"verifier-packet-{phase['id']}-{verifier_attempt}.json"
+                atomic_write(verifier_path, verifier_packet)
+                verifier_id = node_id("agent.verifier", phase["id"], None, verifier_attempt)
+                append_node(
+                    state,
+                    identifier=verifier_id,
+                    kind="agent",
+                    status="running",
+                    attempt=verifier_attempt,
+                    phase_id=phase["id"],
+                    unit_id=None,
+                    input_paths=[str(verifier_path)],
+                    next_action="record-verifier",
+                )
+                flow["stage"] = "awaiting-verifier"
+                next_action = "dispatch-verifier"
+                packet_path = str(verifier_path)
+            else:
+                flow["stage"] = "idle"
+                next_action = "start-next"
+                packet_path = None
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+    emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, check_results_path=str(results_path)))
+
+
+VERIFIER_KEYS = {
+    "schema_version",
+    "run_id",
+    "phase_id",
+    "role",
+    "status",
+    "evidence",
+    "findings",
+    "repair_unit_id",
+}
+
+
+def validate_verifier_result(value: dict[str, Any]) -> None:
+    if set(value) != VERIFIER_KEYS or value.get("schema_version") != 1 or value.get("role") != "verifier":
+        raise RunError(EX_INVALID, "verifier result fields do not match the workflow contract")
+    if value.get("status") not in {"passed", "failed", "blocked"}:
+        raise RunError(EX_INVALID, "verifier result has an invalid status")
+    for field in ("evidence", "findings"):
+        if not isinstance(value[field], list) or not all(isinstance(item, str) and item for item in value[field]):
+            raise RunError(EX_INVALID, f"verifier result field must be an array of strings: {field}")
+    if value["repair_unit_id"] is not None and (not isinstance(value["repair_unit_id"], str) or not ID_RE.fullmatch(value["repair_unit_id"])):
+        raise RunError(EX_INVALID, "verifier repair_unit_id must be null or lowercase hyphen-case")
+
+
+def command_record_verifier(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    result_path = Path(args.result).resolve()
+    if result_path.name.startswith("verifier-result-"):
+        raise RunError(EX_INVALID, "verifier result input uses a kernel-reserved filename; use incoming-verifier-*.json")
+    result = read_json(result_path, "verifier result")
+    validate_verifier_result(result)
+    with state_lock(state_path):
+        state, _, meta = load_bundle(state_path)
+        check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "awaiting-verifier":
+            raise RunError(EX_STATE, "workflow is not awaiting semantic verification", stage=flow["stage"])
+        phase, active_unit = current_unit(state)
+        if not phase or active_unit or any(item["status"] != "completed" for item in phase["units"]):
+            raise RunError(EX_STATE, "phase is not ready for semantic verification")
+        for field, actual in (("run_id", state["run_id"]), ("phase_id", phase["id"])):
+            if result[field] != actual:
+                raise RunError(EX_INVALID, f"verifier result {field} does not match active phase", expected=actual, actual=result[field])
+        active_node = next((item for item in reversed(flow["nodes"]) if item["id"] == flow["current_node"]), None)
+        if not active_node:
+            raise RunError(EX_STATE, "workflow has no active verifier node")
+        stored_result = state_path.parent / f"verifier-result-{phase['id']}-{active_node['attempt']}.json"
+        if stored_result.exists():
+            raise RunError(EX_STATE, "immutable verifier result already exists", path=str(stored_result))
+        atomic_write(stored_result, result)
+        node_status = {"passed": "passed", "failed": "failed", "blocked": "blocked"}[result["status"]]
+        finish_current_node(
+            state,
+            node_status,
+            output_paths=[str(stored_result)],
+            evidence=[{"summary": item, "path": None, "command": None, "exit_code": None} for item in result["evidence"]],
+            next_action="start-next" if result["status"] == "passed" else "repair",
+        )
+
+        packet_path: str | None = None
+        if result["status"] == "passed":
+            phase["verification"] = {"status": "passed", "evidence": result["evidence"]}
+            phase["status"] = "completed"
+            state["current_phase"] = None
+            if all(item["status"] == "completed" for item in state["phases"]):
+                review_packet = {
+                    "schema_version": 1,
+                    "run_id": state["run_id"],
+                    "plan": state["plan"],
+                    "status": "review_ready",
+                    "completed_phases": [item["id"] for item in state["phases"]],
+                    "nodes": [item["id"] for item in flow["nodes"]],
+                    "unresolved": [
+                        finding
+                        for item in state["phases"]
+                        for unit in item["units"]
+                        for finding in unit["unresolved"]
+                    ],
+                    "delivery_authorized": False,
+                }
+                review_path = state_path.parent / "review-packet.json"
+                atomic_write(review_path, review_packet)
+                append_node(
+                    state,
+                    identifier="human.final-review.0",
+                    kind="human",
+                    status="pending",
+                    attempt=0,
+                    phase_id=None,
+                    unit_id=None,
+                    input_paths=[str(review_path)],
+                    next_action="await-engineer-review",
+                )
+                flow["stage"] = "review-ready"
+                flow["review"] = {"status": "ready", "packet_path": str(review_path)}
+                state["status"] = "review_ready"
+                next_action = "await-engineer-review"
+                packet_path = str(review_path)
+            else:
+                flow["stage"] = "idle"
+                next_action = "start-next"
+        elif result["status"] == "failed":
+            repair_id = result["repair_unit_id"] or phase["units"][-1]["id"]
+            unit = next((item for item in phase["units"] if item["id"] == repair_id), None)
+            if not unit:
+                raise RunError(EX_INVALID, "verifier named an unknown repair unit", repair_unit_id=repair_id)
+            next_action, packet_path = route_repair(
+                state,
+                state_path,
+                phase,
+                unit,
+                "semantic verifier requested repair",
+                [str(stored_result)],
+            )
+        else:
+            phase["status"] = "blocked"
+            state["current_phase"] = None
+            state["status"] = "blocked"
+            flow["stage"] = "failed"
+            next_action = "resolve-blocker"
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+    emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, verifier_result_path=str(stored_result)))
+
+
 def command_verify_phase(args: argparse.Namespace) -> None:
     state_path = Path(args.state).resolve()
     with state_lock(state_path):
@@ -763,6 +1418,8 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--run-id")
     init.add_argument("--state")
     init.add_argument("--base-ref")
+    init.add_argument("--kernel", action="store_true")
+    init.add_argument("--max-repair-attempts", type=int, default=1, choices=range(0, 4))
     init.set_defaults(handler=command_init)
     for name, handler in (("inspect", command_inspect), ("resume", command_resume)):
         command = commands.add_parser(name)
@@ -776,6 +1433,18 @@ def parser() -> argparse.ArgumentParser:
     record.add_argument("--state", required=True)
     record.add_argument("--result", required=True)
     record.set_defaults(handler=command_record_worker)
+    agent = commands.add_parser("record-agent")
+    agent.add_argument("--state", required=True)
+    agent.add_argument("--result", required=True)
+    agent.set_defaults(handler=command_record_agent)
+    checks = commands.add_parser("run-checks")
+    checks.add_argument("--state", required=True)
+    checks.add_argument("--timeout", type=int, default=300, choices=range(1, 1801))
+    checks.set_defaults(handler=command_run_checks)
+    verifier = commands.add_parser("record-verifier")
+    verifier.add_argument("--state", required=True)
+    verifier.add_argument("--result", required=True)
+    verifier.set_defaults(handler=command_record_verifier)
     verify = commands.add_parser("verify-phase")
     verify.add_argument("--state", required=True)
     verify.add_argument("--status", required=True, choices=("passed", "failed"))

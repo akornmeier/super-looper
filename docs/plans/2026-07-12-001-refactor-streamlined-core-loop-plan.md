@@ -29,7 +29,7 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 - [x] U3: Claude preservation gates, native Codex packaging, release lockstep, and cross-host smoke seam (`d7c95e0`)
 - [x] U4: lean frontier planner (implementation boundary; see `docs/evals/sl-plan-u4-report.md` for the token-telemetry caveat)
 - [x] U5: resumable `sl-run` coordinator (`docs/evals/sl-run-u5-report.md`)
-- [ ] U6: extract the code-owned workflow kernel and deterministic validation graph
+- [x] U6: extract the code-owned workflow kernel and deterministic validation graph (`docs/evals/sl-run-u6-report.md`)
 - [ ] U7: add risk-routed workflow profiles and bounded isolation
 - [ ] U8: add engineer review, delivery, learning, and strategy closeout
 - [ ] U9: migrate callers and reduce the public surface
@@ -37,15 +37,15 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 
 ## Continuation Checkpoint
 
-Work stopped cleanly at the U5/U6 boundary on branch `plan/streamline-super-looper` after commit `fb3b47f` (`feat(run): add resumable phased coordinator`). U1-U5 are complete and validated. No U6 implementation has started.
+Work stopped cleanly at the U6/U7 boundary on branch `plan/streamline-super-looper`. U1-U6 are complete and validated. U6 extracted the serial code-owned workflow kernel, deterministic command graph, typed agent/verifier boundaries, same-session repair contract, independent verification, and `review_ready` engineer boundary. See `docs/evals/sl-run-u6-report.md`. No U7 implementation has started.
 
-The continuation strategy is intentionally reset here: U6 does not assume that adding more agents to the U5 skill is the next step. The remaining work follows the three-actor model described in the supplied Dan Eisler transcript:
+The continuation strategy remains the three-actor model described in the supplied Dan Eisler transcript:
 
 - **Engineers** define intent and review consequential outcomes.
 - **Deterministic code** owns routing, state, conditions, validation commands, budgets, isolation policy, and audit records.
 - **Agents** perform bounded discovery, planning, implementation, repair, and semantic verification where judgment is actually required.
 
-This checkpoint is the durable resume note for the next implementation session.
+The next slice is U7 only: add data-defined workflow profiles, deterministic routing, and an isolation capability while preserving the serial default. Do not add delivery or learning authority at this boundary. This checkpoint is the durable resume note for the next implementation session.
 
 ---
 
@@ -743,6 +743,8 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 
 ### U6. Extract the code-owned workflow kernel
 
+**Status:** Complete; see `docs/evals/sl-run-u6-report.md`.
+
 **Goal:** Prove one observable serial developer workflow in which code owns control flow and agents own bounded judgment.
 
 **Dependencies:** U5.
@@ -1006,17 +1008,17 @@ This is a product-architecture change across the plugin, not a local skill refac
 
 ## Recommended Next Slice
 
-Resume at U6 only: extract and prove the serial code-owned workflow kernel. Do not add agent teams, workflow profiles, automated delivery, or learning changes in the same PR.
+Resume at U7 only: add deterministic workflow profiles, risk routing, and bounded isolation over the proven serial kernel. Do not add automated delivery or learning changes in the same PR.
 
 That PR should produce:
 
-- A checked-in diagram or fixture for plan -> build -> check -> repair -> verify -> review-ready.
-- Typed `code`, `agent`, and `human` node results and transition tests.
-- A command runner that owns exit-code classification, timeouts, log pointers, and safe argument handling.
-- Claude and Codex agent adapters with an explicit invoke/resume capability contract.
-- Same-session repair where supported and a tested, visible fresh-agent fallback.
-- A thinner `sl-run` that launches/resumes the kernel and presents status or review evidence.
-- Serial end-to-end behavioral evidence on both hosts.
-- No parallel workers, workflow router, old-skill deletion, or default delivery authority.
+- Chore, bug, feature, and hotfix profiles as data over the shared node contracts.
+- A deterministic router that prefers explicit metadata and mechanically observable risk signals, with a frontier model used only for ambiguous cases.
+- A user route override that cannot bypass safety or authority gates.
+- One isolation interface with sandbox, worktree, and serialized-checkout capability reporting.
+- A serial default and mechanically enforced concurrency eligibility for DAG-independent, non-overlapping work only.
+- Hotfix proposal approval before build and no delivery authority.
+- Cross-host routing, isolation, and overlap tests plus fresh-source behavioral evidence.
+- No old-skill deletion, automated delivery, or learning closeout.
 
-This is the smallest boundary that applies the transcript's most valuable recommendation: build and test the workflow as a composition of engineers, agents, and deterministic code before scaling its compute or autonomy.
+This is the smallest boundary that scales the proven workflow by economics and risk without confusing more agents with more reliability.

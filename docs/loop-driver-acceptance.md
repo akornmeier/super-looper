@@ -79,7 +79,7 @@ predicate. Sign-off uses the faithful run.
 `--plan-file` puts the driver into **plan-input mode**: instead of inlining a seed
 task, it names a canonical plan via `plan:<path>`, selects a durable
 `state-path:`, and launches `sl-run` in unattended mode. The committed tests pin
-the prompt route, reject `DONE` without durable completed state, and exercise a
+the prompt route, reject `DONE` without durable review-ready state, and exercise a
 crash -> validated `state:` resume -> green verification sequence.
 
 ### Setup (reproducible)
@@ -106,14 +106,14 @@ prompt that names `plan:<path>` without inlining the plan body.
 
 ### Expected outcome
 
-- The run log shows **no planning phase** and dispatches no more than one worker
+- The run log shows **no planning phase** and dispatches no more than one implementation, repair, or verifier agent
   at a time.
-- Each phase is independently verified after its worker result is recorded.
+- Required command entries run through kernel `run-checks`; a fresh verifier evaluates each phase afterward.
 - An interrupted phase boundary resumes from `state:<path>` without re-running
   the completed phase.
 - The state remains at `/tmp/super-looper/sl-run/<run-id>/run-state.json`, and the
-  terminal run record surfaces its completed gates and terminal reason.
-- `<promise>DONE</promise>` is accepted only with matching durable completed state
+  terminal run record surfaces its completed gates, review-ready state, and review packet.
+- `<promise>DONE</promise>` is accepted only with matching durable `review_ready` state
   and green `--verify-cmd` output.
 - A missing or unreadable `--plan-file` exits `2` in `loop.sh` **before**
   launching the agent. A malformed plan is rejected by `sl-run`; either way

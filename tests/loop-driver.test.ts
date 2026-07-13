@@ -58,17 +58,19 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 head_sha="$(git rev-parse HEAD)"
 mkdir -p "$(dirname "$state_path")"
 if printf '%s\n' "$prompt" | grep -q '^state:'; then
-  status=completed
+  status=review_ready
   phase_status=completed
   unit_status=completed
   verification_status=passed
-  terminal='{"status":"completed","reason":"all phase completion gates passed","ended_at":"2026-07-13T12:00:01.000Z"}'
+  workflow_stage=review-ready
+  review_status=ready
 else
   status=initialized
   phase_status=pending
   unit_status=pending
   verification_status=not_run
-  terminal=null
+  workflow_stage=idle
+  review_status=not-ready
 fi
 cat > "$state_path" <<EOF
 {
@@ -79,16 +81,17 @@ cat > "$state_path" <<EOF
   "git": {"branch":"$branch","base_ref":"$head_sha","head_sha":"$head_sha"},
   "status": "$status",
   "current_phase": null,
+  "workflow": {"schema_version":1,"stage":"$workflow_stage","current_node":null,"max_repair_attempts":1,"repair_attempts":{},"sessions":{},"nodes":[],"review":{"status":"$review_status","packet_path":"$state_path.review.json"}},
   "phases": [{"id":"phase-one","depends_on":[],"status":"$phase_status","units":[{"id":"unit-one","depends_on":[],"status":"$unit_status","worker_id":null,"changed_files":[],"evidence":[],"unresolved":[]}],"verification":{"status":"$verification_status","evidence":[]},"commits":[]}],
   "usage": {"available":false,"by_role":{},"by_phase":{}},
   "learning_candidates": [],
   "strategy_observations": [],
   "started_at": "2026-07-13T12:00:00.000Z",
   "updated_at": "2026-07-13T12:00:01.000Z",
-  "terminal": $terminal
+  "terminal": null
 }
 EOF
-if [ "$status" = completed ]; then printf '<promise>DONE</promise>\n'; exit 0; fi
+if [ "$status" = review_ready ]; then printf '<promise>DONE</promise>\n'; exit 0; fi
 exit 1
 `,
   )
@@ -834,16 +837,16 @@ describe("plan-input mode", () => {
 
     const record = readRecord(logDir)
     expect(record.coordinator).toMatchObject({
-      status: "completed",
+      status: "review_ready",
       completed_gates: ["phase-one"],
-      next_action: "none",
-      terminal_reason: "all phase completion gates passed",
+      next_action: "await-engineer-review",
+      terminal_reason: null,
     })
     expect(fs.existsSync(record.coordinator.state_path)).toBe(true)
     fs.rmSync(path.dirname(record.coordinator.state_path), { recursive: true, force: true })
   })
 
-  test("sl-run refuses DONE without durable completed state", async () => {
+  test("sl-run refuses DONE without durable review-ready state", async () => {
     const target = mkdirInWork("target")
     const plugin = mkdirInWork("plugin")
     gitInit(target, false)

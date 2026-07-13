@@ -101,7 +101,7 @@ Follow `references/plan-contract.md`. Every unit must include:
 - bounded scope and repo-relative files or area;
 - explicit dependencies and non-goals;
 - observable acceptance criteria;
-- verification commands or inspection evidence.
+- one argv-compatible verification command per list item, without shell operators, or semantic evidence prefixed with `Inspect `.
 
 For feature-bearing units, name concrete test files and scenarios covering relevant happy, boundary, failure, permission, and integration paths. Blank or missing test scenarios make the plan incomplete. When no automated test is justified, write `Test expectation: none -- <reason>` and provide another verification method.
 

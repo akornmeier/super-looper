@@ -1,13 +1,15 @@
 ---
 name: sl-plan
 description: "Create an executable phased plan for a multi-step task. Uses the parent frontier model for planning, grounds once in repository strategy and evidence, and delegates only when an important uncertainty cannot be resolved locally. Produces canonical Markdown by default and preserves explicit HTML output for Claude Code compatibility."
+argument-hint: "[task, requirements path, or existing plan path] [output:md|output:html] [mode:interactive|mode:headless]"
+allowed-tools: Bash(python3 *generate-plan-images.py*), Bash(python3 *wire-plan-references.py*)
 ---
 
 # Frontier planner
 
 Turn the request into one durable, dependency-ordered execution plan. The parent model is the planner. Do not implement the work, run a planning fleet, or delegate synthesis.
 
-**Runtime adapter:** this Codex package uses `references/runtime-codex.md`. Read it only when a question, scout, critic, or optional renderer needs host mechanics.
+**Runtime adapter:** this Claude Code package uses `references/runtime-claude.md`. Read it only when a question, scout, critic, or optional renderer needs host mechanics.
 
 ## Invariants
 
@@ -99,7 +101,7 @@ Follow `references/plan-contract.md`. Every unit must include:
 - bounded scope and repo-relative files or area;
 - explicit dependencies and non-goals;
 - observable acceptance criteria;
-- verification commands or inspection evidence.
+- one argv-compatible verification command per list item, without shell operators, or semantic evidence prefixed with `Inspect `.
 
 For feature-bearing units, name concrete test files and scenarios covering relevant happy, boundary, failure, permission, and integration paths. Blank or missing test scenarios make the plan incomplete. When no automated test is justified, write `Test expectation: none -- <reason>` and provide another verification method.
 

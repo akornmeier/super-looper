@@ -73,6 +73,8 @@ Use this structure. Omit optional narrative sections when they add no decision v
 - `<repo-relative path>` - <why it matters>
 ```
 
+Each executable `Verification` item must be one argument-vector-compatible command. Put commands in separate list items; do not use pipes, redirects, `&&`, `;`, command substitution, environment-assignment prefixes, or shell `-c`. Prefix non-command evidence with `Inspect ` so `sl-run` routes it to the independent verifier instead of trying to execute it.
+
 ## Mapping to the machine schema
 
 | Markdown field | Structured field |

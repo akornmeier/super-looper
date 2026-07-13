@@ -60,8 +60,8 @@ readonly LOOP_PROMPT_PREFIX='Run the lfg workflow to completion on the task belo
 # the same inline-instruction
 # style as LOOP_PROMPT_PREFIX (not a `/lfg` slash command) per the same
 # execution-time-unknown pinned by the acceptance smoke.
-readonly LOOP_PLAN_PROMPT_PREFIX='Use the sl-run workflow to execute the canonical plan named below in unattended mode; do not re-plan. Initialize or resume only through sl-run state, use one implementation worker at a time, independently verify every phase, and output <promise>DONE</promise> only after durable terminal completed state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. Plan to execute:'
-readonly LOOP_PLAN_RESUME_PROMPT_PREFIX='Use the sl-run workflow to resume the durable state named below in unattended mode. Validate it before implementation activity, never repeat completed gates or blindly redispatch an in-progress unit, and output <promise>DONE</promise> only after durable terminal completed state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. State to resume:'
+readonly LOOP_PLAN_PROMPT_PREFIX='Use the sl-run workflow to execute the canonical plan named below in unattended mode; do not re-plan. Initialize with the code-owned kernel, use one implementation or repair agent at a time, run required checks through the kernel, use an independent verifier, and output <promise>DONE</promise> only after durable review_ready state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. Plan to execute:'
+readonly LOOP_PLAN_RESUME_PROMPT_PREFIX='Use the sl-run workflow to resume the durable state named below in unattended mode. Validate it before implementation activity, never repeat completed nodes or blindly redispatch an in-progress agent, and output <promise>DONE</promise> only after durable review_ready state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. State to resume:'
 readonly LOOP_LEGACY_PLAN_PROMPT_PREFIX='Run the lfg workflow to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. lfg implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'
 
 # --- Defaults -----------------------------------------------------------------
@@ -395,8 +395,12 @@ emit_record() {
           current_unit: ($unit.id // null),
           completed_gates: [.phases[] | select(.status == "completed") | .id],
           next_action: (
-            if (.status == "completed" or .status == "failed" or .status == "cancelled") then "none"
+            if .status == "review_ready" then "await-engineer-review"
+            elif (.status == "completed" or .status == "failed" or .status == "cancelled") then "none"
             elif .status == "blocked" then "resolve-blocker"
+            elif .workflow.stage == "checking" then "run-checks"
+            elif (.workflow.stage == "awaiting-worker" or .workflow.stage == "awaiting-repair") then "reconcile-in-progress-agent"
+            elif .workflow.stage == "awaiting-verifier" then "reconcile-in-progress-verifier"
             elif $unit != null then "reconcile-in-progress-unit"
             elif ($phase != null and ([$phase.units[].status] | all(. == "completed"))) then "verify-phase"
             else "start-next" end
@@ -617,7 +621,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   fi
   echo "[dry-run] verify-mode: $VERIFY_MODE"
   if [ "$VERIFY_MODE" = "github" ] && [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
-    echo "[dry-run] WARNING: sl-run U5 does not deliver a PR; a real run requires --verify-cmd (exit $EX_NO_VERIFY)."
+    echo "[dry-run] WARNING: sl-run U6 stops at review-ready and does not deliver a PR; a real run requires --verify-cmd (exit $EX_NO_VERIFY)."
   elif [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
     echo "[dry-run] WARNING: github verify-mode but target has no git remote — a real run would fail fast (exit $EX_NO_VERIFY)."
   fi
@@ -649,7 +653,7 @@ fi
 # --- Fail fast when there is no verification path -----------------------------
 if [ "$VERIFY_MODE" = "github" ] && [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
   emit_record "$EX_NO_VERIFY" || true
-  fail "$EX_NO_VERIFY" "sl-run U5 stops before delivery, so plan mode requires an explicit target --verify-cmd."
+  fail "$EX_NO_VERIFY" "sl-run U6 stops at review-ready before delivery, so plan mode requires an explicit target --verify-cmd."
 fi
 if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
   emit_record "$EX_NO_VERIFY" || true
@@ -716,7 +720,7 @@ validate_progress_file() {
     "$JQ_BIN" -e '
       (.schema_version == 1)
       and (.run_id | type == "string")
-      and (.status == "initialized" or .status == "running" or .status == "blocked" or .status == "completed" or .status == "failed" or .status == "cancelled")
+      and (.status == "initialized" or .status == "running" or .status == "blocked" or .status == "review_ready" or .status == "completed" or .status == "failed" or .status == "cancelled")
       and (.git.branch | type == "string" and (length > 0))
       and (.git.base_ref | type == "string" and (length > 0))
       and (.git.head_sha | type == "string" and (length > 0))
@@ -795,8 +799,10 @@ sl_run_completed() {
   command -v "$JQ_BIN" >/dev/null 2>&1 || return 1
   "$JQ_BIN" -e --arg run_id "$RUN_ID" '
     .run_id == $run_id
-    and .status == "completed"
-    and .terminal.status == "completed"
+    and (
+      (.status == "review_ready" and .workflow.stage == "review-ready" and .workflow.review.status == "ready" and .terminal == null)
+      or (.status == "completed" and .terminal.status == "completed")
+    )
     and ([.phases[].status] | all(. == "completed"))
   ' "$PROGRESS_FILE" >/dev/null 2>&1
 }
@@ -1015,7 +1021,7 @@ resume:$PROGRESS_FILE"
 
   if detect_done "$attempt_log"; then
     if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ] && ! sl_run_completed; then
-      log "attempt $attempt emitted DONE without durable completed sl-run state — refusing the routing signal"
+      log "attempt $attempt emitted DONE without durable review-ready sl-run state — refusing the routing signal"
     else
       log "attempt $attempt reached DONE"
       done_reached=1
@@ -1053,10 +1059,10 @@ resume:$PROGRESS_FILE"
   if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
     if detect_goal_drift_now; then exit_goal_drift; fi
     coordinator_status="$(sl_run_status)"
-    if [ "$coordinator_status" = "completed" ] && sl_run_completed; then
-      log "attempt $attempt: reconciled durable completed sl-run state after process exit"
+    if { [ "$coordinator_status" = "review_ready" ] || [ "$coordinator_status" = "completed" ]; } && sl_run_completed; then
+      log "attempt $attempt: reconciled durable finished sl-run state after process exit"
       done_reached=1
-      attempt_results+=("state-completed-reconciled")
+      attempt_results+=("state-finished-reconciled")
       break
     fi
     case "$coordinator_status" in

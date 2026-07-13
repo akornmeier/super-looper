@@ -24,6 +24,7 @@ The run passes only when every context item is `correct`.
 | scout-is-single-bounded-and-evidence-only | More than one worker runs; the scout receives the full session; the scout proposes/writes the plan; or unsupported claims are treated as facts. |
 | critic-runs-only-for-material-risk | The migration skips independent criticism; the critic rewrites the plan; findings are integrated without evidence; or a merely large refactor automatically triggers review. |
 | html-preserved-but-images-separately-opt-in | HTML is free-formed, a Markdown sibling is also written, images run without `images:on`, revision overwrites tracked state, or pipeline emits HTML. |
+| verification-is-kernel-compatible | Commands are combined with shell control syntax; inspection lacks the literal `Inspect ` prefix; or the response implies the kernel executes semantic inspection as a program. |
 
 ## Aggregate gate
 

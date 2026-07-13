@@ -4,61 +4,71 @@ import path from "node:path"
 const ROOT = path.join(process.cwd(), "plugins/super-looper/skills/sl-run")
 const SKILL = await Bun.file(path.join(ROOT, "SKILL.md")).text()
 const ENGINE = await Bun.file(path.join(ROOT, "references/state-engine.md")).text()
-const WORKER = await Bun.file(path.join(ROOT, "references/worker-contract.md")).text()
+const AGENT = await Bun.file(path.join(ROOT, "references/agent-contract.md")).text()
+const VERIFIER = await Bun.file(path.join(ROOT, "references/verifier-contract.md")).text()
 const EVALS = JSON.parse(await Bun.file(path.join(ROOT, "evals/evals.json")).text())
 
-describe("sl-run U5 coordinator contract", () => {
-  test("keeps execution serial and context bounded", () => {
-    expect(SKILL).toContain("Dispatch at most one implementation worker at a time")
-    expect(SKILL).toContain("complete phase packet, and nothing broader")
-    expect(SKILL).toContain("Do not send the full plan")
-    expect(SKILL).not.toContain("parallel workers")
+describe("sl-run U6 code-owned workflow contract", () => {
+  test("makes the kernel the serial transition authority", () => {
+    expect(SKILL).toContain("bundled kernel selects every transition")
+    expect(SKILL).toContain("Make the kernel the only run-state writer")
+    expect(SKILL).toContain("Keep execution serial in U6")
+    expect(SKILL).toContain("Perform only the `next_action` it emits")
   })
 
-  test("separates worker completion from independent phase verification", () => {
-    expect(SKILL).toContain("A worker's completed result is not a phase pass")
-    expect(SKILL).toContain("Run the phase's verification commands from the coordinator")
-    expect(SKILL).toContain("verify-phase --status passed")
+  test("runs required checks outside agent nodes", () => {
+    expect(SKILL).toContain("only through kernel `run-checks`")
+    expect(SKILL).toContain("do not run the plan commands yourself")
+    expect(ENGINE).toContain("converts plan command entries to argument vectors")
+    expect(ENGINE).toContain("rejects shell control flow and shell `-c`")
+    expect(AGENT).not.toContain('"verification"')
   })
 
-  test("resumes without blind redispatch and stops on goal drift", () => {
-    expect(SKILL).toContain("reconcile-in-progress-unit")
-    expect(SKILL).toContain("do not redispatch it")
-    expect(SKILL).toContain("exit `8` is terminal goal drift")
-    expect(ENGINE).toContain("never repeats completed work")
+  test("routes repair through honest session capabilities", () => {
+    expect(SKILL).toContain("Resume the responsible agent only when")
+    expect(SKILL).toContain("dispatch a fresh repair agent")
+    expect(AGENT).toContain('"session"')
+    expect(AGENT).toContain("Never invent a resumable handle")
   })
 
-  test("keeps U6 and U7 behavior outside the U5 boundary", () => {
+  test("keeps semantic verification independent and stops review-ready", () => {
+    expect(SKILL).toContain("Use a fresh independent verifier")
+    expect(SKILL).toContain("An implementation or repair agent cannot certify its own phase")
+    expect(SKILL).toContain("durable `review_ready` state")
     expect(SKILL).toContain("Do not commit, push, create a pull request")
-    expect(SKILL).toContain("Parallel or multi-worker phase teams")
-    expect(SKILL).toContain("not available in this version")
+    expect(VERIFIER).toContain('"repair_unit_id"')
   })
 
-  test("defines a strict portable worker result", () => {
+  test("defines strict implementation and verifier results", () => {
     for (const field of [
       "schema_version",
       "run_id",
       "phase_id",
       "unit_id",
+      "role",
       "status",
+      "session",
       "changed_files",
       "evidence",
-      "verification",
       "risks",
       "unresolved",
     ]) {
-      expect(WORKER).toContain(`"${field}"`)
+      expect(AGENT).toContain(`"${field}"`)
     }
-    expect(WORKER).toContain("inside `owned_scope`")
+    for (const field of ["schema_version", "run_id", "phase_id", "role", "status", "evidence", "findings", "repair_unit_id"]) {
+      expect(VERIFIER).toContain(`"${field}"`)
+    }
   })
 
-  test("carries focused behavioral evals for the U5 safety cases", () => {
+  test("carries behavioral evals for U6 boundaries", () => {
     expect(EVALS.evals.map((entry: any) => entry.name)).toEqual([
-      "serial-two-phase-completion",
+      "serial-review-ready",
+      "code-check-same-session-repair",
+      "non-resumable-repair-fallback",
+      "unsafe-command-refusal",
       "phase-boundary-resume",
-      "mid-unit-interruption",
+      "in-progress-agent-reconciliation",
       "goal-drift-refusal",
-      "worker-claim-is-not-phase-pass",
     ])
   })
 })

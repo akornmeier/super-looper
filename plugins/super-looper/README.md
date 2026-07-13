@@ -24,13 +24,13 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 | 1 | `/sl-ideate` | Pick the highest-leverage next slice — ranks grounded ideas against strategy and past learnings. Optional once direction is clear. |
 | 2 | `/sl-brainstorm` | Explore the chosen idea into a requirements doc (the *what*: scope, success criteria, boundaries). |
 | 3 | `/sl-plan` | Turn requirements into an implementation plan (the *how*: dependency-ordered units, test scenarios). |
-| 4 | `/sl-run` | Execute and resume the plan through durable, independently verified phases. |
+| 4 | `/sl-run` | Execute and resume the plan through a serial code-owned workflow that stops review-ready. |
 | 5 | `/sl-compound` | Capture the learning from anything non-trivial you solved. Read back automatically by ideate, plan, and review on later passes. |
 
-**Step 4 has two policies over the same state machine**
+**Step 4 has two policies over the same workflow kernel**
 
-- **Interactive:** `/sl-run plan:<path>` advances one bounded work unit at a time and asks only when recovery or new authority is required.
-- **Unattended:** `scripts/loop.sh --plan-file <path> --verify-cmd ...` supervises the same coordinator with timeout, retry, goal-drift, and terminal-record guards. U5 stops after implementation and independent phase verification; delivery and learning remain explicit until their closeout phase lands.
+- **Interactive:** `/sl-run plan:<path>` advances one bounded agent node at a time, runs required checks directly in code, and asks only when recovery or new authority is required.
+- **Unattended:** `scripts/loop.sh --plan-file <path> --verify-cmd ...` supervises the same kernel with timeout, retry, goal-drift, and terminal-record guards. U6 stops at `review_ready` after deterministic checks and an independent verifier; delivery and learning remain explicit until their closeout phase lands.
 
 The existing `/sl-work` and `/lfg` workflows remain available during migration. `loop-phases.sh` deliberately uses `loop.sh --legacy-lfg-plan` to preserve its stacked-PR behavior.
 
@@ -57,7 +57,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-ideate`](../../docs/skills/sl-ideate.md) | Optional big-picture ideation: generate and critically evaluate grounded ideas, then route the strongest one into brainstorming. Writes the ranked ideation artifact as a single self-contained HTML file by default (human-facing); pass `output:md` for markdown (exclusive — html OR md, never both) |
 | [`/sl-brainstorm`](../../docs/skills/sl-brainstorm.md) | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning. Pass `output:html` to write the doc as a single self-contained HTML file instead of markdown (exclusive — md OR html, never both) |
 | [`/sl-plan`](../../docs/skills/sl-plan.md) | Use the parent frontier model to create a grounded, dependency-ordered execution plan with zero default subagents. Markdown is canonical; `output:html` preserves the optional self-contained renderer, while paid images require a separate explicit `images:on` request |
-| [`/sl-run`](../../docs/skills/sl-run.md) | Execute or resume a canonical plan through serial bounded work packets, atomic durable state, immutable-goal checks, and independent phase gates on Claude Code or Codex |
+| [`/sl-run`](../../docs/skills/sl-run.md) | Execute or resume a canonical plan through a serial code-owned kernel, bounded implementation agents, deterministic checks, repair routing, atomic state, and independent verification on Claude Code or Codex |
 | [`/sl-code-review`](../../docs/skills/sl-code-review.md) | Structured code review with tiered persona agents, confidence gating, and dedup pipeline |
 | [`/sl-work`](../../docs/skills/sl-work.md) | Execute work items systematically. Interactive runs keep an HTML plan's status markers current; unattended and parallel runs never write to the plan |
 | [`/sl-debug`](../../docs/skills/sl-debug.md) | Systematically find root causes and fix bugs -- traces causal chains, forms testable hypotheses, and implements test-first fixes |

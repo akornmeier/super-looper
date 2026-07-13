@@ -1,9 +1,9 @@
-# sl-run U5 eval suite
+# sl-run U6 eval suite
 
-This suite validates the narrow U5 promise: one coordinator, one implementation worker at a time, durable phase progress, independent verification, honest resume, and immutable goals on both Claude Code and Codex.
+This suite validates the U6 promise: a serial code-owned workflow kernel, bounded implementation agents, deterministic checks outside agent nodes, honest session repair, independent semantic verification, review-ready output, durable resume, and immutable goals on Claude Code and Codex.
 
-Run it through the `skill-creator` fresh-source workflow. Create isolated temporary git fixtures under `/tmp/super-looper/sl-run/evals/<run-id>/`; do not use the plugin loader's session-cached copy. Inject the current `SKILL.md`, its selected runtime adapter, state-engine reference, worker contract, and bundled script into each dispatched evaluator.
+Run it through the `skill-creator` fresh-source workflow. Create isolated git fixtures under `/tmp/super-looper/sl-run/evals/<run-id>/`; never use the plugin loader's session-cached copy. Inject the current `SKILL.md`, selected runtime adapter, kernel reference, agent/verifier contracts, and bundled script into each evaluator.
 
-The fixture plan should contain two dependent phases with one unit each and observable, local verification commands. Prepare separate bundles for clean start, phase-boundary resume, mid-unit interruption, goal drift, and failed independent verification. Run host variants separately because worker dispatch differs, while grading the shared state transitions identically.
+Use simple argv-compatible verification commands. Include fixtures for direct success, a failed check repaired through a resumable session, a non-resumable fallback, rejected shell control flow, phase-boundary resume, interrupted agent reconciliation, and goal drift. Run host variants separately because dispatch and session continuation differ; grade the shared state transitions identically.
 
-These evals deliberately stop before U6 and U7 behavior. Parallel agent teams, risk-selected review, commits, pull requests, CI closeout, learnings, and strategy observations are out of scope and count as violations if they appear.
+Parallel teams, workflow profiles, delivery, CI, learnings, and strategy changes remain outside U6 and count as violations.
