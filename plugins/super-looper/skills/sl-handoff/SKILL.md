@@ -1,40 +1,28 @@
 ---
 name: sl-handoff
-description: "Compact the current session into a clean handoff document a fresh agent can pick up, referencing existing artifacts (plan, brainstorm, ADRs) by path instead of duplicating them. Use at a planning-to-implementation seam — after a plan is written, before starting an unattended work loop — to carry the planning-dialogue context (rationale, rejected alternatives, resolved questions, gotchas) that the plan doc alone omits across a fresh process."
-argument-hint: "[what the next session will focus on]"
+description: "Create a compact cross-session handoff for research, debugging, design, or other non-run work whose important context is not already durable. Do not use for sl-run work: its state path and review packet are the handoff."
+argument-hint: "[what the next non-run session will focus on]"
 ---
 
-# Session Handoff
+# Non-run session handoff
 
-Write a handoff document that lets a fresh agent continue this work without inheriting the current conversation. The handoff is produced at the seam between planning and implementation, then carried into a clean run (for example, `loop.sh --handoff-file`).
+Use this compatibility skill only when a fresh session needs context that no durable workflow artifact already carries.
 
-## What the handoff is for
+## First gate: an active run needs no handoff
 
-A plan is a decision artifact: it records *what* to build and the decisions reached, not the dialogue that produced them. A fresh process — a `loop.sh` run launches `claude -p` with no prior session — has the plan but none of the conversation. The handoff carries only what the plan omits and the next agent would otherwise have to re-derive.
+If the work has an `sl-run` state path, review packet, or closeout packet, do not create `handoff.md`. Surface the absolute state path, current compact status, and next action instead. A fresh session resumes with `/sl-run state:<absolute-path>`; copying run context into another document creates competing state.
 
-If the plan is fully self-sufficient, the handoff is legitimately thin. Do not pad it by restating the plan — keep it to the delta.
+Likewise, a canonical plan does not need a planning-to-run handoff. Start or resume `/sl-run` with the plan or state path. Use this skill only for non-run transitions such as research -> implementation planning, debugging -> repair planning, design exploration -> planning, or an interrupted manual session with essential conversation-only decisions.
 
-## Steps
+## Write the handoff
 
-1. **Resolve the focus.** If an argument was passed, treat it as what the next session will do first and tailor the handoff to it. Otherwise infer the next step from the session (commonly: execute the plan).
+1. Resolve the next session's focus from the argument or current non-run work.
+2. Create one throwaway directory with `mktemp -d -t handoff-XXXXXX`; write `handoff.md` there. Never place it in the repository.
+3. Keep the document to the delta over durable artifacts:
+   - one-line current state and first next action;
+   - artifact paths, branch, commits, issue, or PR by reference rather than copied content;
+   - conversation-only decisions, rejected alternatives, resolved questions, and gotchas;
+   - the direct next command, normally `/sl-plan` for code work that is not planned yet, or the relevant standalone debug, design, review, testing, or Git utility.
+4. Output the absolute path. Do not start another session or workflow from this skill.
 
-2. **Create a per-run temp location.** Run a single command to make a throwaway directory, then write `handoff.md` inside it with the Write tool:
-
-   ```bash
-   mktemp -d -t handoff-XXXXXX
-   ```
-
-   Use the per-run-throwaway form (OS temp, opaque path) — the handoff is consumed once by the next run and discarded. Do not write it into the repo.
-
-3. **Write `handoff.md`.** Keep it to the delta over the durable artifacts:
-   - **One-line state** — where the work stands and what the next session should do first (shaped by the focus).
-   - **Artifacts by reference, not copy** — the plan, brainstorm/requirements doc, relevant ADRs, branch, and any open PR or commits, each named by path or URL. Do not duplicate their content.
-   - **Session-only context** — the things said in this conversation that are *not* in those artifacts: decisions and the reasoning behind them, alternatives considered and why they were rejected, open questions resolved during dialogue, and gotchas or discoveries the next agent would otherwise hit cold.
-   - **Recommended next skill** — name `lfg` and how it consumes the plan (the plan path drives `lfg`'s plan-input branch). Suggest other skills only if the next step is not implementation.
-
-4. **Surface the path.** Output the absolute path to `handoff.md` so the caller can hand it onward (e.g., as `loop.sh --handoff-file <path>`). Do not start the next session from here — producing the handoff and naming the path is the whole job.
-
-## Constraints
-
-- Reference artifacts by path; never duplicate content already captured in a plan, brainstorm, ADR, issue, commit, or diff.
-- The handoff is descriptive, not a re-plan. It orients a fresh agent; it does not re-decide what the plan settled.
+Never duplicate a plan, strategy, ADR, issue, diff, run packet, or existing handoff. This document is descriptive context, not a new plan or mutable run state.

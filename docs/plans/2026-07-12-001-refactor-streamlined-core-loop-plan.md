@@ -32,12 +32,12 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 - [x] U6: extract the code-owned workflow kernel and deterministic validation graph (`docs/evals/sl-run-u6-report.md`)
 - [x] U7: add risk-routed workflow profiles and bounded isolation (`docs/evals/sl-run-u7-report.md`)
 - [x] U8: add engineer review, delivery, learning, and strategy closeout (`docs/evals/sl-run-u8-report.md`)
-- [ ] U9: migrate callers and reduce the public surface
+- [x] U9: migrate callers and reduce the public surface (`docs/evals/sl-run-u9-report.md`)
 - [ ] U10: two-host evaluation and promotion
 
 ## Continuation Checkpoint
 
-Work stopped cleanly at the U8/U9 boundary on branch `plan/streamline-super-looper`. U1-U8 are complete and validated. U8 added complete engineer review packets; explicit approve, reject, and named-repair decisions; exact-authority code-owned commit/PR delivery; typed CI observation and bounded repair; evidence-gated learning with a valid `no-learning` outcome; code-owned delivery and CI for written learnings; separate strategy proposal artifacts; and terminal run records. See `docs/evals/sl-run-u8-report.md`. No U9 migration or public-surface reduction has started.
+Work stopped cleanly at the U9/U10 boundary on branch `plan/streamline-super-looper`. U1-U9 are complete and validated. U9 made `sl-strategy -> sl-plan -> sl-run` the documented path on both hosts; reduced `lfg` and `sl-work` to short compatibility adapters; isolated their retired Claude-only workflows behind explicit legacy modes; narrowed `sl-handoff` to non-run transitions; migrated primary callers; and added fresh-source behavioral and repository contract coverage. See `docs/evals/sl-run-u9-report.md`. No U10 comparison, promotion, or compatibility deletion has started.
 
 The continuation strategy remains the three-actor model described in the supplied Dan Eisler transcript:
 
@@ -45,7 +45,7 @@ The continuation strategy remains the three-actor model described in the supplie
 - **Deterministic code** owns routing, state, conditions, validation commands, budgets, isolation policy, and audit records.
 - **Agents** perform bounded discovery, planning, implementation, repair, and semantic verification where judgment is actually required.
 
-The next slice is U9 only: migrate primary callers to `sl-strategy -> sl-plan -> sl-run`, reduce the documented public surface, and keep compatibility wrappers explicit. Do not begin U10 promotion in the same slice. This checkpoint is the durable resume note for the next implementation session.
+The next slice is U10 only, after explicit continuation: compare both hosts and every workflow profile against the established baselines, then promote only what earns the plan's evidence gates. Keep compatibility components until that evaluation supports a separately approved removal. This checkpoint is the durable resume note for the next implementation session.
 
 ---
 
@@ -1008,17 +1008,15 @@ This is a product-architecture change across the plugin, not a local skill refac
 
 ## Recommended Next Slice
 
-Resume at U9 only: make the three-command code-first workflow the documented default while preserving explicit compatibility routes. Do not start U10 promotion or delete compatibility components in the same slice.
+Resume at U10 only after explicit continuation: validate, compare, and promote behind evidence. Do not delete compatibility components as part of an unproven promotion.
 
 That PR should produce:
 
-- `lfg` as a short unattended compatibility wrapper over `sl-run`.
-- `sl-work` as an interactive compatibility wrapper over `sl-run`.
-- A narrowed `sl-handoff` purpose for genuinely cross-session, non-run handoffs.
-- README onboarding centered on `sl-strategy -> sl-plan -> sl-run` and the four workflow profiles.
-- Internal callers migrated away from demoted fixed agent names and full-skill pipeline handoffs.
-- Direct replacement guidance wherever a compatibility surface is deprecated.
-- Cross-host contract and fresh-source behavioral coverage for the wrapper routes.
-- No component deletion or U10 promotion.
+- Same-fixture comparisons for chore, bug, feature, hotfix, resume, repair, and host-gap paths.
+- Per-profile quality floors and efficiency evidence for Claude Code and Codex.
+- Independent failure injection for agent and deterministic-command nodes.
+- Fresh-session installed-plugin validation in addition to fresh-source skill evaluation.
+- A tracked two-host comparison report and release validation.
+- Promotion only for profiles that pass every hard gate; compatibility remains for the rest.
 
-This is the smallest boundary that changes the product's primary path without conflating compatibility migration with evidence-based promotion or deletion.
+This keeps evidence-based promotion separate from the completed public-surface migration and from any later deletion decision.

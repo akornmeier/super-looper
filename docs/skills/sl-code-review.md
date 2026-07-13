@@ -4,7 +4,7 @@
 
 `sl-code-review` is the **deep code review** skill. It analyzes the diff (PR, branch, or current changes), selects the right reviewer personas for what was actually touched, dispatches them in parallel, then merges and deduplicates their findings into a single report. Each finding carries a severity (P0-P3), an autofix class (`gated_auto`, `manual`, `advisory`) that signals follow-up shape, and an owner. In interactive mode the review applies the safe, verified fixes itself and commits them when the working tree is clean (it never pushes); in `mode:agent` it reports and the caller applies.
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-code-review` is `/sl-work`'s **Tier 2 escalation** target — invoked automatically for sensitive surfaces, large diffs, or explicit deep-review requests, but also directly invocable any time you want a structured review of the current branch or a specific PR.
+`sl-code-review` remains a standalone structured review for a branch or PR. The primary `/sl-run` workflow uses risk-sized verifier lenses and its engineer review packet rather than dispatching this fixed reviewer fleet as a workflow node.
 
 ---
 

@@ -7,7 +7,9 @@ async function readRepoFile(relativePath: string): Promise<string> {
 }
 
 const SL_DEBUG = "plugins/super-looper/skills/sl-debug/SKILL.md"
-const LFG = "plugins/super-looper/skills/lfg/SKILL.md"
+// U9 keeps the retired CI supervisor available only behind the explicit
+// mode:legacy-pipeline compatibility route.
+const LFG_LEGACY = "plugins/super-looper/skills/lfg/references/legacy-pipeline.md"
 
 // Guarded slice: asserts BOTH markers are present so a renamed/removed marker fails
 // loudly instead of silently over-slicing (a slice that passes on the wrong content).
@@ -119,7 +121,7 @@ function rungRegion(lfg: string): string {
 
 describe("lfg debug-escalation rung (U2)", () => {
   test("AE1: rung invokes sl-debug with the non-interactive mode token, after the 3-attempt GATE", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const step9 = step9Region(lfg)
 
     expect(step9).toContain("**Debug-escalation rung**")
@@ -136,7 +138,7 @@ describe("lfg debug-escalation rung (U2)", () => {
   })
 
   test("AE2 / R6: the floor is preserved after the escalation and enriched with debug findings on red", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const step9 = step9Region(lfg)
 
     // Floor marker still exists and is reachable after the rung (not replaced by it)
@@ -151,7 +153,7 @@ describe("lfg debug-escalation rung (U2)", () => {
   })
 
   test("AE3 / R2: the flaky-no-fix-path disposition routes to the floor without invoking the rung", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const step9 = step9Region(lfg)
 
     expect(step9).toContain("Flaky-no-fix-path disposition recorded")
@@ -163,13 +165,13 @@ describe("lfg debug-escalation rung (U2)", () => {
   })
 
   test("the rung restates the no-weaken/skip/mock prohibition for the unattended pass", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const rung = rungRegion(lfg)
     expect(rung).toContain("do NOT weaken, skip, or mock the failing assertion to make it pass")
   })
 
   test("AE4 / R4: the rung re-checks CI once and contains no return-to-iteration edge", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const rung = rungRegion(lfg)
 
     expect(rung).toContain("not a loop")
@@ -181,7 +183,7 @@ describe("lfg debug-escalation rung (U2)", () => {
   })
 
   test("R5: the green-after-escalation path joins break-to-step-10 without composing the floor marker", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const rung = rungRegion(lfg)
 
     expect(rung).toContain("break out of the loop and proceed to step 10")
@@ -192,7 +194,7 @@ describe("lfg debug-escalation rung (U2)", () => {
   })
 
   test("the rung's no-change branch falls through to the floor (detected via git status --porcelain)", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
     const rung = rungRegion(lfg)
 
     expect(rung).toContain("git status --porcelain")
@@ -203,7 +205,7 @@ describe("lfg debug-escalation rung (U2)", () => {
   })
 
   test("step ordering preserved — no renumbering of steps 10 and 11", async () => {
-    const lfg = await readRepoFile(LFG)
+    const lfg = await readRepoFile(LFG_LEGACY)
 
     expect(lfg.indexOf("**CI watch and autofix loop**")).toBeLessThan(
       lfg.indexOf("**Debug-escalation rung**"),

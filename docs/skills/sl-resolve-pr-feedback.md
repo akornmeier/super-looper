@@ -4,7 +4,7 @@
 
 `sl-resolve-pr-feedback` is the **incoming-feedback resolution** skill. After your PR gets review comments, this skill fetches all unresolved threads, classifies them as new vs already-handled, dispatches parallel agents to validate each finding and fix what's genuinely correct (or reply with reasoning), commits and pushes, then posts replies and resolves threads via GitHub's GraphQL API. It judges every item on its merits — regardless of source (human or bot) or form (inline thread, formal review body, or top-level comment) — and defaults to fixing, diverting only when reading the code trips a concrete signal (the finding's wrong, the fix would harm, it buys nothing, or the risk can't be bounded).
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-resolve-pr-feedback` is the **post-PR feedback loop** — invoked after reviewers leave comments, complementary to `/sl-code-review` (which reviews *before* the PR is open) and `/sl-debug` (which investigates broken behavior, not review feedback).
+`sl-resolve-pr-feedback` is the standalone post-PR feedback loop, complementary to `/sl-code-review` and `/sl-debug`. It remains available after a `/sl-run` delivery without becoming a core workflow node.
 
 ---
 

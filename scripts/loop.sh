@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 #
-# loop.sh — unattended process supervisor for lfg and sl-run.
+# loop.sh — unattended process supervisor for sl-run and compatibility lfg.
 #
-# Plan input launches the streamlined `sl-run` coordinator. Seed input retains
-# the legacy `lfg` pipeline during migration. The shell owns only process
+# Plan input launches `sl-run` directly. Seed input uses the thin `lfg` adapter
+# to plan once and launch the same coordinator. The shell owns only process
 # supervision: isolation, permission containment, timeout/retry caps, durable
 # state routing, goal hashes, terminal records, and independent target checks.
 #
-# DONE is a ROUTING signal, never a success signal: lfg emits DONE even when it
-# gives up on red CI (its "CI Failures Unresolved" path). Success therefore
-# requires DONE *and* an independent, target-scoped green verification.
+# DONE is a ROUTING signal, never a success signal. Success requires DONE and
+# independent target verification; direct plan mode also checks durable state.
 #
 # This driver never runs this repo's own gate scripts (solutions / plugin /
 # release validators) against the target — those validate *this* repo and would
@@ -51,18 +50,18 @@ JQ_BIN="${LOOP_JQ_BIN:-jq}"
 # exact trigger form (this inline instruction vs. a `/lfg` slash command) is the
 # execution-time unknown the U2 smoke pins; keep it here and mirrored in
 # scripts/loop.example.env so the acceptance and the driver never diverge.
-readonly LOOP_PROMPT_PREFIX='Run the lfg workflow to completion on the task below, fully unattended. lfg plans, implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Task:'
+readonly LOOP_PROMPT_PREFIX='Use the lfg compatibility workflow on the software task below. Plan it once with sl-plan, then execute the returned canonical Markdown plan through sl-run in unattended mode. Stop at durable engineer review_ready unless already-authorized delivery state exists, and output <promise>DONE</promise> only for durable review_ready or completed state. Do not ask questions or infer approval. Task:'
 
 # Plan-input variant: the task is ALREADY planned, so lfg skips planning and
 # executes the supplied plan. The plan is NAMED (not inlined) using the literal
-# `plan:<path>` marker lfg's plan-input branch detects; a relative path resolves
+# `plan:<path>` marker sl-run detects; a relative path resolves
 # against the target (the agent's CWD), an absolute path is used as-is. Built in
 # the same inline-instruction
 # style as LOOP_PROMPT_PREFIX (not a `/lfg` slash command) per the same
 # execution-time-unknown pinned by the acceptance smoke.
 readonly LOOP_PLAN_PROMPT_PREFIX='Use the sl-run workflow to execute the canonical plan named below in unattended mode; do not re-plan. Initialize with the code-owned kernel, use one implementation or repair agent at a time, run required checks through the kernel, use an independent verifier, and output <promise>DONE</promise> only after durable review_ready state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. Plan to execute:'
 readonly LOOP_PLAN_RESUME_PROMPT_PREFIX='Use the sl-run workflow to resume the durable state named below in unattended mode. Validate it before implementation activity, never repeat completed nodes or blindly redispatch an in-progress agent, and output <promise>DONE</promise> only after durable review_ready state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. State to resume:'
-readonly LOOP_LEGACY_PLAN_PROMPT_PREFIX='Run the lfg workflow to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. lfg implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'
+readonly LOOP_LEGACY_PLAN_PROMPT_PREFIX='Run lfg mode:legacy-pipeline to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. This explicit compatibility route implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'
 
 # --- Defaults -----------------------------------------------------------------
 TARGET=""
@@ -91,7 +90,7 @@ Required (pick ONE task source):
   --seed <text>             Seed task (inline), OR
   --seed-file <path>        Seed task read from a file, OR
   --plan-file <path>        Plan doc IN THE TARGET to execute; skips planning and
-                            runs lfg's plan-input branch. Commit the plan in the
+                            runs sl-run directly. Commit the plan in the
                             target so a retry's reset does not delete it.
 
 Options:
@@ -99,7 +98,7 @@ Options:
                             (valid only with --plan-file). One run, one PR, one
                             phase. Normally set by scripts/loop-phases.sh rather
                             than by hand.
-  --handoff-file <path>     Handoff doc carried as orienting context for the run
+  --handoff-file <path>     Non-run handoff carried as orienting context
                             (legacy lfg plan mode only).
   --legacy-lfg-plan         Preserve the old plan -> PR pipeline for compatibility.
                             Valid only with --plan-file; used by loop-phases.sh.
@@ -303,7 +302,7 @@ run-id:$RUN_ID
 mode:unattended"
 else
   PROGRESS_FILE="$LOG_DIR/$RUN_ID.progress.json"
-  # Name legacy progress for lfg. No marker (interactive) means no writes.
+  # Name legacy progress for the explicit lfg pipeline. No marker means no writes.
   PROMPT="$PROMPT
 progress:$PROGRESS_FILE"
 fi
@@ -618,10 +617,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
     if [ -n "$HANDOFF_FILE" ]; then echo "[dry-run] handoff-file: $HANDOFF_FILE"; fi
   else
     echo "[dry-run] mode: seed"
+    echo "[dry-run] workflow: lfg -> sl-plan -> sl-run"
   fi
   echo "[dry-run] verify-mode: $VERIFY_MODE"
   if [ "$VERIFY_MODE" = "github" ] && [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
-    echo "[dry-run] WARNING: sl-run U6 stops at review-ready and does not deliver a PR; a real run requires --verify-cmd (exit $EX_NO_VERIFY)."
+    echo "[dry-run] WARNING: the streamlined unattended workflow stops at review-ready without inferring delivery authority; a real run requires --verify-cmd (exit $EX_NO_VERIFY)."
   elif [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
     echo "[dry-run] WARNING: github verify-mode but target has no git remote — a real run would fail fast (exit $EX_NO_VERIFY)."
   fi
@@ -653,7 +653,7 @@ fi
 # --- Fail fast when there is no verification path -----------------------------
 if [ "$VERIFY_MODE" = "github" ] && [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
   emit_record "$EX_NO_VERIFY" || true
-  fail "$EX_NO_VERIFY" "sl-run U6 stops at review-ready before delivery, so plan mode requires an explicit target --verify-cmd."
+  fail "$EX_NO_VERIFY" "the streamlined unattended workflow stops at review-ready before unapproved delivery, so it requires an explicit target --verify-cmd."
 fi
 if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
   emit_record "$EX_NO_VERIFY" || true
@@ -891,7 +891,7 @@ detect_goal_drift_now() {
     goal_drift_file="$STRATEGY_PATH"
     goal_drift_kind="$(drift_kind_of "$strategy_hash_start" "$strategy_hash_end")"
   elif [ -n "$GUARD_PLAN_PATH" ]; then
-    if [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+    if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
       plan_hash_end="$(hash_file "$GUARD_PLAN_PATH")"
     else
       plan_hash_end="$(hash_plan "$GUARD_PLAN_PATH")"
@@ -980,9 +980,9 @@ while :; do
   fi
 
   # Build this attempt's command. A resuming relaunch (a validated no-PR retry)
-  # appends a resume:<path> marker so lfg re-verifies steps 1..N-1 and continues
-  # at the recorded step; a cold attempt uses the base prompt (the progress:<path>
-  # marker is already in PROMPT for both). Rebuilt per attempt because only the
+  # routes streamlined state directly back to sl-run; the explicit legacy route
+  # appends resume:<path> so the old pipeline re-verifies prior step boundaries.
+  # Rebuilt per attempt because only the
   # prompt differs — env, plugin-dir, model, flags, and wrapper are identical.
   attempt_prompt="$PROMPT"
   if [ "$resume_active" -eq 1 ]; then

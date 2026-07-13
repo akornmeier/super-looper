@@ -1,20 +1,16 @@
 # Loop driver (`scripts/loop.sh`) — operator guide
 
-`loop.sh` is the unattended process supervisor for two migration paths. A
-`--plan-file` launches the streamlined `sl-run` coordinator; a seed retains the
-legacy `lfg` pipeline. The shell owns isolation, headless launch, timeout/retry
+`loop.sh` is the unattended process supervisor for the streamlined workflow and
+one explicit compatibility path. A `--plan-file` launches `sl-run` directly; a
+seed uses the thin `lfg` adapter to plan once and launch the same coordinator.
+The shell owns isolation, headless launch, timeout/retry
 caps, durable-state routing, goal hashes, terminal records, and an independent
 target check. Workflow policy stays in the selected skill.
 
 ## Quick start
 
 ```bash
-# Faithful GitHub-CI run against a throwaway with a remote + Actions:
-GH_TOKEN=<repo-scoped-token> bash scripts/loop.sh \
-  --target /abs/path/to/throwaway \
-  --seed-file "$PWD/examples/loop-seed.md"
-
-# Local proxy (no Actions): verify with the target's own command:
+# Seed -> sl-plan -> sl-run, verified with the target's own command:
 bash scripts/loop.sh \
   --target /abs/path/to/throwaway \
   --seed-file "$PWD/examples/loop-seed.md" \
@@ -54,8 +50,9 @@ command (`--dry-run`) and then runs it. Always preview with `--dry-run` first.
 
 A run executes exactly one task source:
 
-- **Seed** (`--seed` / `--seed-file`) — an inline task. `lfg` plans it first, then
-  implements: plan → work → review → … → green.
+- **Seed** (`--seed` / `--seed-file`) — an inline software task. The `lfg`
+  compatibility wrapper calls `sl-plan`, then passes the returned canonical
+  Markdown plan to `sl-run mode:unattended`. It stops at engineer review.
 - **Plan** (`--plan-file`) — a canonical Markdown plan already written **in the
   target**. The driver names it with `plan:<path>`, gives `sl-run` a deterministic
   state destination and run id, and supervises serial phased execution. On retry,
@@ -69,21 +66,21 @@ silent fallback to planning.
 
 ## Verification modes (one is always required)
 
-- **GitHub-CI mode (legacy default).** When the target has a git remote and no
+- **GitHub-CI mode (explicit legacy default).** When the target has a git remote and no
   `--verify-cmd` is given, success requires an **open PR** for the target branch
   with **green `gh pr checks`**. A PR with **zero checks** is treated as *not*
   green — there is no unverified success. This is the faithful "reach CI-green"
   bar.
 - **Command mode.** `--verify-cmd <cmd...>` runs a local command **in the target
   directory**; success requires it to exit `0`. Use for targets without Actions.
-- **Unattended plan mode requires command mode.** `sl-run` deliberately stops at
+- **Unattended direct plan mode requires command mode.** `sl-run` deliberately stops at
   `review_ready` before
   commit/PR delivery at this boundary, so GitHub-CI verification is unavailable
   until closeout lands. Omitting `--verify-cmd` fails fast with exit 4.
 - **No verification available** (no remote *and* no `--verify-cmd`) → the driver
   **fails fast** (`exit 4`). There is no unverified success path.
 
-`DONE` is a **routing** signal, not a success signal. In `sl-run` plan mode the
+`DONE` is a **routing** signal, not a success signal. In direct `sl-run` plan mode the
 driver additionally requires a matching durable `review_ready` run state before it
 accepts the sentinel. In legacy mode, `lfg` emits
 `<promise>DONE</promise>` in every exit path — including when it gives up on red

@@ -6,109 +6,44 @@ async function readRepoFile(relativePath: string): Promise<string> {
   return readFile(path.join(process.cwd(), relativePath), "utf8")
 }
 
-describe("sl-work review contract", () => {
-  test("requires code review before shipping", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
-    // Review content extracted to references/shipping-workflow.md
-    const shipping = await readRepoFile("plugins/super-looper/skills/sl-work/references/shipping-workflow.md")
-
-    // SKILL.md should not contain extracted content
-    expect(content).not.toContain("3. **Code Review**")
-    expect(content).not.toContain("Consider Code Review")
-    expect(content).not.toContain("Code Review** (Optional)")
-
-    // Phase 3 has a conditional Simplify step at position 2 (sl-simplify-code, gated on >=30 LOC)
-    // and code review at position 3 (Tier 1 when available; Tier 2 on criteria only)
-    expect(shipping).toContain("2. **Simplify**")
-    expect(shipping).toContain("sl-simplify-code")
-    expect(shipping).toContain("3. **Code Review**")
-
-    // Two-tier rubric in reference file: Tier 1 when harness has built-in review,
-    // Tier 2 is sl-code-review (risk-based escalation only — not when Tier 1 missing)
-    expect(shipping).toContain("**Tier 1 -- harness-native review")
-    expect(shipping).toContain("**Tier 2 -- `sl-code-review` (escalation only).**")
-    expect(shipping).toContain("not** because Tier 1 is missing")
-    expect(shipping).toContain("sl-code-review")
-    expect(shipping).toContain("review-findings-followup.md")
-    expect(shipping).toMatch(/review is not fix|2a\. Review|2b\. Apply/i)
-    expect(shipping).toContain("mode:agent")
-
-    // Quality checklist includes review
-    expect(shipping).toContain("Code review: Tier 1 completed, or Tier 2 when escalated")
-  })
-
-  test("delegates commit and PR to dedicated skills", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
-    // Commit/PR delegation content extracted to references/shipping-workflow.md
-    const shipping = await readRepoFile("plugins/super-looper/skills/sl-work/references/shipping-workflow.md")
-
-    expect(shipping).toContain("`sl-commit-push-pr` skill")
-    expect(shipping).toContain("`sl-commit` skill")
-
-    // Should not contain inline PR templates or attribution placeholders
-    expect(content).not.toContain("gh pr create")
-    expect(content).not.toContain("[HARNESS_URL]")
-  })
-
-  test("residual work gate sentinel present in sl-work shipping workflow", async () => {
-    const workShipping = await readRepoFile(
-      "plugins/super-looper/skills/sl-work/references/shipping-workflow.md",
-    )
-
-    expect(workShipping).toContain("Actionable findings: none.")
-  })
-
-  test("includes per-task testing deliberation in execution loop", async () => {
+describe("sl-work compatibility contract (U9)", () => {
+  test("is a short adapter over sl-plan and sl-run", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
 
-    // Testing deliberation exists in the execution loop
-    expect(content).toContain("Assess testing coverage")
-
-    // Deliberation is between "Run tests after changes" and "Mark task as completed"
-    const runTestsIdx = content.indexOf("Run tests after changes")
-    const assessIdx = content.indexOf("Assess testing coverage")
-    const markDoneIdx = content.indexOf("Mark task as completed")
-    expect(runTestsIdx).toBeLessThan(assessIdx)
-    expect(assessIdx).toBeLessThan(markDoneIdx)
+    expect(content.split("\n").length).toBeLessThan(80)
+    expect(content).toContain("`sl-work` is a compatibility wrapper")
+    expect(content).toContain("invoke `sl-plan`")
+    expect(content).toContain("invoke `sl-run`")
+    expect(content).toContain("mode:interactive")
   })
 
-  test("quality checklist says 'Testing addressed' not 'Tests pass'", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
-    // Quality checklist extracted to references/shipping-workflow.md
-    const shipping = await readRepoFile("plugins/super-looper/skills/sl-work/references/shipping-workflow.md")
-
-    // New language present in reference file
-    expect(shipping).toContain("Testing addressed")
-
-    // Old language fully removed from both
-    expect(content).not.toContain("Tests pass (run project's test command)")
-    expect(content).not.toContain("- All tests pass")
-    expect(shipping).not.toContain("Tests pass (run project's test command)")
-  })
-
-  test("SKILL.md stub points to shipping-workflow reference", async () => {
+  test("does not retain a second implementation or reviewer engine", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
 
-    // Stub references the shipping-workflow file
-    expect(content).toContain("`references/shipping-workflow.md`")
-
-    // Extracted content is not in SKILL.md
-    expect(content).not.toContain("3. **Code Review**")
+    expect(content).toContain("Do not independently implement")
+    expect(content).toContain("delegate a reviewer fleet")
     expect(content).not.toContain("## Quality Checklist")
-    expect(content).not.toContain("## Code Review Tiers")
+    expect(content).not.toContain("**Frontend Design Guidance**")
+    expect(content).not.toContain("gh pr create")
   })
 
-  test("sl:work remains the stable non-delegating surface", async () => {
+  test("preserves explicit legacy and unattended compatibility", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
 
-    expect(content).not.toContain("## Argument Parsing")
+    expect(content).toContain("mode:legacy-workflow")
+    expect(content).toContain("execution: knowledge-work")
+    expect(content).toContain("HTML plan")
+    expect(content).toContain("mode:unattended")
+    expect(content).toContain("direct replacement")
   })
 
-  test("carries frontend design guidance folded from the retired beta twin", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
+  test("keeps the retired workflow isolated in a reference", async () => {
+    const legacy = await readRepoFile("plugins/super-looper/skills/sl-work/references/legacy-workflow.md")
+    const shipping = await readRepoFile("plugins/super-looper/skills/sl-work/references/shipping-workflow.md")
 
-    expect(content).toContain("**Frontend Design Guidance**")
-    expect(content).toContain("`sl-frontend-design` skill")
+    expect(legacy).toContain("Assess testing coverage")
+    expect(shipping).toContain("Actionable findings: none.")
+    expect(shipping).toContain("Testing addressed")
   })
 })
 

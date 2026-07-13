@@ -17,7 +17,9 @@ function sliceBetween(content: string, start: string, end: string): string {
   return rest.slice(0, endIdx)
 }
 
-const LFG = "plugins/super-looper/skills/lfg/SKILL.md"
+// U9 moved the former pipeline behind an explicit compatibility token. Preserve
+// its progress/CI contract coverage against the isolated legacy reference.
+const LFG = "plugins/super-looper/skills/lfg/references/legacy-pipeline.md"
 const SL_LEARN = "plugins/super-looper/skills/sl-learn/SKILL.md"
 const PROGRESS_REF = "plugins/super-looper/skills/lfg/references/progress-file.md"
 

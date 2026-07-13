@@ -578,11 +578,16 @@ describe("sl-code-review contract", () => {
     expect(stopGuardMatches?.length).toBeGreaterThanOrEqual(1)
   })
 
-  test("orchestration callers invoke review-only code review", async () => {
+  test("only the explicit legacy lfg pipeline invokes review-only code review", async () => {
     const lfg = await readRepoFile("plugins/super-looper/skills/lfg/SKILL.md")
-    expect(lfg).toMatch(/sl-code-review[^\n]*mode:agent/)
-    expect(lfg).toContain("references/review-followup.md")
-    expect(lfg).not.toMatch(/mode:autofix/)
+    const legacy = await readRepoFile(
+      "plugins/super-looper/skills/lfg/references/legacy-pipeline.md",
+    )
+    expect(lfg).not.toContain("sl-code-review")
+    expect(lfg).toContain("mode:legacy-pipeline")
+    expect(legacy).toMatch(/sl-code-review[^\n]*mode:agent/)
+    expect(legacy).toContain("references/review-followup.md")
+    expect(legacy).not.toMatch(/mode:autofix/)
   })
 
   test("sl-work documents review-findings followup after Tier 2", async () => {
@@ -590,6 +595,9 @@ describe("sl-code-review contract", () => {
       "plugins/super-looper/skills/sl-work/references/review-findings-followup.md",
     )
     const skill = await readRepoFile("plugins/super-looper/skills/sl-work/SKILL.md")
+    const legacy = await readRepoFile(
+      "plugins/super-looper/skills/sl-work/references/legacy-workflow.md",
+    )
     expect(followup).toContain("review-only")
     expect(followup).toContain("suggested_fix")
     // The apply followup consumes the review the caller already ran; re-invocation is a
@@ -600,9 +608,11 @@ describe("sl-code-review contract", () => {
     expect(followup).toMatch(/Group by `file`/i)
     expect(followup).toMatch(/batch/i)
     expect(followup).toContain("mode:agent")
-    expect(skill).toMatch(/sl-code-review.*review-only|review-only.*sl-code-review/i)
-    expect(skill).toContain("review-findings-followup.md")
-    expect(skill).toMatch(/batch.*file|batch applicable findings by file/i)
+    expect(skill).not.toContain("sl-code-review")
+    expect(skill).toContain("mode:legacy-workflow")
+    expect(legacy).toMatch(/sl-code-review.*review-only|review-only.*sl-code-review/i)
+    expect(legacy).toContain("review-findings-followup.md")
+    expect(legacy).toMatch(/batch.*file|batch applicable findings by file/i)
   })
 
   test("sl-work shipping-workflow enforces a residual-work gate after Tier 2 review", async () => {
@@ -636,7 +646,12 @@ describe("sl-code-review contract", () => {
   })
 
   test("lfg autonomously handles residuals via non-interactive tracker-defer and PR description", async () => {
-    const lfg = await readRepoFile("plugins/super-looper/skills/lfg/SKILL.md")
+    const wrapper = await readRepoFile("plugins/super-looper/skills/lfg/SKILL.md")
+    const lfg = await readRepoFile(
+      "plugins/super-looper/skills/lfg/references/legacy-pipeline.md",
+    )
+    expect(wrapper).toContain("mode:legacy-pipeline")
+    expect(wrapper).not.toContain("Autonomous residual handoff")
     await expect(readRepoFile("plugins/super-looper/skills/lfg/references/tracker-defer.md")).resolves.toContain(
       "Non-interactive mode",
     )

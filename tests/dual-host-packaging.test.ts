@@ -143,6 +143,35 @@ describe("dual-host plugin packaging", () => {
     }
   })
 
+  test("keeps compatibility wrapper routing aligned across hosts", async () => {
+    for (const skill of ["lfg", "sl-work"]) {
+      const claude = await Bun.file(
+        path.join(pluginRoot, "skills", skill, "SKILL.md"),
+      ).text()
+      const codex = await Bun.file(
+        path.join(codexPluginRoot, "skills", skill, "SKILL.md"),
+      ).text()
+
+      expect(codex).toBe(claude)
+      expect(codex.split("\n").length).toBeLessThan(80)
+      expect(codex).toContain("invoke `sl-run`")
+    }
+  })
+
+  test("keeps Claude-only legacy behavior outside native Codex hot paths", async () => {
+    const codexLfgLegacy = await Bun.file(
+      path.join(codexPluginRoot, "skills", "lfg", "references", "legacy-pipeline.md"),
+    ).text()
+    const codexWorkLegacy = await Bun.file(
+      path.join(codexPluginRoot, "skills", "sl-work", "references", "legacy-workflow.md"),
+    ).text()
+
+    expect(codexLfgLegacy).toContain("Claude Code-only")
+    expect(codexLfgLegacy).toContain("Do not emulate")
+    expect(codexWorkLegacy).toContain("Claude Code-only")
+    expect(codexWorkLegacy).toContain("Do not")
+  })
+
   test("cuts the planner hot-path instructions by more than 70 percent", async () => {
     const baseline = await readJson("docs/evals/core-loop-baseline.json")
     const prior = baseline.baseline.components.find(

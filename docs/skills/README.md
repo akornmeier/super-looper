@@ -9,7 +9,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 
 | Skill | What it does |
 |-------|--------------|
-| [`lfg`](./lfg.md) | Run the full autonomous engineering pipeline end-to-end (plan, work, code review, test, commit, push, open PR, watch CI, fix CI failures until green, capture learnings) |
+| [`lfg`](./lfg.md) | Compatibility command for the streamlined unattended developer workflow |
 | [`sl-agent-native-architecture`](./sl-agent-native-architecture.md) | Build applications where agents are first-class citizens |
 | [`sl-agent-native-audit`](./sl-agent-native-audit.md) | Run comprehensive agent-native architecture review with scored principles |
 | [`sl-brainstorm`](./sl-brainstorm.md) | Explore requirements and approaches through collaborative dialogue, then write a right-sized requirements document |
@@ -25,7 +25,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-doc-review`](./sl-doc-review.md) | Review requirements or plan documents using parallel persona agents that surface role-specific issues |
 | [`sl-dogfood-beta`](./sl-dogfood-beta.md) | [BETA] Dogfood the active branch end-to-end as a QA engineer |
 | [`sl-frontend-design`](./sl-frontend-design.md) | Build web interfaces with genuine design quality, not AI slop |
-| [`sl-handoff`](./sl-handoff.md) | Compact the current session into a clean handoff document a fresh agent can pick up, referencing existing artifacts (plan, brainstorm, ADRs) by path instead of duplicating them |
+| [`sl-handoff`](./sl-handoff.md) | Create a compact cross-session handoff for research, debugging, design, or other non-run work whose important context is not already durable |
 | [`sl-host-smoke`](./sl-host-smoke.md) | Run an explicit, non-mutating compatibility diagnostic for the super-looper plugin |
 | [`sl-ideate`](./sl-ideate.md) | Generate and critically evaluate grounded ideas about a topic |
 | [`sl-learn`](./sl-learn.md) | Compatibility learning seam for the legacy lfg pipeline: invoke sl-compound headless, evaluate the result, commit an accepted docs/solutions learning into the open PR, and re-confirm CI |
@@ -48,7 +48,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-test-browser`](./sl-test-browser.md) | Run browser tests on pages affected by current PR or branch |
 | [`sl-test-xcode`](./sl-test-xcode.md) | Build and test iOS apps on simulator using XcodeBuildMCP |
 | [`sl-update`](./sl-update.md) | Check if the super-looper plugin is up to date and recommend the update command if not |
-| [`sl-work`](./sl-work.md) | Execute work efficiently while maintaining quality and finishing features |
+| [`sl-work`](./sl-work.md) | Compatibility command for interactive implementation |
 | [`sl-worktree`](./sl-worktree.md) | Ensure work happens in an isolated git worktree without disturbing the current checkout |
 
 ---

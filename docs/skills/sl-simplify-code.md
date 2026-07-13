@@ -6,7 +6,7 @@
 
 The premise is that simplification preserves exact functionality. The skill enforces this by running typecheck, lint, and scoped tests after fixes. **It refuses to relax assertions, weaken type signatures, or skip tests to make checks pass** — that defeats the guarantee.
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-simplify-code` runs as a quality gate inside `/sl-work` Phase 3 (for diffs ≥30 changed lines), and is directly invocable for refining a feature branch before you open a PR.
+`sl-simplify-code` is a standalone branch-diff refinement workflow. The primary `/sl-run` workflow does not treat it as a mandatory node; use it explicitly when a focused simplification pass is warranted.
 
 ---
 

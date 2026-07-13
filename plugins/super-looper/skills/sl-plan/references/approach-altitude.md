@@ -36,7 +36,7 @@ Hold at the approach. Use `AskUserQuestion` (call `ToolSearch` with `select:AskU
 
 **Save for later.** Persist the approach-plan to `docs/plans/` so it survives. If the deliverable is non-code, write the marker (`execution: knowledge-work`, see `references/plan-sections.md`) at persist time — so a later `sl-work` invocation on the saved plan routes to the carve-out, not the code path. Offer to deepen it. Keep the plan **agent-agnostic** (no `sl-work`-specific choreography in the body) so any agent can execute it later.
 
-**Execute now -- code deliverable.** The approach-plan's job is done; continue into the normal `sl-plan` flow (Phase 0.1b onward) to produce the implementation plan, then hand off to `sl-work` for the code. `sl-plan` never writes the code itself.
+**Execute now -- code deliverable.** The approach-plan's job is done; continue into the normal `sl-plan` flow (Phase 0.1b onward) to produce canonical Markdown, then invoke `sl-run plan:<path> mode:interactive`. `sl-plan` never writes the code itself.
 
 **Execute now -- non-code deliverable.** This is the knowledge-work path with no `sl-work` equivalent, so it routes to `sl-work`'s carve-out:
 

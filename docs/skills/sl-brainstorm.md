@@ -6,10 +6,10 @@
 
 It runs equally well on software features, on entirely non-software topics (event planning, business decisions, personal-project framing, travel itineraries, naming briefs), and anywhere in between. The same one-question-at-a-time discipline; the same right-sized template; the same Synthesis Summary before any artifact lands.
 
-This is the middle step in the super-looper ideation chain:
+This is an optional definition step before the three-command core:
 
 ```text
-/sl-ideate         /sl-brainstorm      /sl-plan             /sl-work
+/sl-ideate         /sl-brainstorm      /sl-plan             /sl-run
 "What's worth      "What does this     "What's needed       "Build it."
  exploring?"        need to be?"        to accomplish
                                         this?"
@@ -26,7 +26,7 @@ It's also the most common standalone entry point — for any feature, decision, 
 | What does it do? | Collaborative dialogue to clarify scope, pressure-test premises, explore approaches, and write a right-sized requirements doc |
 | When to use it | Vague feature ideas, "let's brainstorm", multiple plausible directions, unclear scope; non-software decisions and projects |
 | What it produces | Requirements doc in `docs/brainstorms/` (with R-IDs, A-IDs, F-IDs, AE-IDs in software mode) |
-| What's next | `/sl-plan`, `/sl-work` for trivial scope, doc review, or Proof iteration |
+| What's next | `/sl-plan`, then `/sl-run`; or doc review / Proof iteration |
 
 ---
 
@@ -152,7 +152,7 @@ Skip `sl-brainstorm` when:
    |  R-IDs flow into Requirements; A/F/AE-IDs trace into units and tests
    |  origin scope boundaries are preserved verbatim
    v
-/sl-work
+/sl-run plan:<path>
 ```
 
 When `sl-plan` loads with a requirements doc as input, it does not re-litigate product behavior. The doc is authoritative. Plan-time decisions are about execution guardrails — not what's being built.
