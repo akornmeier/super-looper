@@ -1,24 +1,24 @@
 ---
-title: "refactor(core-loop): Streamline Super Looper around plan, run, and learn"
+title: "refactor(workflows): Streamline Super Looper into code-first AI developer workflows"
 type: refactor
 date: 2026-07-12
 origin: none
 ---
 
-# refactor(core-loop): Streamline Super Looper around plan, run, and learn
+# refactor(workflows): Streamline Super Looper into code-first AI developer workflows
 
 ## Summary
 
-Reduce Super Looper from a user-visible chain of overlapping orchestration skills into one lean lifecycle:
+Reduce Super Looper from a user-visible chain of overlapping orchestration skills into a small family of code-first AI developer workflows:
 
 1. `sl-strategy` maintains durable product direction.
 2. `sl-plan` uses a frontier model to produce one immutable, phased execution plan.
-3. `sl-run` executes that plan through bounded agent teams, persists phase progress, verifies the result, and finishes the delivery workflow.
+3. `sl-run` selects a right-sized workflow profile and hands execution to a deterministic workflow kernel that routes bounded agent work, code-owned checks, durable state, and review evidence.
 4. A closeout seam records only evidence-backed learnings and proposes strategy changes for human approval.
 
-Review, testing, repair, commit/PR work, learning capture, and resume behavior become internal phases of `sl-run`, not separate workflow choices the user must remember. Existing specialist skills remain available as optional tools, but they stop defining the primary product path.
+Review, testing, repair, commit/PR work, learning capture, and resume behavior become explicit workflow nodes with typed inputs and outputs, not prose steps hidden inside one agent or separate workflow choices the user must remember. Existing specialist skills remain available as optional tools, but they stop defining the primary product path.
 
-The redesign preserves the strongest existing mechanisms: immutable goals, checksum-based goal-drift detection, independent verification, honest failure terminals, structured run records, isolated workers, and durable solution docs. It removes repeated context gathering, fixed reviewer fleets, duplicated progress channels, and full-skill handoffs between every stage.
+The redesign preserves the strongest existing mechanisms: immutable goals, checksum-based goal-drift detection, independent verification, honest failure terminals, structured run records, isolated workers, and durable solution docs. It removes repeated context gathering, fixed reviewer fleets, duplicated progress channels, and full-skill handoffs between every stage. Deterministic code owns repeatable control flow and validation; agents own bounded judgment and implementation; engineers own intent and final acceptance.
 
 The streamlined core ships as one dual-host product. Existing Claude Code installation and behavior remain supported throughout the migration, while the same release component gains a separate native Codex package, marketplace entry, and runtime adapters. No workflow is considered migrated until it passes both host contracts; Codex support is not a later port of a Claude-only redesign.
 
@@ -29,10 +29,23 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 - [x] U3: Claude preservation gates, native Codex packaging, release lockstep, and cross-host smoke seam (`d7c95e0`)
 - [x] U4: lean frontier planner (implementation boundary; see `docs/evals/sl-plan-u4-report.md` for the token-telemetry caveat)
 - [x] U5: resumable `sl-run` coordinator (`docs/evals/sl-run-u5-report.md`)
-- [ ] U6: bounded phase teams and risk-selected verification
-- [ ] U7: delivery, learning, and strategy closeout
-- [ ] U8: caller migration and public-surface reduction
-- [ ] U9: two-host evaluation and promotion
+- [ ] U6: extract the code-owned workflow kernel and deterministic validation graph
+- [ ] U7: add risk-routed workflow profiles and bounded isolation
+- [ ] U8: add engineer review, delivery, learning, and strategy closeout
+- [ ] U9: migrate callers and reduce the public surface
+- [ ] U10: two-host evaluation and promotion
+
+## Continuation Checkpoint
+
+Work stopped cleanly at the U5/U6 boundary on branch `plan/streamline-super-looper` after commit `fb3b47f` (`feat(run): add resumable phased coordinator`). U1-U5 are complete and validated. No U6 implementation has started.
+
+The continuation strategy is intentionally reset here: U6 does not assume that adding more agents to the U5 skill is the next step. The remaining work follows the three-actor model described in the supplied Dan Eisler transcript:
+
+- **Engineers** define intent and review consequential outcomes.
+- **Deterministic code** owns routing, state, conditions, validation commands, budgets, isolation policy, and audit records.
+- **Agents** perform bounded discovery, planning, implementation, repair, and semantic verification where judgment is actually required.
+
+This checkpoint is the durable resume note for the next implementation session.
 
 ---
 
@@ -70,6 +83,27 @@ The simplification must improve efficiency without turning the system into an un
 
 ---
 
+## Strategy Reframe: From Loop to Developer Workflows
+
+The transcript does not invalidate U1-U5. Those units established the plan contract, immutable-goal protection, dual-host packaging, frontier planning, and resumable state needed by any reliable workflow. It does change the best next step.
+
+U5 currently gives `sl-run` an agent-oriented coordinator contract. If U6 immediately adds teams and reviewers, the plugin risks scaling the least reliable actor before separating deterministic process control from model judgment. The remaining refactor therefore treats the existing loop as one control-flow feature inside a larger AI developer workflow.
+
+| Transcript principle | Current fit at U5 | Plan response |
+|---|---|---|
+| Combine engineers, agents, and code deliberately | Engineers and agents are explicit; deterministic code is strongest in state helpers and the shell supervisor | Extract a code-owned workflow kernel before adding teams |
+| Put engineers at planning and review boundaries | Planning is explicit; final human acceptance is not yet a first-class node | Add a review-ready terminal and explicit approval policy before delivery |
+| Use code for reliable, zero-token decisions | Goal checks and state transitions use code, but much execution and verification routing remains skill prose | Make commands, conditions, retries, routing, and audit transitions independently testable code nodes |
+| Separate agents from code | U5 still describes one coordinator that dispatches agents and performs the surrounding workflow | Make `sl-run` a thin entry; the kernel invokes/resumes agent nodes and runs code nodes itself |
+| Start simple, then scale | U6 previously started with parallel teams | Prove a serial plan -> build -> check -> repair -> review workflow first |
+| Specialize workflows by task and urgency | One main phase topology serves all work | Add chore, bug, feature, and hotfix profiles with distinct cost and approval policies |
+| Isolate parallel work | Worktrees are supported, but isolation and concurrency are coupled to worker dispatch | Add an isolation adapter; prefer sandbox, fall back to worktree, otherwise serialize safely |
+| Test nodes and transitions independently | State transitions are tested; agent/code boundaries are not yet fully separable | Add mocked agent adapters, command runners, node contracts, and transition fixtures |
+
+The useful product is not a larger autonomous loop. It is a small, inspectable workflow factory that selects the least expensive safe path, uses models only where judgment adds value, and produces an evidence packet an engineer can review quickly.
+
+---
+
 ## Desired Outcome
 
 ### User-facing core
@@ -85,40 +119,39 @@ sl-strategy -> sl-plan -> sl-run
 - `sl-run` handles interactive and unattended execution of an existing plan. The mode changes permissions and checkpoints, not the underlying phase model.
 - Learning and strategy reconciliation happen automatically at closeout when warranted; they are not required user-invoked steps.
 
-### Execution lifecycle
+### AI developer workflow lifecycle
 
-```text
-strategy context
-      |
-      v
-frontier planner -> immutable phased plan
-      |
-      v
-run initializer -> run-state.json
-      |
-      v
-+--------------------------------------+
-| for each phase                       |
-|  context packet                      |
-|      -> bounded worker team          |
-|      -> coordinator integration      |
-|      -> independent phase verifier   |
-|      -> checkpoint or honest stop    |
-+--------------------------------------+
-      |
-      v
-integrated verification -> delivery -> learning gate -> strategy observation
+The user-facing path stays small, but `sl-run` is an entry point into a code-owned workflow rather than one agent simulating an entire software-development lifecycle:
+
+```mermaid
+flowchart LR
+  E1[Engineer: intent and constraints] --> P[Frontier planner agent]
+  P --> K[Deterministic workflow kernel]
+  K --> R{Route by work and risk}
+  R --> B[Bounded build agent]
+  B --> V[Code: format, lint, typecheck, tests]
+  V -->|typed failures + same session handle| B
+  V -->|pass| A[Independent agent verification]
+  A -->|repair packet| B
+  A -->|pass| E2[Engineer: final review or policy gate]
+  E2 --> D[Code-owned delivery and audit]
 ```
+
+The kernel may select a serial chore, bug, feature, or hotfix profile. Those profiles share node contracts and state machinery, but differ in model roles, isolation, review gates, budgets, and delivery authority. A loop is only one edge in this graph; the product is the complete developer workflow and its information flow.
 
 ### Definition of streamlined
 
 The work is complete when:
 
-- A new user can understand the core loop from one short page and three skill names.
+- A new user can understand the core developer workflow from one short page and three skill names.
 - Planning uses one frontier context rather than a default planning fleet.
 - Execution agents receive scoped phase packets rather than the whole session or repeated repository surveys.
-- The coordinator is the sole writer of run state and the sole integrator of worker results.
+- The workflow kernel is the sole writer of run state and the sole integrator of worker results.
 - One machine-readable state file answers what is pending, active, complete, blocked, verified, and resumable.
+- Deterministic code, not model prose, evaluates configured formatter, linter, typecheck, test, retry, timeout, and transition conditions.
+- Agent nodes and code nodes have separate, testable interfaces; a skill does not hide a hundred-step workflow inside one agent session.
+- The engineer is explicitly present at goal definition and final review, with additional approval gates for hotfixes, high-risk work, or expanded authority.
+- Work routes to the cheapest workflow that meets its risk and quality floor; a chore does not pay for the feature or hotfix topology.
 - Review breadth is selected from actual risk signals instead of dispatching a standing persona catalog.
 - A successful run may produce no learning and no strategy edit; no-op is a valid high-signal outcome.
 - Token use is measured per role and phase when the host exposes usage, with stable structural proxies otherwise.
@@ -129,17 +162,21 @@ The work is complete when:
 
 ## Product and Design Principles
 
-1. **Frontier intelligence at decision points.** Spend the strongest model on planning, ambiguity resolution, architecture decisions, and bounded escalation. Do not spend it repeatedly on extraction or mechanical checks.
-2. **One owner per kind of state.** The plan owns intended work. Run state owns execution progress. Git owns code history. Verification owns pass/fail evidence. Solution docs own reusable learning. Strategy owns durable direction.
-3. **Immutable goal, mutable execution state.** Worker teams never edit `STRATEGY.md` or the active plan. A changed goal ends or supersedes the run.
-4. **Context by pointer.** Large evidence, logs, and intermediate results live in files. Agent messages carry a gist and paths, not copied payloads.
-5. **One discovery pass per scope.** Gather repository evidence once for planning and once per phase only when the phase needs fresher detail. Workers consume the shared packet.
-6. **Bounded teams.** Parallelism follows actual independence. More reviewer personas are not automatically more confidence.
-7. **Verification is independent.** A worker cannot certify its own unit. Phase and final gates use separate evidence or a separate verifier.
-8. **Learning must earn permanence.** Capture a solution only when evidence supports a reusable causal lesson that is not already documented.
-9. **Strategy stays human-owned.** Runs record observations that may challenge strategy; only an interactive, explicit approval changes the strategy document.
-10. **Platform semantics before tool syntax.** Core workflow language describes roles, state transitions, and outcomes. Claude Code or Codex tool names live in thin runtime adapters.
-11. **Two-host acceptance from the first slice.** Shared contracts, skills, scripts, and release metadata must validate on Claude Code and Codex before a migration unit is complete.
+1. **Engineers at the consequential boundaries.** Engineers supply intent and constraints, then review the integrated result or approve a documented automation policy. High-risk and hotfix profiles may add earlier approval gates.
+2. **Code owns deterministic control flow.** Routing, conditions, state transitions, command execution, retry/timeout budgets, overlap checks, and audit records belong in testable code rather than prompt prose.
+3. **Agents own bounded judgment.** Spend models on planning, repository interpretation, implementation, repair, and semantic review. Do not ask an agent to decide whether a process exited zero or a schema parsed.
+4. **Separate agent nodes from code nodes.** Each node has one interface and one owner. Code invokes or resumes an agent and passes typed results; an agent does not impersonate the outer workflow engine by calling every downstream step itself.
+5. **Frontier intelligence at decision points.** Spend the strongest model on planning, ambiguity resolution, architecture decisions, hotfix proposals, and bounded escalation. Use workhorse or lightweight models for well-specified execution.
+6. **One owner per kind of state.** The plan owns intended work. Run state owns execution progress. Git owns code history. Verification owns pass/fail evidence. Solution docs own reusable learning. Strategy owns durable direction.
+7. **Immutable goal, mutable execution state.** Worker teams never edit `STRATEGY.md` or the active plan. A changed goal ends or supersedes the run.
+8. **Context by pointer and typed packets.** Large evidence, logs, and intermediate results live in files. Transitions carry a schema, gist, paths, and agent session handle rather than copied transcripts.
+9. **Start serial and earn parallelism.** The first production workflow is observable and serial. Add isolation and concurrency only for measured independent work with non-overlapping ownership.
+10. **Specialize by work and risk, not persona count.** Chore, bug, feature, and hotfix workflows differ where their economics or safety differ. More permanent agents are not automatically more capability.
+11. **Verification is layered and independent.** Deterministic checks run first. An independent agent interprets behavioral and risk evidence afterward. Neither the build agent nor a passing command alone certifies the whole result.
+12. **Learning must earn permanence.** Capture a solution only when evidence supports a reusable causal lesson that is not already documented.
+13. **Strategy stays human-owned.** Runs record observations that may challenge strategy; only an interactive, explicit approval changes the strategy document.
+14. **Platform semantics before tool syntax.** Core workflow language describes roles, state transitions, and outcomes. Claude Code or Codex tool names live in thin runtime adapters.
+15. **Two-host acceptance from the first slice.** Shared contracts, skills, scripts, and release metadata must validate on Claude Code and Codex before a migration unit is complete.
 
 ---
 
@@ -180,25 +217,57 @@ completion_gate: evidence required before the next phase
 
 The checked-in plan remains a human-readable Markdown document. The structured shape above is a conceptual contract, not a second generated plan file unless parsing Markdown proves unreliable in implementation.
 
-### 2. Single run coordinator
+### 2. Thin run entry and code-owned workflow kernel
 
-Add `sl-run` as the primary execution entry point. It absorbs the core responsibilities now spread across `sl-work`, `lfg`, `sl-code-review`, `sl-handoff`, `sl-learn`, and the finishing portions of `sl-commit-push-pr`.
+Keep `sl-run` as the primary user entry point, but do not make its agent session the outer workflow engine. Its portable skill body interprets the request, resolves the plan, requests any required authority, starts or resumes the kernel, and presents status or review evidence. The deterministic kernel owns the process after that handoff.
 
-`sl-run` is a small coordinator over phase references and deterministic scripts. It does not inline every review, CI, learning, and resume procedure into one always-loaded body.
+The U5 state engine is the seed of this kernel. U6 extends it into a small CLI/library with three explicit node kinds:
 
-Responsibilities:
+| Node kind | Owner | Responsibilities |
+|---|---|---|
+| `code` | Workflow kernel | Validate artifacts; choose explicit routes; execute configured commands; classify results; enforce retries, timeouts, overlap, and authority; update state atomically |
+| `agent` | Host adapter plus bounded agent session | Scout only when necessary; plan; implement; repair; perform semantic verification; return a typed result and evidence pointers |
+| `human` | Engineer | Confirm intent or expanded authority, approve a hotfix proposal, review the integrated result, and authorize delivery unless an explicit policy permits it |
 
-- Validate the plan and immutable-goal hashes.
-- Create or resume run state.
-- Select the next runnable phase.
-- Build one context packet for that phase.
-- Dispatch bounded workers for independent units.
-- Serialize integration when workers share a checkout or files.
-- Run the phase verifier and record evidence.
-- Apply one bounded repair pass or escalate honestly.
-- Perform final integrated verification.
-- Route commit, PR, CI, learning, and strategy observation closeout.
-- Emit the existing structured run record on every terminal path.
+Each node transition uses one small record rather than narrative control flow:
+
+```json
+{
+  "node_id": "feature.check.test",
+  "kind": "code",
+  "status": "failed",
+  "input_paths": [],
+  "output_paths": ["/tmp/super-looper/sl-run/.../test.log"],
+  "session_handle": "opaque-or-null",
+  "evidence": [{ "command": ["bun", "test"], "exit_code": 1 }],
+  "next": "feature.build.repair"
+}
+```
+
+The kernel:
+
+- Validates plan and immutable-goal hashes and creates or resumes run state.
+- Chooses the next node from the selected workflow profile and typed prior result.
+- Invokes or resumes an agent through the current host adapter and persists its opaque session handle when supported.
+- Runs formatter, linter, typecheck, tests, schema validation, and other configured checks directly, without spending agent tokens to determine pass or fail.
+- Returns compact failure evidence to the same build session when the host supports resume; otherwise starts a replacement agent with a typed repair packet and records the degraded mode.
+- Applies retry, timeout, isolation, overlap, and delivery-authority policies mechanically.
+- Emits a review packet, terminal record, and durable evidence pointers on every exit.
+
+The first kernel slice is deliberately serial. It must prove plan -> build -> deterministic checks -> same-session repair -> semantic verification -> review-ready before U7 introduces workflow routing, isolation, or parallel workers.
+
+#### Workflow profiles
+
+The kernel selects a profile from explicit user/plan metadata and mechanically detectable risk signals first. A frontier router is used only when those signals are genuinely ambiguous, and it must return a typed classification with rationale. The user can override a non-safety route.
+
+| Profile | Default topology | Quality and approval policy |
+|---|---|---|
+| `chore` | One workhorse agent, serial code checks | Narrow checks plus final engineer review; no scout or frontier critic by default |
+| `bug` | Optional reproduction scout, build/repair agent, deterministic regression checks, verifier | Require evidence that the failure reproduced and the regression is covered |
+| `feature` | Frontier plan, bounded build agents when justified, full configured checks, verifier | Final engineer review; additional lenses selected from changed surfaces |
+| `hotfix` | Frontier scout/proposal, engineer approval, isolated surgical build attempts when useful | Smallest safe diff, targeted deterministic checks, mandatory engineer approval before delivery |
+
+Profiles reuse the same node and state contracts. They are configurations of the workflow, not four large duplicated skills.
 
 ### 3. Dual-host packaging and runtime adapters
 
@@ -292,6 +361,7 @@ Use semantic roles rather than model names in skill prose:
 | Role | Default capability | Use |
 |---|---|---|
 | `planner` | frontier, inherited from the parent | Plan creation, architecture, unresolved ambiguity |
+| `router` | deterministic rules first; frontier only when ambiguous | Select a workflow profile and explain uncertain classifications |
 | `scout` | efficient read-heavy model | Repository evidence and targeted retrieval |
 | `worker` | capable implementation model | Independent work units |
 | `verifier` | strong independent model | Phase gates and final acceptance |
@@ -302,15 +372,26 @@ Platform adapters map these roles to supported models. If the host cannot select
 
 Planning should fail clearly or warn when the selected parent model is not suitable for frontier planning; it must not silently pretend a weaker model met the planning policy. The exact capability check depends on what each host exposes and should remain advisory where reliable model introspection is unavailable.
 
-### 5. Phase team topology
+### 5. Isolation and bounded execution
 
-Default phase execution uses the smallest useful team:
+Default execution is serial. Parallelism is enabled only after the serial kernel is proven and only when a plan exposes independent units, ownership does not overlap, and an isolation backend is available.
 
-- One scout only when the plan packet lacks current implementation context.
-- One worker per independent work unit, with a default parallel cap of three.
-- One coordinator in the parent thread; workers never merge one another.
-- One verifier after integration.
-- One frontier escalator only after the normal verifier and one repair attempt cannot converge.
+Isolation is a runtime capability with a safe fallback order:
+
+1. Dedicated agent sandbox when the host or configured provider supplies one.
+2. Git worktree when repository state and the host support it.
+3. Shared checkout with mechanically serialized edits and integration.
+
+The smallest useful execution topology is:
+
+- No scout when the plan packet and repository dossier are sufficient.
+- One worker by default; up to three only for measured independent units with isolation.
+- One code-owned kernel as the sole state writer and integrator; workers never merge one another.
+- Deterministic checks immediately after integration.
+- One independent verifier after code checks pass.
+- One frontier escalator only after the normal repair budget cannot converge.
+
+Repair work resumes the responsible worker session when the host exposes a stable handle. Session continuity is an optimization and a context-quality feature, not an unverified assumption: adapters must test it, persist the opaque handle, and report when they fall back to a fresh repair agent.
 
 Workers receive a phase packet containing only:
 
@@ -344,8 +425,14 @@ Directional schema:
   "plan": { "path": "docs/plans/...", "sha256": "..." },
   "strategy": { "path": "STRATEGY.md", "sha256": "..." },
   "git": { "branch": "...", "base_ref": "...", "head_sha": "..." },
+  "profile": { "name": "feature", "source": "explicit", "rationale": "..." },
   "status": "running",
   "current_phase": "phase-2",
+  "current_node": "feature.check.test",
+  "isolation": { "mode": "serialized_checkout", "parallel_cap": 1 },
+  "agent_sessions": { "unit-2": { "handle": "opaque", "resumable": true } },
+  "approvals": [],
+  "nodes": [],
   "phases": [
     {
       "id": "phase-1",
@@ -364,9 +451,9 @@ Directional schema:
 
 Rules:
 
-- The coordinator is the only writer.
+- The workflow kernel is the only writer; skills and agents return proposed results but never mutate state directly.
 - Writes use temp-file-plus-rename atomic replacement.
-- Every phase transition records the current `head_sha` and verification evidence.
+- Every node and phase transition records its owner, current `head_sha`, verification evidence, and relevant session or isolation metadata.
 - Resume re-verifies hashes, branch, commit reachability, and completed-phase gates before continuing.
 - Any mismatch produces an honest terminal or cold restart; it never marks work complete by assertion.
 - The terminal run record indexes the state, transcript, PR, and residual evidence by pointer.
@@ -387,21 +474,24 @@ Replace the standing reviewer fleet with a small set of review lenses selected f
 | UI behavior | Product, accessibility, and visual behavior |
 | Test-only or narrowly mechanical diff | Testing and simplicity |
 
-The default final review uses one verifier with the selected lenses. Dispatch additional independent reviewers only when risks are materially orthogonal or the verifier reports uncertainty. Cap the default review team at three.
+The default validation sequence is deterministic checks first, one verifier with the selected lenses second, and an engineer-facing review packet last. Dispatch additional independent reviewers only when risks are materially orthogonal or the verifier reports uncertainty. Cap the exceptional review team at three.
+
+Passing code checks never substitutes for semantic review, and passing agent review never authorizes delivery by itself. The initial production policy stops at `review_ready` and requires engineer approval. A project may later opt into review waivers for a narrow profile only after benchmark evidence demonstrates repeatable safety; the waiver, scope, and evidence are recorded in run state. The hotfix profile always keeps its pre-build proposal approval and final delivery approval during this refactor.
 
 The existing 42 agent files become a source catalog during migration, not the target runtime inventory. Preserve their best criteria as compact lens references. Keep only agents that need distinct tools, context, or execution behavior; a different perspective alone does not require a permanent agent definition.
 
-### 8. Learning and strategy closeout
+### 8. Engineer review, delivery, learning, and strategy closeout
 
-After final verification:
+After deterministic and semantic verification:
 
-1. Build a small evidence packet from run state, relevant diffs, failed attempts, and the final fix.
-2. Search existing solution docs for overlap.
-3. Ask the learner for candidate causal lessons.
-4. Grade each candidate: reusable, evidence-backed, novel, and likely to change future behavior.
-5. Write a solution doc only when the candidate passes. Otherwise record `no_learning` with a reason.
-6. Compare the outcome with the strategy target problem, approach, metrics, and tracks.
-7. Record only material strategy observations in run state and the run summary.
+1. Code assembles a compact review packet from the plan, changed files, diff summary, deterministic results, verifier findings, failed attempts, unresolved risks, and delivery intent.
+2. The engineer approves, rejects, or requests a bounded repair. Unattended mode stops safely at `review_ready` unless a previously approved policy covers the exact profile and authority.
+3. Code-owned delivery creates the approved commit/PR operation, observes CI, and routes typed CI failures back through the repair budget.
+4. Code builds a learning evidence packet from run state, relevant diffs, failed attempts, and the final fix.
+5. Search existing solution docs for overlap, then ask the learner for candidate causal lessons.
+6. Grade each candidate: reusable, evidence-backed, novel, and likely to change future behavior.
+7. Write a solution doc only when the candidate passes. Otherwise record `no_learning` with a reason.
+8. Compare the outcome with the strategy target problem, approach, metrics, and tracks, and record only material observations.
 
 Strategy handling:
 
@@ -410,7 +500,7 @@ Strategy handling:
 - Unattended closeout: write the proposal into the run summary or a durable tracked proposal only when one exists; do not edit strategy.
 - Routine feature completion with no strategic implication records no proposal.
 
-This preserves the goal guard while making strategy reconciliation part of the loop rather than an unrelated maintenance habit.
+This preserves the goal guard while making strategy reconciliation an explicit workflow closeout node rather than an unrelated maintenance habit.
 
 ---
 
@@ -420,18 +510,20 @@ This preserves the goal guard while making strategy reconciliation part of the l
 |---|---|
 | `sl-strategy` | Keep; narrow to deliberate strategy maintenance and approved post-run reconciliation |
 | `sl-plan` | Rewrite as the frontier-model planner and canonical phased-plan producer |
-| `sl-work` | Move execution mechanics behind `sl-run`; retain a temporary compatibility wrapper |
+| `sl-run` | Keep as the thin plan/profile entry and review surface; move outer control flow into the deterministic workflow kernel |
+| Workflow kernel | Add as testable code for nodes, transitions, commands, agent-session adapters, policy, and evidence |
+| `sl-work` | Move execution mechanics behind the kernel; retain a temporary compatibility wrapper to `sl-run` |
 | `lfg` | Replace with a compatibility alias to unattended `sl-run`; deprecate after migration |
 | `sl-code-review` | Keep standalone review as an optional skill; move its risk selection and final gate behind `sl-run` |
 | `sl-commit-push-pr` | Keep standalone Git utility; `sl-run` calls a compact delivery capability internally |
-| `sl-handoff` | Remove from the core loop; canonical plan plus run state is the handoff |
+| `sl-handoff` | Remove from the core workflow; canonical plan plus run state is the handoff |
 | `sl-learn` | Make an internal closeout capability rather than a user-facing pipeline step |
 | `sl-compound` | Keep as manual knowledge maintenance; reuse its validated writer behind the learning gate |
 | `sl-ideate`, `sl-brainstorm` | Keep as optional discovery extensions; remove them from the required path |
 | Reviewer agents | Convert most to compact risk-lens references; retain only tool- or domain-distinct agents |
 | HTML plans and plan images | Move to an optional post-plan renderer outside the execution contract |
 | Plan status markers | Make derived presentation only; run state is canonical |
-| `scripts/loop.sh` | Keep as the unattended process supervisor, but make it launch `sl-run` rather than duplicate workflow policy |
+| `scripts/loop.sh` | Keep as the unattended process supervisor, but make it launch the workflow kernel through `sl-run` rather than duplicate workflow policy |
 | Claude plugin/marketplace | Preserve as a first-class supported distribution and regression surface |
 | Codex plugin/marketplace | Add native manifest, repo marketplace, interface metadata, validation, and fresh-session install tests |
 | Host-specific skill mechanics | Route through co-located Claude and Codex runtime references; keep shared contracts host-neutral |
@@ -447,10 +539,12 @@ No component is deleted in the first implementation slice. Compatibility wrapper
 - Reduce median total tokens for the representative end-to-end eval suite by at least 40% from the pre-refactor baseline.
 - Reduce always-carried core orchestration text by at least 50%; as a repository proxy, keep the combined main bodies of `sl-strategy`, `sl-plan`, and `sl-run` at or below 120 KB, with conditional detail in references.
 - Planning dispatches no subagents by default and at most one critic when the risk/confidence gate requires it.
-- Default phase fan-out is at most three workers plus one verifier.
+- The default workflow is serial: one worker, direct code checks, and one verifier. Parallel workers, scouts, and extra reviewers must be justified by the selected profile and recorded risk.
 - Default integrated review is one verifier and at most three independent reviewers when risks require separation.
 - Repository discovery is performed once per plan and at most once per phase; workers reuse the packet.
-- Agent returns are structured and capped to the information the coordinator consumes.
+- Deterministic command output is stored by pointer; agents receive compact failures and relevant excerpts rather than full successful logs.
+- Agent returns are structured and capped to the information the workflow kernel consumes.
+- Report agent invocations, resumed sessions, replacement sessions, deterministic node count, and code-versus-agent wall time so token savings cannot hide orchestration overhead.
 
 ### Quality floors
 
@@ -461,6 +555,7 @@ Efficiency changes do not land if they regress:
 - Verification pass rate on representative tasks.
 - Unattended completion rate.
 - Honest failure behavior and goal-drift detection.
+- A complete engineer review packet and correct approval boundary for the selected workflow profile.
 - Learning correctness and deduplication.
 - Claude Code plugin validation, installation, skill discovery, hooks, and existing behavioral contracts.
 - Codex plugin validation, marketplace installation, skill discovery, subagent execution, goal-guard hooks, and fresh-session behavior.
@@ -472,9 +567,12 @@ On scored behavioral evals, the streamlined workflow must remain within 5% of th
 Add a fixed benchmark set spanning:
 
 - Small, obvious code change.
+- Low-risk chore that should not invoke a frontier router or scout.
 - Multi-phase feature with independent units.
 - Cross-cutting migration.
 - Bug investigation with an initially wrong hypothesis.
+- Hotfix that requires proposal and delivery approvals.
+- Deterministic check failure repaired through the same agent session when supported.
 - UI change requiring visual verification.
 - Run with no worthwhile learning.
 - Run that produces a valid learning.
@@ -643,65 +741,97 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 
 **Acceptance:** On Claude Code and Codex, `sl-run plan:<path>` completes a single-worker multi-phase fixture; interruption at every phase boundary resumes without repeating completed work; goal or plan mutation still exits honestly.
 
-### U6. Add bounded phase teams and risk-selected verification
+### U6. Extract the code-owned workflow kernel
 
-**Goal:** Execute independent work in parallel without multiplying repository discovery or review cost.
+**Goal:** Prove one observable serial developer workflow in which code owns control flow and agents own bounded judgment.
 
 **Dependencies:** U5.
 
 **Files:**
 
-- `plugins/super-looper/skills/sl-run/SKILL.md`
-- `plugins/super-looper/skills/sl-run/references/team-execution.md`
-- `plugins/super-looper/skills/sl-run/references/review-lenses.md`
-- selected source material from `plugins/super-looper/agents/`
-- `plugins/super-looper/skills/sl-run/evals/`
-- relevant shell/contract tests
+- `src/workflows/` (new kernel, node contracts, policies, command runner, and host-agent interfaces)
+- `scripts/workflows/` (new CLI entry points if needed)
+- `plugins/super-looper/skills/sl-run/SKILL.md` (reduce to thin entry and status/review UX)
+- `plugins/super-looper/skills/sl-run/references/runtime-claude.md`
+- `plugins/super-looper/skills/sl-run/references/runtime-codex.md`
+- `plugins/super-looper/skills/sl-run/scripts/` (bridge to the kernel)
+- `scripts/loop.sh` and `scripts/loop-phases.sh`
+- focused kernel, command-runner, adapter, state-transition, and behavioral tests
 
 **Approach:**
 
-- Build one phase packet and dispatch one worker per independent unit, capped at three by default.
-- Require explicit file/area ownership and prevent parallel edits to overlapping scopes.
-- Return structured results by path and evidence rather than narrative transcripts.
-- Integrate in the coordinator, then dispatch the independent verifier.
-- Select review lenses from changed surfaces and plan risks.
-- Permit one bounded repair pass; invoke the frontier escalator only after genuine exhaustion.
-- Preserve the give-up floor and unresolved-artifact behavior.
+- Before generalizing, diagram and manually exercise the smallest full graph: plan -> build -> deterministic checks -> repair -> semantic verify -> review-ready.
+- Define independently testable `code`, `agent`, and `human` node results and a typed transition record.
+- Move next-node selection, retries, timeouts, conditions, state writes, goal checks, and evidence indexing into the kernel.
+- Configure deterministic commands as argument arrays plus explicit working directory and timeout; never interpolate agent-authored shell text through `eval`.
+- Run formatter, lint, typecheck, tests, and contract checks outside the build agent. Successful output stays on disk; only compact failure evidence enters repair context.
+- Persist the opaque agent session handle and resume the responsible worker after a failed check when supported. Use a typed fresh-agent fallback and record degraded continuity otherwise.
+- Keep the first implementation serial and single-worker. Do not add profiles, parallelism, delivery, or learning in this unit.
+- Make host adapters implement the same invoke/resume/result contract without assuming an undocumented SDK or identical Claude/Codex semantics.
 
-**Acceptance:** On both hosts, independent fixture units run concurrently where the host permits, overlapping units serialize, failed verification cannot be self-certified by the worker, and default review dispatch is materially smaller than the current persona fleet. Any host limitation is explicit in run state and never reported as parallel success.
+**Acceptance:** On both hosts, a fixture follows plan -> build -> failed deterministic check -> repair -> passed checks -> independent verification -> `review_ready`. State proves that code, not model prose, selected each transition. Kernel tests can mock agents and commands independently; a successful command does not consume an agent turn; unsupported session resume is visible rather than silently claimed.
 
-### U7. Fold delivery, learning, and strategy observation into closeout
+### U7. Add workflow profiles, risk routing, and bounded isolation
 
-**Goal:** Finish the loop without forcing users to invoke or understand separate shipping and learning workflows.
+**Goal:** Select the least expensive safe workflow for chore, bug, feature, or hotfix work, then add concurrency only where isolation makes it reliable.
 
-**Dependencies:** U5, U6.
+**Dependencies:** U6.
 
 **Files:**
 
+- `src/workflows/profiles/` (profile definitions and deterministic router)
+- `src/workflows/isolation/` (sandbox, worktree, and serialized-checkout adapters)
+- `plugins/super-looper/skills/sl-run/references/workflow-profiles.md`
+- `plugins/super-looper/skills/sl-run/references/team-execution.md`
+- `plugins/super-looper/skills/sl-run/references/review-lenses.md`
+- selected criteria from `plugins/super-looper/agents/`
+- profile, routing, overlap, isolation, and behavioral eval fixtures
+
+**Approach:**
+
+- Implement the chore, bug, feature, and hotfix profiles as data over shared node contracts, not duplicated orchestration prose.
+- Route from explicit user/plan metadata and deterministic risk signals first. Invoke a frontier router only for ambiguous classification and persist its rationale.
+- Give the user a route override unless it would bypass a required safety or authority gate.
+- Add one isolation interface: dedicated sandbox when available, worktree fallback, and mechanically serialized shared-checkout fallback.
+- Permit parallel workers only for explicit DAG-independent units with non-overlapping ownership and an isolation backend. Keep the hard cap at three; one remains the default.
+- Make hotfix work propose the smallest surgical remedy for engineer approval before build. Permit an optional isolated race only when urgency and compute budget justify it; fastest does not win unless checks and review pass.
+- Select verifier lenses from actual changed surfaces and profile risk, with additional reviewers only for orthogonal uncertainty.
+
+**Acceptance:** Both hosts route representative fixtures predictably; a chore avoids frontier/scout cost; bug work proves reproduction and regression coverage; feature work receives the planned review depth; hotfix work cannot build or deliver past its approval gates. Independent isolated units may run concurrently, overlapping or non-isolated units serialize, and run state records the actual isolation mode.
+
+### U8. Add engineer review, code-owned delivery, and evidence closeout
+
+**Goal:** Complete the developer workflow with a fast human acceptance boundary, deterministic delivery control, and high-signal learning.
+
+**Dependencies:** U6-U7.
+
+**Files:**
+
+- `src/workflows/review/` and `src/workflows/delivery/`
+- `plugins/super-looper/skills/sl-run/references/review-packet.md`
 - `plugins/super-looper/skills/sl-run/references/delivery.md`
 - `plugins/super-looper/skills/sl-run/references/closeout.md`
 - `plugins/super-looper/skills/sl-learn/` (reduce to internal compatibility capability)
 - `plugins/super-looper/skills/sl-compound/` (expose compact validated writer contract)
 - `plugins/super-looper/skills/sl-strategy/` (add explicit reconciliation input)
-- run-record schema, append tooling, and tests
-- behavioral evals for learning and strategy no-op/write cases
+- run-record schema, append tooling, and review/delivery/learning evals
 
 **Approach:**
 
-- Reuse existing commit, PR, CI quiescence, bounded fix, and honest unresolved behavior through late-loaded references.
-- Build learning evidence from run state instead of the entire hot transcript.
-- Deduplicate before drafting; make `no_learning` a normal terminal result.
-- Record strategy observations separately from learning candidates.
-- Require interactive approval for any targeted strategy update after the run is terminal and verified.
-- In unattended mode, preserve a concise proposal pointer without changing strategy.
+- Generate one review packet containing intent, scope, diff gist, checks, semantic findings, failed attempts, unresolved risks, profile, authority, and proposed delivery action.
+- Make `review_ready` the default unattended terminal. Require explicit engineer approval to deliver unless a narrow project policy was separately approved and is recorded.
+- Keep hotfix proposal and final delivery approval mandatory during this refactor.
+- Put commit/PR operations, CI observation, and delivery state transitions under code-owned policy. Route typed CI failures back to the responsible repair session within a bounded budget.
+- Build learning evidence from run state rather than the hot transcript; deduplicate before drafting and treat `no_learning` as normal.
+- Record strategy observations separately and require explicit post-run approval for any `STRATEGY.md` update.
 
-**Acceptance:** A green run can commit and open/update a PR, records CI disposition, writes a verified novel learning when warranted, writes none when unwarranted, and cannot mutate strategy without explicit post-run approval.
+**Acceptance:** A verified run stops with a complete review packet; rejection or repair requests resume safely; approval can commit and open/update a PR and record CI disposition. Typed CI failures can re-enter bounded repair. Novel learning is written only when warranted, no-op closeout is valid, and strategy cannot change without explicit approval.
 
-### U8. Migrate callers and reduce the public surface
+### U9. Migrate callers and reduce the public surface
 
-**Goal:** Make the streamlined workflow the default without breaking existing users abruptly.
+**Goal:** Make the code-first workflows the default without breaking existing users abruptly.
 
-**Dependencies:** U4-U7.
+**Dependencies:** U4-U8.
 
 **Files:**
 
@@ -715,39 +845,41 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 
 **Approach:**
 
-- Turn `lfg` into a short compatibility wrapper for unattended `sl-run`.
+- Turn `lfg` into a short compatibility wrapper for an unattended kernel run through `sl-run`.
 - Turn `sl-work` into a compatibility wrapper for interactive `sl-run`.
 - Mark `sl-handoff` unnecessary for new runs; retain it temporarily for non-run session handoffs if usage justifies that narrower purpose.
-- Keep `sl-code-review`, Git utilities, debug, design, and platform testing available outside the core loop.
+- Keep `sl-code-review`, Git utilities, debug, design, and platform testing available outside the core workflows.
+- Teach workflow profiles and the engineer review boundary without exposing internal node machinery as user commands.
 - Stop presenting the full catalog as the onboarding path.
-- Add deprecation messages only where they give the user a direct replacement, and avoid noisy warnings during internal invocation.
-- After at least one release of compatibility evidence, remove obsolete wrappers and agent definitions in a separate explicitly approved change.
+- Add deprecation messages only where they give the user a direct replacement, and remove obsolete wrappers or agent definitions only in a later explicitly approved change.
 
-**Acceptance:** README onboarding teaches three core commands; existing `lfg` and `sl-work` invocations route successfully; internal callers no longer depend on fixed agent names that are being demoted.
+**Acceptance:** README onboarding teaches three core commands and the four workflow profiles; existing `lfg` and `sl-work` invocations route successfully; internal callers no longer depend on demoted fixed agent names or treat a giant skill as the workflow engine.
 
-### U9. Validate, compare, and roll out behind evidence
+### U10. Validate, compare, and promote behind evidence
 
-**Goal:** Prove the streamlined system is cheaper and at least as reliable before promoting it fully.
+**Goal:** Prove each developer workflow is cheaper and at least as reliable before promoting it fully.
 
-**Dependencies:** U1-U8.
+**Dependencies:** U1-U9.
 
 **Files:**
 
 - all affected eval suites
 - `tests/` contracts
+- `docs/evals/` comparison report
 - `docs/solutions/` only for verified implementation learnings
 - release metadata and docs when component counts or descriptions change
 
 **Approach:**
 
-- Run the full benchmark against the old and new paths on the same fixtures.
-- Compare tokens/proxies, agent count, wall time, plan quality, completion, review findings, and learning precision.
+- Run old and new paths on the same chore, bug, feature, hotfix, resume, repair, and host-gap fixtures.
+- Compare tokens/proxies, agent invocations, session resumes, deterministic node count, wall time, engineer interventions, plan quality, completion, review findings, and learning precision.
+- Test individual nodes, every permitted transition, and end-to-end graphs; inject agent failures and command failures independently.
 - Use `skill-creator` fresh-source behavioral evals for every changed agent or skill.
-- Run the equivalent Codex compatibility/eval fixtures from a fresh installed-plugin session, because plugin and skill content is cached across installation/session boundaries.
-- Run `bun test` and `bun run release:validate` because component inventory, skill behavior, and descriptions change.
-- Promote `sl-run` only after hard gates pass; otherwise retain the compatibility path and revise the failed phase.
+- Run equivalent Codex fixtures from a fresh installed-plugin session because plugin and skill content is cached across installation/session boundaries.
+- Run `bun test` and `bun run release:validate` because component inventory, skill behavior, scripts, and descriptions change.
+- Promote a profile only after its hard gates pass. Keep compatibility paths for profiles that have not earned promotion.
 
-**Acceptance:** Meet the efficiency targets and every quality floor independently on Claude Code and Codex; publish the two-host comparison in the PR or a tracked evaluation report; no release-owned version is hand-bumped.
+**Acceptance:** Meet efficiency targets and every quality floor independently for each promoted profile on Claude Code and Codex; publish the two-host comparison in a tracked evaluation report; no release-owned version is hand-bumped.
 
 ---
 
@@ -759,10 +891,11 @@ Keep the work reviewable through separate PRs:
 2. **Dual-host foundation:** U3; native Codex packaging plus Claude preservation gates and a cross-host smoke skill.
 3. **Lean planner:** U4; migrate one core skill across both hosts while preserving the old execution path.
 4. **Run-state coordinator:** U5; introduce `sl-run` behind explicit invocation on both hosts.
-5. **Agent teams and verification:** U6.
-6. **Closeout loop:** U7.
-7. **Migration and surface reduction:** U8.
-8. **Promotion:** U9 plus documentation and inventory cleanup.
+5. **Serial workflow kernel:** U6; extract deterministic control flow and independently test code/agent boundaries.
+6. **Profiles and isolation:** U7; route by economics and risk, then earn bounded concurrency.
+7. **Engineer review and closeout:** U8; add review-ready, delivery, CI repair, learning, and strategy observation nodes.
+8. **Migration and surface reduction:** U9.
+9. **Promotion:** U10 plus documentation and inventory cleanup.
 
 Do not combine deletion of old workflows with introduction of the new runner. The compatibility window is what makes quality and token comparisons possible.
 
@@ -774,9 +907,12 @@ Do not combine deletion of old workflows with introduction of the new runner. Th
 
 - Simplifying the core product workflow and user entry points.
 - Frontier-model planning and semantic model roles.
-- Bounded agent-team execution by plan phase.
+- A deterministic workflow kernel with separate code, agent, and human node interfaces.
+- Chore, bug, feature, and hotfix profiles selected by explicit metadata and risk.
+- Bounded agent execution and optional isolated concurrency by plan phase.
 - Canonical progress, resume, and run-record state.
-- Risk-selected review and independent verification.
+- Deterministic validation, risk-selected independent verification, and engineer review packets.
+- Code-owned delivery authority, CI observation, and bounded repair routing.
 - Evidence-gated learning and human-owned strategy reconciliation.
 - Token/dispatch observability and behavioral benchmarks.
 - Compatibility wrappers and staged deprecation.
@@ -788,6 +924,9 @@ Do not combine deletion of old workflows with introduction of the new runner. Th
 ### Deferred
 
 - A hosted dashboard for run records or strategy metrics.
+- Direct integrations with Kanban/ticket, support, Slack/Teams, or production incident systems.
+- A hosted sandbox provider; U7 defines an adapter and uses capabilities already available to the host.
+- Organization-wide zero-touch delivery. A narrow review-waiver policy may be evaluated later, but is not the default outcome of this plan.
 - Automatic strategy edits in unattended mode.
 - Recursive agent teams or deeper-than-one subagent delegation.
 - Public Codex marketplace submission; this plan covers a source-controlled repo marketplace and local/team installation first.
@@ -796,6 +935,9 @@ Do not combine deletion of old workflows with introduction of the new runner. Th
 ### Explicit non-goals
 
 - Preserving every existing skill or agent as a first-class public component.
+- Building a universal software factory or one mega-workflow for every engineering activity.
+- Eliminating engineers from consequential intent, hotfix, or review decisions.
+- Treating all process steps as one giant skill or agent session.
 - Maximizing parallel agent count.
 - Producing a learning for every run.
 - Making HTML or generated images part of the execution contract.
@@ -808,10 +950,17 @@ Do not combine deletion of old workflows with introduction of the new runner. Th
 
 | Risk | Mitigation |
 |---|---|
-| A single `sl-run` becomes another enormous skill | Keep the main body as a state-machine router; load phase references only at the phase that needs them; enforce a size budget in tests |
+| A single `sl-run` becomes another enormous skill | Keep `sl-run` as the UX and policy entry; move outer control flow to a code-owned kernel with independently tested nodes; enforce a skill size budget |
+| The kernel merely shells out to one giant agent workflow | Require typed code, agent, and human node interfaces; test commands and agent adapters independently; persist every transition owner in state |
 | Frontier planning becomes expensive | Use one frontier planner, no default fleet, targeted evidence, and at most one gated critic |
+| Every task pays for the feature workflow | Use deterministic routing and explicit profile metadata first; benchmark chore, bug, feature, and hotfix economics separately |
+| An agent router makes unstable profile choices | Prefer deterministic signals, require typed rationale for ambiguous model routing, and allow user override except for safety gates |
 | Smaller review teams miss issues | Select lenses from explicit risk signals; keep independent verification and permit bounded extra reviewers for orthogonal risks |
-| Parallel workers conflict | Require scope ownership, detect overlap before dispatch, isolate where available, and serialize integration in the coordinator |
+| Parallel workers conflict | Require scope ownership, detect overlap before dispatch, isolate where available, and serialize integration in the workflow kernel |
+| Sandbox support is unavailable or inconsistent | Use one isolation adapter with sandbox, worktree, and safe serialized fallbacks; record actual mode rather than claiming isolation |
+| Same-session repair is unavailable | Treat the session handle as an adapter capability; fall back to a typed fresh-agent packet and record the context degradation |
+| Agent-authored commands create an execution boundary risk | Configure command argument arrays, explicit working directories and timeouts; never pass model-authored strings through `eval` |
+| Automation bypasses engineer acceptance | Default to `review_ready`; require explicit recorded delivery authority; keep hotfix approvals mandatory |
 | State file and git diverge | Record hashes and `head_sha` at every boundary; re-verify on resume; fail honestly on mismatch |
 | Learning precision falls | Build from evidence, deduplicate first, retain the learning evaluator, and accept `no_learning` |
 | Strategy becomes noisy | Record observations only when the run challenges a strategy claim; require explicit interactive approval for edits |
@@ -834,6 +983,7 @@ This is a product-architecture change across the plugin, not a local skill refac
 - Plugin README, root README, generated skill docs, component counts, and descriptions will change.
 - Skills and agents will change behavior and therefore require `skill-creator` behavioral evaluation in fresh subagents.
 - `scripts/loop.sh`, progress contracts, run-record fields, and their tests will evolve.
+- `src/workflows/` becomes a new product-code surface for deterministic node execution, routing, isolation, review policy, and delivery control.
 - A native Codex package manifest under `plugins/super-looper/codex/super-looper/` and `.agents/plugins/marketplace.json` become release/validation surfaces alongside the existing Claude files.
 - Release metadata synchronization must keep Claude and Codex plugin metadata in lockstep, but routine PRs must not bump versions manually.
 - The strategy document's current approach still broadly applies. A later interactive `sl-strategy` revision should update its wording from enforcing every named skill stage to enforcing the smaller strategy -> plan -> run -> learn lifecycle after the new path is proven.
@@ -854,20 +1004,19 @@ This is a product-architecture change across the plugin, not a local skill refac
 
 ---
 
-## Recommended First Slice
+## Recommended Next Slice
 
-Start with U1-U3, split into two PRs: measurement/contracts first, then the dual-host packaging foundation.
+Resume at U6 only: extract and prove the serial code-owned workflow kernel. Do not add agent teams, workflow profiles, automated delivery, or learning changes in the same PR.
 
 That PR should produce:
 
-- A representative baseline eval set.
-- A before-state efficiency report.
-- The minimum phased-plan contract.
-- The run-state and phase-packet schemas.
-- Mechanical validators and transition tests.
-- A preserved and validated Claude plugin/marketplace baseline.
-- A native Codex manifest and repo marketplace entry wired into release validation.
-- One cross-host smoke skill proving shared instructions, reference loading, bundled scripts, questions, and one worker dispatch through host adapters.
-- No renamed skills, removed agents, or changed default workflow.
+- A checked-in diagram or fixture for plan -> build -> check -> repair -> verify -> review-ready.
+- Typed `code`, `agent`, and `human` node results and transition tests.
+- A command runner that owns exit-code classification, timeouts, log pointers, and safe argument handling.
+- Claude and Codex agent adapters with an explicit invoke/resume capability contract.
+- Same-session repair where supported and a tested, visible fresh-agent fallback.
+- A thinner `sl-run` that launches/resumes the kernel and presents status or review evidence.
+- Serial end-to-end behavioral evidence on both hosts.
+- No parallel workers, workflow router, old-skill deletion, or default delivery authority.
 
-This is the smallest slice that prevents the refactor from becoming another intuition-driven prompt rewrite or a Claude-only design that is expensive to port later. Once the baseline, contracts, and two-host adapter seam exist, `sl-plan` can be simplified once and measured on both hosts before the execution system changes.
+This is the smallest boundary that applies the transcript's most valuable recommendation: build and test the workflow as a composition of engineers, agents, and deterministic code before scaling its compute or autonomy.
