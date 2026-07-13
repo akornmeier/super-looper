@@ -57,4 +57,4 @@ The planner reports the artifact path, assumptions, and whether a scout or criti
 sl-run plan:<repo-relative-plan-path>
 ```
 
-Until `sl-run` ships, `sl-work <repo-relative-plan-path>` remains the Claude Code compatibility path. Planning never starts execution or creates external state without an explicit follow-up request.
+`sl-work <repo-relative-plan-path>` remains the Claude Code compatibility path during migration. Planning never starts execution or creates external state without an explicit follow-up request.

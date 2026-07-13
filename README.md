@@ -31,14 +31,14 @@ Super looper is not a box of tools you reach into when you remember to. It is a 
 flowchart LR
   S(["STRATEGY.md (anchor)"]) -. grounds .-> B
   I(["ideate (optional)"]) -. routes .-> B
-  B["brainstorm"] --> P["plan"] --> W["work"] --> R["review"] --> SH["ship: commit, PR, CI"] --> C["compound"]
+  B["brainstorm"] --> P["plan"] --> W["run: execute + verify"] --> R["review"] --> SH["ship: commit, PR, CI"] --> C["compound"]
   C -->|"repeat with better context"| B
   PP(["product-pulse"]) -. signal .-> S
 ```
 
 `/sl-strategy` sits upstream of the loop. It captures the product's target problem, approach, persona, metrics, and tracks as a short durable anchor at `STRATEGY.md`, which ideate, brainstorm, and plan all read as grounding -- so strategy choices flow into feature conception, prioritization, and spec.
 
-The core loop is: **brainstorm** the requirements, **plan** the implementation, **work** through the plan, **review** the result, **ship** it, then **compound** the learning -- and repeat with better context. Use `/sl-ideate` *before* the loop when you want the agent to generate and critique bigger ideas before choosing one to brainstorm; it produces a ranked ideation artifact, not requirements, plans, or code.
+The core loop is: **brainstorm** the requirements, **plan** the implementation, **run** the plan through verified phases, **review** the result, **ship** it, then **compound** the learning -- and repeat with better context. Use `/sl-ideate` *before* the loop when you want the agent to generate and critique bigger ideas before choosing one to brainstorm; it produces a ranked ideation artifact, not requirements, plans, or code.
 
 | Stage          | Skill               | What it does                                                                                                                                                    |
 | -------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -46,7 +46,8 @@ The core loop is: **brainstorm** the requirements, **plan** the implementation, 
 | _pre-loop_     | `/sl-ideate`        | Optional big-picture ideation: generate and critically evaluate grounded ideas, then route the strongest one into brainstorming                                 |
 | brainstorm     | `/sl-brainstorm`    | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning                                                  |
 | plan           | `/sl-plan`          | Turn feature ideas into detailed implementation plans                                                                                                           |
-| work           | `/sl-work`          | Execute plans with worktrees and task tracking                                                                                                                  |
+| run            | `/sl-run`           | Execute and resume canonical plans through durable, independently verified phases                                                                               |
+| work (compat.) | `/sl-work`          | Existing Claude Code execution workflow retained during migration                                                                                               |
 | review         | `/sl-code-review`   | Multi-agent code review before merging                                                                                                                          |
 | ship           | `/sl-commit-push-pr`| Commit, push, and open a PR with a value-communicating description                                                                                              |
 | compound       | `/sl-compound`      | Document learnings to make future work easier                                                                                                                   |
@@ -78,24 +79,18 @@ Every stage above is a skill you can run yourself -- or you can hand the whole l
 /lfg "make background job retries safer"
 ```
 
-**Unattended (`scripts/loop.sh`).** For a fully hands-off run in a clean context -- no accumulated session state -- the loop driver wraps `/lfg` headlessly and drives a committed plan in a target repo to a green PR. It runs against **another** project, not this one:
+**Unattended (`scripts/loop.sh`).** For a fully hands-off run in a clean context, the loop driver launches `sl-run` for a canonical plan and preserves its durable state across process retries. At the U5 boundary it completes implementation and independent phase verification but deliberately stops before delivery, so plan mode requires a local `--verify-cmd`. It runs against **another** project, not this one:
 
 ```bash
-# --plan-file is resolved in the target (commit it there); --handoff-file is
-# the absolute OS-temp path /sl-handoff prints (it never writes into the repo).
-bash scripts/loop.sh \
-  --target /path/to/your-project \
-  --plan-file docs/plans/<plan>.md \
-  --handoff-file /tmp/handoff-XXXXXX/handoff.md
-
-# No GitHub remote? Verify with the target's own command (--verify-cmd must be last):
+# --plan-file is resolved in the target; --verify-cmd must be last.
 bash scripts/loop.sh \
   --target /path/to/your-project \
   --plan-file docs/plans/<plan>.md \
   --verify-cmd bun test
 ```
 
-`/sl-plan` and `/sl-handoff` produce the plan and handoff docs the runner consumes. See the [loop driver operator guide](docs/loop-driver.md) for the full flag reference, verification modes, and safety rules.
+The old plan-to-PR path remains available as `--legacy-lfg-plan`, and
+`loop-phases.sh` selects it explicitly for stacked PRs. See the [loop driver operator guide](docs/loop-driver.md) for the full flag reference, verification modes, and safety rules.
 
 ## Quick Example
 
@@ -113,7 +108,7 @@ Reach for `/lfg` or `scripts/loop.sh` when the task is clear and self-contained 
 
 After installing, run `/sl-setup` in any project. It checks your environment, installs missing tools, and bootstraps project config.
 
-The `super-looper` plugin currently ships 40 skills and 42 agents. See the [full component reference](plugins/super-looper/README.md) for the complete inventory.
+The `super-looper` plugin currently ships 41 skills and 42 agents. See the [full component reference](plugins/super-looper/README.md) for the complete inventory.
 
 ## Install
 

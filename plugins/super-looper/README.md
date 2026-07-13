@@ -24,13 +24,15 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 | 1 | `/sl-ideate` | Pick the highest-leverage next slice — ranks grounded ideas against strategy and past learnings. Optional once direction is clear. |
 | 2 | `/sl-brainstorm` | Explore the chosen idea into a requirements doc (the *what*: scope, success criteria, boundaries). |
 | 3 | `/sl-plan` | Turn requirements into an implementation plan (the *how*: dependency-ordered units, test scenarios). |
-| 4 | _execute_ | Ship the plan — interactively or on autopilot (below). |
+| 4 | `/sl-run` | Execute and resume the plan through durable, independently verified phases. |
 | 5 | `/sl-compound` | Capture the learning from anything non-trivial you solved. Read back automatically by ideate, plan, and review on later passes. |
 
-**Step 4 has two modes**
+**Step 4 has two policies over the same state machine**
 
-- **Steer each stage:** `/sl-work` → `/sl-code-review` → `/sl-commit-push-pr`. Stay in the driver's seat.
-- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them. Unattended runs lock their goals: set `STRATEGY.md` and the plan *before* launching — a run that edits either mid-run aborts (exit 8, goal drift) rather than shipping the drift. Goal changes go through interactive `/sl-strategy` or a plan revision, then relaunch.
+- **Interactive:** `/sl-run plan:<path>` advances one bounded work unit at a time and asks only when recovery or new authority is required.
+- **Unattended:** `scripts/loop.sh --plan-file <path> --verify-cmd ...` supervises the same coordinator with timeout, retry, goal-drift, and terminal-record guards. U5 stops after implementation and independent phase verification; delivery and learning remain explicit until their closeout phase lands.
+
+The existing `/sl-work` and `/lfg` workflows remain available during migration. `loop-phases.sh` deliberately uses `loop.sh --legacy-lfg-plan` to preserve its stacked-PR behavior.
 
 **Right-size it.** Skip brainstorm for small, obvious changes — go straight to `/sl-plan` or `/sl-work`. Use `/sl-debug` for bugs, not the build loop. Save the full chain for ambiguous or cross-cutting features.
 
@@ -39,7 +41,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 | Component | Count |
 |-----------|-------|
 | Agents | 42 |
-| Skills | 40 |
+| Skills | 41 |
 
 ## Skills
 
@@ -55,6 +57,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-ideate`](../../docs/skills/sl-ideate.md) | Optional big-picture ideation: generate and critically evaluate grounded ideas, then route the strongest one into brainstorming. Writes the ranked ideation artifact as a single self-contained HTML file by default (human-facing); pass `output:md` for markdown (exclusive — html OR md, never both) |
 | [`/sl-brainstorm`](../../docs/skills/sl-brainstorm.md) | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning. Pass `output:html` to write the doc as a single self-contained HTML file instead of markdown (exclusive — md OR html, never both) |
 | [`/sl-plan`](../../docs/skills/sl-plan.md) | Use the parent frontier model to create a grounded, dependency-ordered execution plan with zero default subagents. Markdown is canonical; `output:html` preserves the optional self-contained renderer, while paid images require a separate explicit `images:on` request |
+| [`/sl-run`](../../docs/skills/sl-run.md) | Execute or resume a canonical plan through serial bounded work packets, atomic durable state, immutable-goal checks, and independent phase gates on Claude Code or Codex |
 | [`/sl-code-review`](../../docs/skills/sl-code-review.md) | Structured code review with tiered persona agents, confidence gating, and dedup pipeline |
 | [`/sl-work`](../../docs/skills/sl-work.md) | Execute work items systematically. Interactive runs keep an HTML plan's status markers current; unattended and parallel runs never write to the plan |
 | [`/sl-debug`](../../docs/skills/sl-debug.md) | Systematically find root causes and fix bugs -- traces causal chains, forms testable hypotheses, and implements test-first fixes |
@@ -62,7 +65,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-compound-refresh`](../../docs/skills/sl-compound-refresh.md) | Refresh stale or drifting learnings and decide whether to keep, update, replace, or archive them |
 | [`/sl-optimize`](../../docs/skills/sl-optimize.md) | Run iterative optimization loops with parallel experiments, measurement gates, and LLM-as-judge quality scoring |
 | [`/sl-product-pulse`](../../docs/skills/sl-product-pulse.md) | Generate a single-page, time-windowed report on usage, performance, errors, and followups. Saves reports to `docs/pulse-reports/` as a browseable timeline of what users experienced |
-| [`/lfg`](../../docs/skills/lfg.md) | Autopilot: run the entire loop end-to-end — plan, work, review, commit, open a PR, then watch CI and take bounded passes at fixing failures, recording anything it can't resolve. The hands-off path; `scripts/loop.sh` wraps it for unattended runs |
+| [`/lfg`](../../docs/skills/lfg.md) | Compatibility autopilot: run the legacy loop end-to-end — plan, work, review, commit, open a PR, then watch CI and take bounded repair passes. `loop.sh` retains this for seed input and explicit `--legacy-lfg-plan` runs |
 
 ### Research & Context
 
@@ -86,7 +89,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | Skill | Description |
 |-------|-------------|
 | [`/sl-demo-reel`](../../docs/skills/sl-demo-reel.md) | Capture a visual demo reel (GIF demos, terminal recordings, screenshots) for PRs with project-type-aware tier selection |
-| [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact the current session into a clean handoff doc a fresh agent can pick up — references artifacts by path, used at the plan→work seam to carry planning context into a clean run (e.g. `loop.sh --handoff-file`) |
+| [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact the current session into a clean handoff doc a fresh agent can pick up — references artifacts by path and remains available to the legacy plan→work seam (`loop.sh --legacy-lfg-plan --handoff-file`) |
 | [`sl-learn`](../../docs/skills/sl-learn.md) | Capture a ship-time learning at the close of an autopilot run — invoke `sl-compound` headless against the hot session context, commit the resulting `docs/solutions/` learning into the run's PR, and re-confirm CI green. Triggered by `lfg` after CI green and before `DONE`; skips when no open PR exists or CI is unresolved |
 | [`/sl-promote`](../../docs/skills/sl-promote.md) | Draft user-facing announcement copy for a shipped feature (X post, changelog blurb, LinkedIn, email); voice-matched via the Spiral CLI when installed, a lite layer of editorial & social expertise without it |
 | [`/sl-report-bug`](../../docs/skills/sl-report-bug.md) | Report a bug in the super-looper plugin |

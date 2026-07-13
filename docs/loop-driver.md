@@ -1,10 +1,10 @@
 # Loop driver (`scripts/loop.sh`) — operator guide
 
-`loop.sh` runs the `lfg` pipeline **unattended** against a target repo: seed one
-task, walk away, and the loop plans → works → reviews → fixes → opens a PR →
-reaches green. It is a thin headless invoker around `lfg` (which already loops CI
-to green); `loop.sh` adds only headless launch, permission bypass, a cap,
-target/plugin wiring, and a final target-scoped stop-predicate check.
+`loop.sh` is the unattended process supervisor for two migration paths. A
+`--plan-file` launches the streamlined `sl-run` coordinator; a seed retains the
+legacy `lfg` pipeline. The shell owns isolation, headless launch, timeout/retry
+caps, durable-state routing, goal hashes, terminal records, and an independent
+target check. Workflow policy stays in the selected skill.
 
 ## Quick start
 
@@ -37,8 +37,9 @@ command (`--dry-run`) and then runs it. Always preview with `--dry-run` first.
 | `--target <dir>` | _(required)_ | Directory the loop runs in and edits. |
 | `--seed <text>` | _(one required)_ | Seed task, inline. |
 | `--seed-file <path>` | _(one required)_ | Seed task read from a file. |
-| `--plan-file <path>` | _(one required)_ | Plan doc **in the target** to execute; skips planning and runs `lfg`'s plan-input branch. Mutually exclusive with `--seed`/`--seed-file`. Commit the plan in the target so a retry's reset does not delete it. |
-| `--handoff-file <path>` | _(off)_ | Handoff doc carried as orienting context for the run. **Valid only with `--plan-file`.** |
+| `--plan-file <path>` | _(one required)_ | Canonical plan **in the target** to execute with `sl-run`. Mutually exclusive with `--seed`/`--seed-file`. |
+| `--legacy-lfg-plan` | off | Run the old plan-to-PR `lfg` pipeline. `loop-phases.sh` uses this to preserve stacked PRs during migration. |
+| `--handoff-file <path>` | _(off)_ | Legacy `lfg` plan-mode context. Requires `--legacy-lfg-plan`. |
 | `--plugin-dir <path>` | this repo root | Pinned Super Looper checkout loaded via `--plugin-dir`. |
 | `--model <model>` | `opus` | Top-level orchestrator model (`opus` or `fable`). |
 | `--timeout <seconds>` | `1800` | Per-attempt wall-clock cap. |
@@ -55,32 +56,35 @@ A run executes exactly one task source:
 
 - **Seed** (`--seed` / `--seed-file`) — an inline task. `lfg` plans it first, then
   implements: plan → work → review → … → green.
-- **Plan** (`--plan-file`) — a plan doc already written **in the target**. The
-  driver names it via the literal `plan:<path>` marker so `lfg` **skips planning**
-  and executes the supplied plan directly, then runs the rest of the pipeline
-  unchanged. `--handoff-file` (plan mode only) carries planning-session context —
-  rationale, rejected alternatives, resolved questions — into the fresh process as
-  orienting context; the plan stays authoritative.
+- **Plan** (`--plan-file`) — a canonical Markdown plan already written **in the
+  target**. The driver names it with `plan:<path>`, gives `sl-run` a deterministic
+  state destination and run id, and supervises serial phased execution. On retry,
+  it switches to `state:<absolute-path>` rather than repeating initialization.
+- **Legacy plan** (`--plan-file --legacy-lfg-plan`) — preserves the old `lfg`
+  plan-to-PR pipeline, including `--phase` and `--handoff-file` support.
 
-A missing or unreadable `--plan-file` fails fast (`exit 2`) before the agent
-launches; a readable-but-non-plan file is caught at launch by `lfg`'s hard
-plan-shape gate, which stops with a clear error — either way there is no silent
-fallback to planning. Commit the plan in the target before running: a retry resets
-the target with `git clean -fd`, which would delete an untracked plan.
+A missing or unreadable `--plan-file` fails fast (`exit 2`) before launch. A
+readable malformed plan is rejected by the `sl-run` state engine; there is no
+silent fallback to planning.
 
 ## Verification modes (one is always required)
 
-- **GitHub-CI mode (default).** When the target has a git remote and no
+- **GitHub-CI mode (legacy default).** When the target has a git remote and no
   `--verify-cmd` is given, success requires an **open PR** for the target branch
   with **green `gh pr checks`**. A PR with **zero checks** is treated as *not*
   green — there is no unverified success. This is the faithful "reach CI-green"
   bar.
 - **Command mode.** `--verify-cmd <cmd...>` runs a local command **in the target
   directory**; success requires it to exit `0`. Use for targets without Actions.
+- **U5 plan mode requires command mode.** `sl-run` deliberately stops before
+  commit/PR delivery at this boundary, so GitHub-CI verification is unavailable
+  until closeout lands. Omitting `--verify-cmd` fails fast with exit 4.
 - **No verification available** (no remote *and* no `--verify-cmd`) → the driver
   **fails fast** (`exit 4`). There is no unverified success path.
 
-`DONE` is a **routing** signal, not a success signal: `lfg` emits
+`DONE` is a **routing** signal, not a success signal. In `sl-run` plan mode the
+driver additionally requires a matching durable `completed` run state before it
+accepts the sentinel. In legacy mode, `lfg` emits
 `<promise>DONE</promise>` in every exit path — including when it gives up on red
 CI. The driver detects `DONE` only to know the run *finished* (matching the last
 output line, so a mid-transcript echo never counts), then gates success on the
@@ -95,7 +99,11 @@ binary is **required** for a real run — without one, the per-attempt wall-cloc
 cap cannot be enforced and the driver fails fast (see Safety) rather than
 risking a hung, uncapped run.
 
-A crash-**without**-`DONE` reconciles before retrying:
+A crash-**without**-`DONE` reconciles before retrying. For `sl-run`, a valid
+non-terminal state resumes without resetting the target; completed gates remain
+completed, an in-progress unit requires reconciliation, and malformed existing
+state is preserved and fails closed. A blocked/failed/cancelled state is not
+blindly retried. For legacy `lfg`:
 
 - If an **open PR already exists** for the target branch → terminal: route to
   verification, do **not** re-launch. This reconciliation keeps **precedence** —
@@ -109,7 +117,7 @@ the retry budget — the give-up floor (`exit 5`) is intact.
 
 ## Resume
 
-A crashed attempt that got partway through the pipeline records its progress in a
+A legacy `lfg` attempt that got partway through the pipeline records its progress in a
 **run-progress file** — `lfg` writes it at each step boundary to a path `loop.sh`
 owns under `--log-dir`, **outside** the target tree (so a retry's `git clean -fd`
 cannot delete it and `lfg` step 8 cannot sweep it into the PR). On a
@@ -146,9 +154,10 @@ the file**.
 Resume is scoped to **steps 1–7 only**: it fires only *pre-PR*. Once a PR exists,
 open-PR crash reconciliation is authoritative and resume does not run (post-PR
 resume would need a cross-attempt fix-iteration cap to bound CI-fix looping —
-deferred). The progress file is **scrubbed on every terminal path** (all run-record
-exits, success and failure alike) and before every cold restart, so stale state can
-never seed a later run.
+deferred). The legacy progress file is **scrubbed on every terminal path** and
+before every cold restart. `sl-run` state is different:
+`/tmp/super-looper/sl-run/<run-id>/run-state.json` is the durable resume and audit
+handle, so the supervisor preserves it on success and failure.
 
 ## Goal-drift guard
 
@@ -205,7 +214,9 @@ The record captures what the driver directly observes — `outcome`, `exit_code`
 self-describing `coverage_boundary` that names what it indexes by pointer versus
 what it does not contain, so a partial record is never mistaken for a complete one.
 It is an **index, not a copy**: deeper detail lives behind the pointers, and the
-seed/task text is never inlined.
+seed/task text is never inlined. In `sl-run` plan mode, `coordinator` also surfaces
+the durable state path, current phase/unit, completed gates, next action, and
+terminal reason.
 
 `typed_failure` is the exit-code class:
 

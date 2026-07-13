@@ -53,7 +53,10 @@ PLAN_FILE=""
 # makes the script silently iterate over the operator's unix groups instead of the
 # plan's phases (observed: 16 "phases" named 20, 12, 61, ...). Do not rename back.
 PHASE_GROUPS=()
-PASSTHRU=()
+# This driver intentionally preserves the old stacked-PR workflow while
+# loop.sh's ordinary --plan-file path migrates to sl-run. Keep the compatibility
+# flag before any forwarded --verify-cmd, which consumes the remaining argv.
+PASSTHRU=( --legacy-lfg-plan )
 DRY_RUN=0
 
 die() { echo "loop-phases.sh: $*" >&2; exit "$EX_USAGE"; }

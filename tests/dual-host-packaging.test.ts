@@ -172,6 +172,51 @@ describe("dual-host plugin packaging", () => {
     expect(codex).not.toContain("${CLAUDE_SKILL_DIR}")
   })
 
+  test("keeps the sl-run coordinator and deterministic engine aligned across hosts", async () => {
+    const claudeRoot = path.join(pluginRoot, "skills", "sl-run")
+    const codexRoot = path.join(codexPluginRoot, "skills", "sl-run")
+
+    for (const relativeFile of [
+      "SKILL.md",
+      "agents/openai.yaml",
+      "references/state-engine.md",
+      "references/worker-contract.md",
+      "references/runtime-claude.md",
+      "references/runtime-codex.md",
+      "scripts/run-state.py",
+    ]) {
+      expect(await Bun.file(path.join(codexRoot, relativeFile)).text()).toBe(
+        await Bun.file(path.join(claudeRoot, relativeFile)).text(),
+      )
+    }
+  })
+
+  test("keeps host mechanics in sl-run adapters", async () => {
+    const shared = await Bun.file(
+      path.join(pluginRoot, "skills", "sl-run", "SKILL.md"),
+    ).text()
+    const claude = await Bun.file(
+      path.join(pluginRoot, "skills", "sl-run", "references", "runtime-claude.md"),
+    ).text()
+    const codex = await Bun.file(
+      path.join(pluginRoot, "skills", "sl-run", "references", "runtime-codex.md"),
+    ).text()
+
+    expect(shared).not.toMatch(/AskUserQuestion|ToolSearch|CLAUDE_SKILL_DIR/)
+    expect(claude).toContain("Agent")
+    expect(claude).toContain("${CLAUDE_SKILL_DIR}")
+    expect(codex).toContain("Codex subagent collaboration tool")
+    expect(codex).not.toContain("${CLAUDE_SKILL_DIR}")
+  })
+
+  test("keeps the streamlined coordinator hot path under its shared budget", async () => {
+    const bytes = ["sl-strategy", "sl-plan", "sl-run"].reduce(
+      (total, skill) => total + Bun.file(path.join(pluginRoot, "skills", skill, "SKILL.md")).size,
+      0,
+    )
+    expect(bytes).toBeLessThanOrEqual(120_000)
+  })
+
   test("uses the documented plugin-root compatibility variable for hooks", async () => {
     const hooks = await readJson("plugins/super-looper/hooks/hooks.json")
     expect(hooks.hooks.PreToolUse[0].hooks[0].command).toContain("${CLAUDE_PLUGIN_ROOT}")

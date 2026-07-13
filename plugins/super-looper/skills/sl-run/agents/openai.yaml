@@ -1,0 +1,6 @@
+interface:
+  display_name: "Run Plan"
+  short_description: "Execute and resume a verified phased plan"
+  default_prompt: "Use $sl-run to execute this plan with durable progress."
+policy:
+  allow_implicit_invocation: true
