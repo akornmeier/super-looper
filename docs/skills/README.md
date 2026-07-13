@@ -39,7 +39,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-report-bug`](./sl-report-bug.md) | Report a bug in the super-looper plugin |
 | [`sl-resolve-pr-feedback`](./sl-resolve-pr-feedback.md) | Resolve PR review feedback by evaluating validity and fixing issues in parallel |
 | [`sl-riffrec-feedback-analysis`](./sl-riffrec-feedback-analysis.md) | Riffrec product-feedback workflow |
-| [`sl-run`](./sl-run.md) | Execute or resume a canonical sl-plan artifact through a serial code-owned developer workflow with bounded implementation agents, direct deterministic checks, same-session repair when supported, independent semantic verification, durable state, goal-drift protection, and a review-ready stop |
+| [`sl-run`](./sl-run.md) | Execute or resume a canonical sl-plan artifact through a code-owned developer workflow that selects a chore, bug, feature, or hotfix profile, records isolation and bounded-team eligibility, runs direct deterministic checks, routes bounded repair, performs independent semantic verification, protects immutable goals, and stops review-ready |
 | [`sl-sessions`](./sl-sessions.md) | Search and ask questions about Claude Code session history |
 | [`sl-setup`](./sl-setup.md) | Diagnose and configure super-looper environment |
 | [`sl-simplify-code`](./sl-simplify-code.md) | Simplify and refine recently changed code for clarity, reuse, quality, and efficiency while preserving behavior |

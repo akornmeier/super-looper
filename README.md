@@ -46,7 +46,7 @@ The core loop is: **brainstorm** the requirements, **plan** the implementation, 
 | _pre-loop_     | `/sl-ideate`        | Optional big-picture ideation: generate and critically evaluate grounded ideas, then route the strongest one into brainstorming                                 |
 | brainstorm     | `/sl-brainstorm`    | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning                                                  |
 | plan           | `/sl-plan`          | Turn feature ideas into detailed implementation plans                                                                                                           |
-| run            | `/sl-run`           | Run canonical plans through a code-owned serial workflow, deterministic checks, independent verification, and a review-ready stop                              |
+| run            | `/sl-run`           | Route canonical plans through code-owned profiles, deterministic checks, independent verification, and a review-ready stop                                    |
 | work (compat.) | `/sl-work`          | Existing Claude Code execution workflow retained during migration                                                                                               |
 | review         | `/sl-code-review`   | Multi-agent code review before merging                                                                                                                          |
 | ship           | `/sl-commit-push-pr`| Commit, push, and open a PR with a value-communicating description                                                                                              |
@@ -79,7 +79,7 @@ Every stage above is a skill you can run yourself -- or you can hand the whole l
 /lfg "make background job retries safer"
 ```
 
-**Unattended (`scripts/loop.sh`).** For a fully hands-off run in a clean context, the loop driver launches `sl-run` for a canonical plan and preserves its durable state across process retries. At the U6 boundary deterministic code owns required checks and repair routing, while bounded agents implement and independently verify. The run stops at `review_ready` before delivery, so plan mode requires a local `--verify-cmd`. It runs against **another** project, not this one:
+**Unattended (`scripts/loop.sh`).** For a fully hands-off run in a clean context, the loop driver launches `sl-run` for a canonical plan and preserves its durable state across process retries. At the U7 boundary deterministic code selects a right-sized workflow profile, records honest isolation and bounded-team eligibility, and owns required checks and repair routing; bounded agents implement, route only genuine ambiguity, and independently verify. Hotfixes stop for proposal approval, and every run stops at `review_ready` before delivery, so plan mode requires a local `--verify-cmd`. It runs against **another** project, not this one:
 
 ```bash
 # --plan-file is resolved in the target; --verify-cmd must be last.

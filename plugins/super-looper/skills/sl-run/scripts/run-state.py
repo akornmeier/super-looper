@@ -39,6 +39,8 @@ UNIT_RE = re.compile(
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 KERNEL_STAGES = {
     "idle",
+    "awaiting-router",
+    "awaiting-proposal-approval",
     "awaiting-worker",
     "checking",
     "awaiting-repair",
@@ -46,6 +48,8 @@ KERNEL_STAGES = {
     "review-ready",
     "failed",
 }
+PROFILE_NAMES = {"chore", "bug", "feature", "hotfix"}
+ISOLATION_MODES = {"sandbox", "worktree", "shared"}
 
 
 class RunError(Exception):
@@ -313,7 +317,149 @@ def parse_plan(path: Path) -> dict[str, Any]:
         )
     validate_graph(phases)
     validate_graph(phases, "work_units")
-    return {"schema_version": 1, "goal": goal, "requirements": requirements, "phases": phases}
+    plan: dict[str, Any] = {
+        "schema_version": 1,
+        "goal": goal,
+        "plan_type": meta.get("type", "").strip() or "plan",
+        "requirements": requirements,
+        "phases": phases,
+    }
+    profile = meta.get("workflow_profile", "").strip().lower()
+    if profile:
+        if profile not in PROFILE_NAMES:
+            raise RunError(EX_INVALID, "plan workflow_profile is unsupported", profile=profile)
+        plan["workflow_profile"] = profile
+    return plan
+
+
+def load_profile_catalog() -> dict[str, Any]:
+    path = Path(__file__).resolve().parent.parent / "references" / "workflow-profiles.json"
+    catalog = read_json(path, "workflow profile catalog")
+    if catalog.get("schema_version") != 1 or set(catalog.get("profiles", {})) != PROFILE_NAMES:
+        raise RunError(EX_INVALID, "workflow profile catalog does not match the U7 contract", path=str(path))
+    return catalog
+
+
+def route_workflow(plan: dict[str, Any], override: str | None, catalog: dict[str, Any]) -> dict[str, Any]:
+    plan_profile = plan.get("workflow_profile")
+    plan_type = plan.get("plan_type", "").strip().lower()
+    risks = [risk for phase in plan["phases"] for risk in phase["risks"]]
+    text = " ".join([plan["goal"], *plan["requirements"], *risks]).lower()
+    phase_count = len(plan["phases"])
+    unit_count = sum(len(phase["work_units"]) for phase in plan["phases"])
+    floor: str | None
+    source: str
+    rationale: str
+    signals: list[str]
+    signal_floor: str | None = None
+    signal = ""
+    signal_rationale = ""
+    if plan_type == "hotfix" or re.search(r"\b(hotfix|sev[- ]?[01]|production (?:down|outage)|active incident)\b", text):
+        signal_floor, signal = "hotfix", "incident-or-hotfix"
+        signal_rationale = "Incident or urgent production signal requires the hotfix profile."
+    elif plan_type in {"fix", "bug"} or re.search(r"\b(bug|regression|reproduce|root cause)\b", text):
+        signal_floor, signal = "bug", "defect"
+        signal_rationale = "Defect signals require reproduction and regression evidence."
+    elif plan_type in {"feat", "feature", "refactor"} or phase_count > 1 or unit_count > 1:
+        signal_floor, signal = "feature", "feature-or-cross-cutting"
+        signal_rationale = "Feature, refactor, or multi-unit scope requires the feature profile."
+    elif plan_type in {"chore", "docs", "doc", "test", "ci", "build"}:
+        signal_floor, signal = "chore", "bounded-maintenance"
+        signal_rationale = "A bounded maintenance plan qualifies for the chore profile."
+    if plan_profile:
+        if signal_floor and catalog["profiles"][plan_profile]["risk_rank"] < catalog["profiles"][signal_floor]["risk_rank"]:
+            raise RunError(EX_INVALID, "plan workflow_profile is below the deterministic safety floor", profile=plan_profile, safety_floor=signal_floor)
+        floor, source = plan_profile, "explicit-plan"
+        rationale = "Plan frontmatter selected the workflow profile without lowering observed risk."
+        signals = [signal or "explicit-plan", f"workflow_profile:{plan_profile}"]
+        signal_floor = signal_floor or plan_profile
+    elif signal_floor:
+        floor, source, rationale, signals = signal_floor, "deterministic", signal_rationale, [signal]
+    elif plan_type == "plan":
+        floor, source = "feature", "deterministic"
+        rationale, signals, signal_floor = "An unclassified canonical plan uses the conservative feature profile.", ["canonical-plan-default"], "feature"
+    else:
+        floor, source = None, "agent"
+        rationale, signals = "Deterministic signals are insufficient to classify the work safely.", ["ambiguous"]
+    if override:
+        if floor and catalog["profiles"][override]["risk_rank"] < catalog["profiles"][floor]["risk_rank"]:
+            raise RunError(EX_INVALID, "profile override is below the deterministic safety floor", override=override, safety_floor=floor)
+        return {
+            "status": "selected",
+            "profile": override,
+            "source": "override",
+            "rationale": "User selected a profile without lowering the deterministic safety floor.",
+            "signals": [*signals, f"override:{override}"],
+            "safety_floor": signal_floor,
+        }
+    if floor:
+        return {"status": "selected", "profile": floor, "source": source, "rationale": rationale, "signals": signals, "safety_floor": signal_floor or floor}
+    return {"status": "needs-agent", "profile": None, "source": "agent", "rationale": rationale, "signals": signals, "safety_floor": None}
+
+
+def scopes_overlap(left: list[str], right: list[str]) -> bool:
+    def normalize(value: str) -> str:
+        return value.replace("\\", "/").removeprefix("./").rstrip("/")
+    for left_value in left:
+        for right_value in right:
+            first, second = normalize(left_value), normalize(right_value)
+            if not first or not second or first == "." or second == "." or "*" in first or "*" in second:
+                return True
+            if first == second or first.startswith(f"{second}/") or second.startswith(f"{first}/"):
+                return True
+    return False
+
+
+def depends_transitively(unit_id: str, target_id: str, units: dict[str, dict[str, Any]], seen: set[str] | None = None) -> bool:
+    visited = seen or set()
+    if unit_id in visited:
+        return False
+    visited.add(unit_id)
+    return any(
+        dependency == target_id or depends_transitively(dependency, target_id, units, visited)
+        for dependency in units[unit_id]["depends_on"]
+    )
+
+
+def select_isolation(
+    plan: dict[str, Any], profile: str, catalog: dict[str, Any], available: list[str], requested_workers: int
+) -> dict[str, Any]:
+    capabilities = list(dict.fromkeys(available or ["shared"]))
+    selected = "sandbox" if "sandbox" in capabilities else "worktree" if "worktree" in capabilities else "shared"
+    hard_limit = max(1, min(3, requested_workers, catalog["profiles"][profile]["max_workers"]))
+    best_group: list[str] = []
+    for phase in plan["phases"]:
+        units = {unit["id"]: unit for unit in phase["work_units"]}
+        group: list[str] = []
+        for unit in phase["work_units"]:
+            if len(group) >= hard_limit:
+                break
+            independent = all(
+                not depends_transitively(unit["id"], other_id, units)
+                and not depends_transitively(other_id, unit["id"], units)
+                and not scopes_overlap(unit["files_or_area"], units[other_id]["files_or_area"])
+                for other_id in group
+            )
+            if independent:
+                group.append(unit["id"])
+        if len(group) > len(best_group):
+            best_group = group
+    parallel = selected != "shared" and hard_limit > 1 and len(best_group) > 1
+    if selected == "shared":
+        reason = "shared checkout forces serial execution"
+    elif parallel:
+        reason = "isolated, DAG-independent, non-overlapping units are eligible"
+    else:
+        reason = "profile, dependency, or ownership constraints force serial execution"
+    return {
+        "available": capabilities,
+        "selected": selected,
+        "requested_workers": requested_workers,
+        "max_workers": min(hard_limit, len(best_group)) if parallel else 1,
+        "parallel_eligible": parallel,
+        "eligible_group": best_group if parallel else [],
+        "reason": reason,
+    }
 
 
 def load_bundle(state_path: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -416,6 +562,29 @@ def workflow(state: dict[str, Any]) -> dict[str, Any]:
         raise RunError(EX_STATE, "run was not initialized for the workflow kernel")
     if value.get("stage") not in KERNEL_STAGES:
         raise RunError(EX_INVALID, "workflow state has an unsupported stage", stage=value.get("stage"))
+    value.setdefault(
+        "route",
+        {
+            "status": "selected",
+            "profile": "feature",
+            "source": "deterministic",
+            "rationale": "Legacy U6 run resumes through the conservative feature profile.",
+            "signals": ["legacy-u6-state"],
+            "safety_floor": "feature",
+        },
+    )
+    value.setdefault(
+        "isolation",
+        {
+            "available": ["shared"],
+            "selected": "shared",
+            "requested_workers": 1,
+            "max_workers": 1,
+            "parallel_eligible": False,
+            "eligible_group": [],
+            "reason": "legacy U6 state resumes serially in the shared checkout",
+        },
+    )
     return value
 
 
@@ -500,6 +669,10 @@ def summary(state: dict[str, Any], state_path: Path, **extra: Any) -> dict[str, 
         next_action = "none"
     elif flow and flow["stage"] == "review-ready":
         next_action = "await-engineer-review"
+    elif flow and flow["stage"] == "awaiting-router":
+        next_action = "reconcile-in-progress-router"
+    elif flow and flow["stage"] == "awaiting-proposal-approval":
+        next_action = "await-hotfix-proposal-approval"
     elif state["status"] == "blocked":
         next_action = "resolve-blocker"
     elif flow and flow["stage"] in {"awaiting-worker", "awaiting-repair"}:
@@ -524,6 +697,10 @@ def summary(state: dict[str, Any], state_path: Path, **extra: Any) -> dict[str, 
         "next_action": next_action,
         "state_path": str(state_path),
         "terminal_reason": state["terminal"]["reason"] if state.get("terminal") else None,
+        "profile": flow.get("route", {}).get("profile") if flow else None,
+        "route_source": flow.get("route", {}).get("source") if flow else None,
+        "isolation_mode": flow.get("isolation", {}).get("selected") if flow else None,
+        "max_workers": flow.get("isolation", {}).get("max_workers") if flow else None,
     }
     result.update(extra)
     return result
@@ -540,6 +717,8 @@ def initial_state(
     plan: dict[str, Any],
     kernel: bool = False,
     max_repair_attempts: int = 1,
+    route: dict[str, Any] | None = None,
+    isolation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     timestamp = now()
     state = {
@@ -588,9 +767,46 @@ def initial_state(
             "repair_attempts": {},
             "sessions": {},
             "nodes": [],
+            "route": route,
+            "isolation": isolation,
             "review": {"status": "not-ready", "packet_path": None},
         }
     return state
+
+
+def open_hotfix_proposal_gate(
+    state: dict[str, Any], state_path: Path, plan: dict[str, Any], catalog: dict[str, Any]
+) -> str:
+    flow = workflow(state)
+    packet = {
+        "schema_version": 1,
+        "run_id": state["run_id"],
+        "profile": "hotfix",
+        "goal": plan["goal"],
+        "requirements": plan["requirements"],
+        "risks": [risk for phase in plan["phases"] for risk in phase["risks"]],
+        "owned_scopes": [
+            scope for phase in plan["phases"] for unit in phase["work_units"] for scope in unit["files_or_area"]
+        ],
+        "required_evidence": catalog["profiles"]["hotfix"]["required_evidence"],
+        "question": "Approve this bounded hotfix proposal for implementation?",
+        "delivery_authorized": False,
+    }
+    packet_path = state_path.parent / "hotfix-proposal.json"
+    atomic_write(packet_path, packet)
+    append_node(
+        state,
+        identifier="human.hotfix-proposal.0",
+        kind="human",
+        status="pending",
+        attempt=0,
+        phase_id=None,
+        unit_id=None,
+        input_paths=[str(packet_path)],
+        next_action="await-hotfix-proposal-approval",
+    )
+    flow["stage"] = "awaiting-proposal-approval"
+    return str(packet_path)
 
 
 def command_init(args: argparse.Namespace) -> None:
@@ -599,6 +815,8 @@ def command_init(args: argparse.Namespace) -> None:
         raise RunError(EX_INVALID, "target must be a git repository", target=str(target))
     plan_path, plan_rel = resolve_inside(target, args.plan, "plan")
     plan = parse_plan(plan_path)
+    catalog = load_profile_catalog()
+    route = route_workflow(plan, args.profile, catalog)
     run_id = args.run_id or f"run-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
     if not RUN_ID_RE.fullmatch(run_id):
         raise RunError(EX_INVALID, "run id must be 1-128 portable filename characters", run_id=run_id)
@@ -614,6 +832,12 @@ def command_init(args: argparse.Namespace) -> None:
     branch = git(target, "rev-parse", "--abbrev-ref", "HEAD")
     head = git(target, "rev-parse", "HEAD")
     base_ref = args.base_ref or head
+    provisional_profile = route["profile"] or "feature"
+    isolation_capabilities = args.isolation_capability or ["shared"]
+    isolation = select_isolation(plan, provisional_profile, catalog, isolation_capabilities, args.max_workers)
+    repair_cap = args.max_repair_attempts
+    if repair_cap is None:
+        repair_cap = catalog["profiles"][provisional_profile]["max_repair_attempts"]
     state = initial_state(
         run_id,
         plan_rel,
@@ -624,12 +848,16 @@ def command_init(args: argparse.Namespace) -> None:
         head,
         plan,
         kernel=args.kernel,
-        max_repair_attempts=args.max_repair_attempts,
+        max_repair_attempts=repair_cap,
+        route=route,
+        isolation=isolation,
     )
     meta = {
         "schema_version": 1,
         "target": str(target),
         "strategy": {"path": strategy_rel, "absent": strategy_absent},
+        "isolation_capabilities": isolation_capabilities,
+        "requested_workers": args.max_workers,
     }
     state_path.parent.mkdir(parents=True, exist_ok=True)
     with state_lock(state_path):
@@ -637,8 +865,43 @@ def command_init(args: argparse.Namespace) -> None:
             raise RunError(EX_STATE, "run state already exists; resume it instead", state_path=str(state_path))
         atomic_write(state_path.parent / "execution-plan.json", plan)
         atomic_write(state_path.parent / "run-meta.json", meta)
+        if args.kernel and route["status"] == "needs-agent":
+            route_packet = {
+                "schema_version": 1,
+                "run_id": run_id,
+                "goal": plan["goal"],
+                "requirements": plan["requirements"],
+                "risks": [risk for phase in plan["phases"] for risk in phase["risks"]],
+                "plan_type": plan.get("plan_type"),
+                "phase_count": len(plan["phases"]),
+                "unit_count": sum(len(phase["work_units"]) for phase in plan["phases"]),
+                "available_profiles": sorted(PROFILE_NAMES),
+                "deterministic_signals": route["signals"],
+                "safety_floor": route["safety_floor"],
+            }
+            route_path = state_path.parent / "route-packet.json"
+            atomic_write(route_path, route_packet)
+            append_node(
+                state,
+                identifier="agent.router.0",
+                kind="agent",
+                status="running",
+                attempt=0,
+                phase_id=None,
+                unit_id=None,
+                input_paths=[str(route_path)],
+                next_action="record-router",
+            )
+            workflow(state)["stage"] = "awaiting-router"
+        elif args.kernel and route["profile"] == "hotfix":
+            open_hotfix_proposal_gate(state, state_path, plan, catalog)
         atomic_write(state_path, state)
-    emit(summary(state, state_path, plan_contract_path=str(state_path.parent / "execution-plan.json")))
+    extra: dict[str, Any] = {"plan_contract_path": str(state_path.parent / "execution-plan.json")}
+    if args.kernel and route["status"] == "needs-agent":
+        extra.update(next_action="dispatch-router", packet_path=str(state_path.parent / "route-packet.json"))
+    elif args.kernel and route["profile"] == "hotfix":
+        extra.update(next_action="await-hotfix-proposal-approval", packet_path=str(state_path.parent / "hotfix-proposal.json"))
+    emit(summary(state, state_path, **extra))
 
 
 def command_inspect(args: argparse.Namespace) -> None:
@@ -662,6 +925,114 @@ def unit_definition(phase: dict[str, Any], unit_id: str) -> dict[str, Any]:
     return next(item for item in phase["work_units"] if item["id"] == unit_id)
 
 
+ROUTER_KEYS = {"schema_version", "run_id", "role", "profile", "rationale", "signals_considered"}
+
+
+def validate_router_result(value: dict[str, Any]) -> None:
+    if set(value) != ROUTER_KEYS or value.get("schema_version") != 1 or value.get("role") != "router":
+        raise RunError(EX_INVALID, "router result fields do not match the workflow contract")
+    if value.get("profile") not in PROFILE_NAMES:
+        raise RunError(EX_INVALID, "router result selected an unsupported profile")
+    if not isinstance(value.get("rationale"), str) or not value["rationale"].strip():
+        raise RunError(EX_INVALID, "router result requires a rationale")
+    signals = value.get("signals_considered")
+    if not isinstance(signals, list) or not signals or not all(isinstance(item, str) and item for item in signals):
+        raise RunError(EX_INVALID, "router result signals_considered must be a non-empty array of strings")
+
+
+def command_record_router(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    result_path = Path(args.result).resolve()
+    if result_path.name.startswith("router-result-"):
+        raise RunError(EX_INVALID, "router result input uses a kernel-reserved filename; use incoming-router-*.json")
+    result = read_json(result_path, "router result")
+    validate_router_result(result)
+    with state_lock(state_path):
+        state, plan, meta = load_bundle(state_path)
+        check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "awaiting-router":
+            raise RunError(EX_STATE, "workflow is not awaiting a router result", stage=flow["stage"])
+        if result["run_id"] != state["run_id"]:
+            raise RunError(EX_INVALID, "router result run_id does not match active run")
+        catalog = load_profile_catalog()
+        safety_floor = flow["route"].get("safety_floor")
+        if safety_floor and catalog["profiles"][result["profile"]]["risk_rank"] < catalog["profiles"][safety_floor]["risk_rank"]:
+            raise RunError(EX_INVALID, "router result is below the deterministic safety floor", profile=result["profile"], safety_floor=safety_floor)
+        stored_result = state_path.parent / "router-result-0.json"
+        if stored_result.exists():
+            raise RunError(EX_STATE, "immutable router result already exists", path=str(stored_result))
+        atomic_write(stored_result, result)
+        finish_current_node(
+            state,
+            "passed",
+            output_paths=[str(stored_result)],
+            evidence=[{"summary": result["rationale"], "path": None, "command": None, "exit_code": None}],
+            next_action="await-hotfix-proposal-approval" if result["profile"] == "hotfix" else "start-next",
+        )
+        flow["route"] = {
+            "status": "selected",
+            "profile": result["profile"],
+            "source": "agent",
+            "rationale": result["rationale"],
+            "signals": result["signals_considered"],
+            "safety_floor": safety_floor,
+        }
+        flow["max_repair_attempts"] = catalog["profiles"][result["profile"]]["max_repair_attempts"]
+        flow["isolation"] = select_isolation(
+            plan,
+            result["profile"],
+            catalog,
+            meta.get("isolation_capabilities", ["shared"]),
+            meta.get("requested_workers", 1),
+        )
+        packet_path: str | None = None
+        if result["profile"] == "hotfix":
+            packet_path = open_hotfix_proposal_gate(state, state_path, plan, catalog)
+            next_action = "await-hotfix-proposal-approval"
+        else:
+            flow["stage"] = "idle"
+            next_action = "start-next"
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+    emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, router_result_path=str(stored_result)))
+
+
+def command_record_proposal_decision(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    with state_lock(state_path):
+        state, _, meta = load_bundle(state_path)
+        check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "awaiting-proposal-approval" or flow.get("route", {}).get("profile") != "hotfix":
+            raise RunError(EX_STATE, "workflow is not awaiting hotfix proposal approval", stage=flow["stage"])
+        evidence = [{"summary": f"hotfix proposal {args.decision} by {args.approved_by}", "path": None, "command": None, "exit_code": None}]
+        if args.decision == "approved":
+            finish_current_node(state, "passed", evidence=evidence, next_action="start-next")
+            flow["stage"] = "idle"
+            next_action = "start-next"
+        else:
+            finish_current_node(state, "blocked", evidence=evidence, next_action="resolve-blocker")
+            flow["stage"] = "failed"
+            state["status"] = "blocked"
+            next_action = "resolve-blocker"
+        decision_path = state_path.parent / "hotfix-proposal-decision.json"
+        atomic_write(
+            decision_path,
+            {
+                "schema_version": 1,
+                "run_id": state["run_id"],
+                "decision": args.decision,
+                "approved_by": args.approved_by,
+                "delivery_authorized": False,
+                "recorded_at": now(),
+            },
+        )
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+    emit(summary(state, state_path, next_action=next_action, proposal_decision_path=str(decision_path)))
+
+
 def command_start_next(args: argparse.Namespace) -> None:
     state_path = Path(args.state).resolve()
     with state_lock(state_path):
@@ -671,7 +1042,7 @@ def command_start_next(args: argparse.Namespace) -> None:
             state["status"] = "running"
         if state["status"] != "running":
             raise RunError(EX_STATE, "run is not ready to start work", status=state["status"])
-        flow = state.get("workflow")
+        flow = workflow(state) if state.get("workflow") else None
         if flow and flow["stage"] != "idle":
             raise RunError(EX_STATE, "workflow kernel is not ready to start another unit", stage=flow["stage"])
 
@@ -719,6 +1090,9 @@ def command_start_next(args: argparse.Namespace) -> None:
 
         phase = phase_definition(plan, phase_state["id"])
         unit = unit_definition(phase, unit_state["id"])
+        catalog = load_profile_catalog()
+        profile_name = flow["route"]["profile"] if flow else "feature"
+        profile = catalog["profiles"][profile_name]
         packet = {
             "schema_version": 1,
             "run_id": state["run_id"],
@@ -734,6 +1108,9 @@ def command_start_next(args: argparse.Namespace) -> None:
             "solution_pointers": [],
             "evidence_dossier": None,
             "verification_commands": unit["verification"],
+            "workflow_profile": profile_name,
+            "profile_required_evidence": profile["required_evidence"],
+            "isolation": flow["isolation"] if flow else None,
         }
         packet_path = state_path.parent / f"phase-packet-{phase['id']}-{unit['id']}.json"
         atomic_write(packet_path, packet)
@@ -1203,6 +1580,9 @@ def command_run_checks(args: argparse.Namespace) -> None:
                     "phase_id": phase["id"],
                     "phase_goal": phase_contract["goal"],
                     "completion_gate": phase_contract["completion_gate"],
+                    "workflow_profile": flow["route"]["profile"],
+                    "verifier_lenses": load_profile_catalog()["profiles"][flow["route"]["profile"]]["verifier_lenses"],
+                    "profile_required_evidence": load_profile_catalog()["profiles"][flow["route"]["profile"]]["required_evidence"],
                     "units": [
                         {
                             "id": item["id"],
@@ -1314,6 +1694,9 @@ def command_record_verifier(args: argparse.Namespace) -> None:
                     "run_id": state["run_id"],
                     "plan": state["plan"],
                     "status": "review_ready",
+                    "workflow_profile": flow["route"]["profile"],
+                    "route": flow["route"],
+                    "isolation": flow["isolation"],
                     "completed_phases": [item["id"] for item in state["phases"]],
                     "nodes": [item["id"] for item in flow["nodes"]],
                     "unresolved": [
@@ -1419,7 +1802,10 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--state")
     init.add_argument("--base-ref")
     init.add_argument("--kernel", action="store_true")
-    init.add_argument("--max-repair-attempts", type=int, default=1, choices=range(0, 4))
+    init.add_argument("--profile", choices=sorted(PROFILE_NAMES))
+    init.add_argument("--isolation-capability", action="append", choices=sorted(ISOLATION_MODES))
+    init.add_argument("--max-workers", type=int, default=1, choices=range(1, 4))
+    init.add_argument("--max-repair-attempts", type=int, default=None, choices=range(0, 4))
     init.set_defaults(handler=command_init)
     for name, handler in (("inspect", command_inspect), ("resume", command_resume)):
         command = commands.add_parser(name)
@@ -1437,6 +1823,15 @@ def parser() -> argparse.ArgumentParser:
     agent.add_argument("--state", required=True)
     agent.add_argument("--result", required=True)
     agent.set_defaults(handler=command_record_agent)
+    router = commands.add_parser("record-router")
+    router.add_argument("--state", required=True)
+    router.add_argument("--result", required=True)
+    router.set_defaults(handler=command_record_router)
+    proposal = commands.add_parser("record-proposal-decision")
+    proposal.add_argument("--state", required=True)
+    proposal.add_argument("--decision", required=True, choices=("approved", "rejected"))
+    proposal.add_argument("--approved-by", required=True)
+    proposal.set_defaults(handler=command_record_proposal_decision)
     checks = commands.add_parser("run-checks")
     checks.add_argument("--state", required=True)
     checks.add_argument("--timeout", type=int, default=300, choices=range(1, 1801))

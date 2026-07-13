@@ -12,7 +12,15 @@ python3 "<absolute-skill-directory>/scripts/run-state.py" <operation> <arguments
 
 Dispatch one worker with the Codex subagent collaboration tool. Inject only the named packet, applicable repository instructions, target root, and result contract.
 
-Use the returned agent identifier as an opaque handle only when the collaboration runtime can send a follow-up task to that same agent. Then return `resumable: true` and use a follow-up task for `resume-agent`. Otherwise return `session: null` or `resumable: false` and dispatch a fresh repair worker. Never report background or parallel success in U6.
+## Router
+
+When the kernel emits `dispatch-router`, dispatch one fresh strongest-available reasoning agent through the collaboration/subagent mechanism. Give it only the route packet and router contract. Do not create a router for a deterministically selected profile.
+
+## Isolation capabilities
+
+Declare `sandbox` only when the current Codex runtime actually gives each worker a dedicated sandbox/computer with an integration path. Declare `worktree` only after creating or selecting a dedicated worktree. Always declare `shared` as the fallback. Collaboration support alone is not proof of filesystem isolation and does not authorize parallel dispatch.
+
+Use the returned agent identifier as an opaque handle only when the collaboration runtime can send a follow-up task to that same agent. Then return `resumable: true` and use a follow-up task for `resume-agent`. Otherwise return `session: null` or `resumable: false` and dispatch a fresh repair worker. Never report parallel success merely because U7 state records an eligible group.
 
 ## Verifier
 

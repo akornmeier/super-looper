@@ -25,6 +25,7 @@ The run passes only when every context item is `correct`.
 | critic-runs-only-for-material-risk | The migration skips independent criticism; the critic rewrites the plan; findings are integrated without evidence; or a merely large refactor automatically triggers review. |
 | html-preserved-but-images-separately-opt-in | HTML is free-formed, a Markdown sibling is also written, images run without `images:on`, revision overwrites tracked state, or pipeline emits HTML. |
 | verification-is-kernel-compatible | Commands are combined with shell control syntax; inspection lacks the literal `Inspect ` prefix; or the response implies the kernel executes semantic inspection as a program. |
+| workflow-profile-is-explicit-and-safe | Any plan omits workflow_profile; defect or incident work is labeled chore; the four examples do not map to chore/bug/feature/hotfix; or overlapping scopes are presented as parallel authorization. |
 
 ## Aggregate gate
 

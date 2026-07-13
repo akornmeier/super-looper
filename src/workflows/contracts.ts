@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { profileNameSchema } from "./profiles"
 
 const idSchema = z
   .string()
@@ -44,6 +45,18 @@ export const workflowNodeSchema = z
   })
   .strict()
 
+export const isolationStateSchema = z
+  .object({
+    available: z.array(z.enum(["sandbox", "worktree", "shared"])).min(1),
+    selected: z.enum(["sandbox", "worktree", "shared"]),
+    requested_workers: z.number().int().min(1).max(3),
+    max_workers: z.number().int().min(1).max(3),
+    parallel_eligible: z.boolean(),
+    eligible_group: z.array(idSchema),
+    reason: z.string().min(1),
+  })
+  .strict()
+
 export const workflowStateSchema = z
   .object({
     schema_version: z.literal(1),
@@ -53,6 +66,8 @@ export const workflowStateSchema = z
       "checking",
       "awaiting-repair",
       "awaiting-verifier",
+      "awaiting-router",
+      "awaiting-proposal-approval",
       "review-ready",
       "failed",
     ]),
@@ -61,6 +76,18 @@ export const workflowStateSchema = z
     repair_attempts: z.record(z.string(), z.number().int().nonnegative()),
     sessions: z.record(z.string(), agentSessionSchema),
     nodes: z.array(workflowNodeSchema),
+    route: z
+      .object({
+        status: z.enum(["selected", "needs-agent"]),
+        profile: profileNameSchema.nullable(),
+        source: z.enum(["override", "explicit-plan", "deterministic", "agent"]),
+        rationale: z.string().min(1),
+        signals: z.array(z.string().min(1)),
+        safety_floor: profileNameSchema.nullable(),
+      })
+      .strict()
+      .optional(),
+    isolation: isolationStateSchema.optional(),
     review: z
       .object({
         status: z.enum(["not-ready", "ready"]),
@@ -99,6 +126,17 @@ export const verifierResultSchema = z
   })
   .strict()
 
+export const routerResultSchema = z
+  .object({
+    schema_version: z.literal(1),
+    run_id: z.string().min(1),
+    role: z.literal("router"),
+    profile: profileNameSchema,
+    rationale: z.string().min(1),
+    signals_considered: z.array(z.string().min(1)).min(1),
+  })
+  .strict()
+
 export const commandSpecSchema = z
   .object({
     argv: z.array(z.string()).min(1),
@@ -122,5 +160,6 @@ export type WorkflowState = z.infer<typeof workflowStateSchema>
 export type WorkflowNode = z.infer<typeof workflowNodeSchema>
 export type AgentResult = z.infer<typeof agentResultSchema>
 export type VerifierResult = z.infer<typeof verifierResultSchema>
+export type RouterResult = z.infer<typeof routerResultSchema>
 export type CommandSpec = z.infer<typeof commandSpecSchema>
 export type CommandResult = z.infer<typeof commandResultSchema>

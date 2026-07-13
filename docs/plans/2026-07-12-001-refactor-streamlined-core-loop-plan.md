@@ -30,14 +30,14 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 - [x] U4: lean frontier planner (implementation boundary; see `docs/evals/sl-plan-u4-report.md` for the token-telemetry caveat)
 - [x] U5: resumable `sl-run` coordinator (`docs/evals/sl-run-u5-report.md`)
 - [x] U6: extract the code-owned workflow kernel and deterministic validation graph (`docs/evals/sl-run-u6-report.md`)
-- [ ] U7: add risk-routed workflow profiles and bounded isolation
+- [x] U7: add risk-routed workflow profiles and bounded isolation (`docs/evals/sl-run-u7-report.md`)
 - [ ] U8: add engineer review, delivery, learning, and strategy closeout
 - [ ] U9: migrate callers and reduce the public surface
 - [ ] U10: two-host evaluation and promotion
 
 ## Continuation Checkpoint
 
-Work stopped cleanly at the U6/U7 boundary on branch `plan/streamline-super-looper`. U1-U6 are complete and validated. U6 extracted the serial code-owned workflow kernel, deterministic command graph, typed agent/verifier boundaries, same-session repair contract, independent verification, and `review_ready` engineer boundary. See `docs/evals/sl-run-u6-report.md`. No U7 implementation has started.
+Work stopped cleanly at the U7/U8 boundary on branch `plan/streamline-super-looper`. U1-U7 are complete and validated. U7 added data-defined chore, bug, feature, and hotfix profiles; deterministic risk routing with a typed ambiguity seam; no-downgrade overrides; hotfix proposal approval; capability-reported isolation; and mechanically bounded team eligibility. See `docs/evals/sl-run-u7-report.md`. No U8 implementation has started.
 
 The continuation strategy remains the three-actor model described in the supplied Dan Eisler transcript:
 
@@ -45,7 +45,7 @@ The continuation strategy remains the three-actor model described in the supplie
 - **Deterministic code** owns routing, state, conditions, validation commands, budgets, isolation policy, and audit records.
 - **Agents** perform bounded discovery, planning, implementation, repair, and semantic verification where judgment is actually required.
 
-The next slice is U7 only: add data-defined workflow profiles, deterministic routing, and an isolation capability while preserving the serial default. Do not add delivery or learning authority at this boundary. This checkpoint is the durable resume note for the next implementation session.
+The next slice is U8 only: add one engineer acceptance packet, code-owned delivery control, and evidence-based closeout while preserving the mandatory hotfix proposal and final delivery approvals. Do not delete compatibility skills or expand the public surface in this slice. This checkpoint is the durable resume note for the next implementation session.
 
 ---
 
@@ -1008,17 +1008,17 @@ This is a product-architecture change across the plugin, not a local skill refac
 
 ## Recommended Next Slice
 
-Resume at U7 only: add deterministic workflow profiles, risk routing, and bounded isolation over the proven serial kernel. Do not add automated delivery or learning changes in the same PR.
+Resume at U8 only: add engineer acceptance, code-owned delivery, and evidence closeout over the proven routed kernel. Do not delete old skills or migrate callers in the same PR.
 
 That PR should produce:
 
-- Chore, bug, feature, and hotfix profiles as data over the shared node contracts.
-- A deterministic router that prefers explicit metadata and mechanically observable risk signals, with a frontier model used only for ambiguous cases.
-- A user route override that cannot bypass safety or authority gates.
-- One isolation interface with sandbox, worktree, and serialized-checkout capability reporting.
-- A serial default and mechanically enforced concurrency eligibility for DAG-independent, non-overlapping work only.
-- Hotfix proposal approval before build and no delivery authority.
-- Cross-host routing, isolation, and overlap tests plus fresh-source behavioral evidence.
-- No old-skill deletion, automated delivery, or learning closeout.
+- One compact review packet containing intent, scope, diff evidence, checks, semantic findings, unresolved risk, selected profile, authority, and the proposed delivery action.
+- `review_ready` as the default unattended terminal, with explicit engineer approval required before delivery.
+- Code-owned commit, pull-request, CI-observation, and delivery transitions with typed failures and bounded repair routing.
+- Evidence-derived learning candidates with deduplication and a valid `no_learning` outcome.
+- Strategy observations kept separate from strategy edits, with explicit approval required for reconciliation.
+- Mandatory hotfix proposal and final delivery approval throughout the refactor.
+- Cross-host contract tests and fresh-source behavioral evidence for review rejection, approval, CI failure, no-op learning, and strategy protection.
+- No old-skill deletion, caller migration, or public-surface reduction.
 
-This is the smallest boundary that scales the proven workflow by economics and risk without confusing more agents with more reliability.
+This is the smallest boundary that completes one review-to-closeout workflow without conflating delivery authority, learning evidence, and strategy ownership.

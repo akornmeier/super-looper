@@ -17,12 +17,15 @@ A single scout is allowed only when an important decision cannot be resolved fro
 Markdown is canonical and follows a stable execution contract:
 
 - one goal and traceable requirements;
+- one explicit least-cost safe `workflow_profile` (`chore`, `bug`, `feature`, or `hotfix`);
 - dependency-ordered phases with completion gates;
 - bounded units with stable IDs and status markers;
 - repo-relative files or areas;
 - explicit dependencies and non-goals;
 - observable acceptance and verification;
 - named test files and concrete scenarios for feature-bearing work.
+
+Independent units use explicit non-overlapping owned scopes. This lets `sl-run` determine isolation and bounded-team eligibility mechanically; the plan itself never authorizes parallel execution.
 
 Plans are written under `docs/plans/` by default. `sl-run` will parse this Markdown into the host-neutral execution schema; no second checked-in machine artifact is required.
 

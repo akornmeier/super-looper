@@ -17,6 +17,7 @@ Return exactly one JSON object:
 
 Rules:
 
+- Apply the packet's profile-specific verifier lenses and required evidence; do not invent extra standing reviewer personas.
 - Be independent: do not reuse the implementation or repair agent session.
 - Judge the phase goal and completion gate using the packet, changed files, and direct inspection.
 - Treat deterministic command results as evidence only for what those commands cover.

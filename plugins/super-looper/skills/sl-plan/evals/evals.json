@@ -138,6 +138,31 @@
         "contract_lines": "Draft the execution contract; Canonical execution-plan contract body shape.",
         "expected_behavior": "One argv-compatible command per Verification item; semantic evidence uses Inspect."
       }
+    },
+    {
+      "id": 6,
+      "name": "workflow-profile-is-explicit-and-safe",
+      "tests_risk": "missing_route_metadata_or_risk_downgrade",
+      "prompt": "Show the canonical frontmatter and unit boundaries for four small plans: routine documentation maintenance, a reproducible defect, ordinary product functionality, and an active production outage. Explain how write scopes affect later team eligibility.",
+      "expected_terms": [
+        {"term": "workflow_profile", "tier": "must"},
+        {"term": "chore", "tier": "must"},
+        {"term": "bug", "tier": "must"},
+        {"term": "feature", "tier": "must"},
+        {"term": "hotfix", "tier": "must"},
+        {"term": "non-overlapping", "tier": "should"}
+      ],
+      "expected_context": [
+        "the four plans select chore, bug, feature, and hotfix respectively in canonical workflow_profile frontmatter",
+        "the defect and outage are not downgraded to chore, and hotfix remains subject to proposal approval in sl-run",
+        "independent units use explicit non-overlapping repo-relative owned scopes; the plan does not itself authorize parallel execution"
+      ],
+      "ground_truth": {
+        "skill": "sl-plan",
+        "contract_source": "plugins/super-looper/skills/sl-plan/SKILL.md and references/plan-contract.md",
+        "contract_lines": "Decide before decomposing; Draft the execution contract; Frontmatter.",
+        "expected_behavior": "Every new plan carries the least expensive safe explicit workflow profile and mechanically useful ownership boundaries."
+      }
     }
   ]
 }

@@ -93,6 +93,8 @@ Write the smallest decision set that makes execution coherent:
 
 Then derive dependency-ordered phases. Each phase must end in an independently checkable completion gate. Split work into units that one worker can own without overlapping another unit's write scope.
 
+Select one `workflow_profile` for frontmatter: `chore` for bounded maintenance, `bug` for defect investigation and regression proof, `feature` for product/refactor or cross-cutting work, and `hotfix` for an active production incident. Choose the least expensive profile that satisfies the evidence and authority floor. Never label a defect or incident as a chore. Record independent units with non-overlapping owned scopes; this makes safe isolation eligibility mechanically decidable without authorizing parallel work.
+
 ### 5. Draft the execution contract
 
 Follow `references/plan-contract.md`. Every unit must include:
@@ -129,6 +131,7 @@ Before reporting completion, verify:
 - every unit has files/area, acceptance, verification, dependencies, and non-goals;
 - feature-bearing units have named tests and concrete scenarios or an explicit justified exception;
 - every phase has a completion gate and material risks are owned;
+- `workflow_profile` matches the work and does not understate defect, feature, or incident risk;
 - paths are repo-relative and the plan contains no implementation-time progress claims;
 - existing unit IDs and `[]`, `[wip]`, `[x]`, or `[f]` markers were preserved exactly.
 

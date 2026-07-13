@@ -9,6 +9,7 @@ This suite protects the U4 boundary: a frontier parent plans directly, normal lo
 | critic-runs-only-for-material-risk | Every large plan pays a review tax or a critic takes synthesis authority |
 | html-preserved-but-images-separately-opt-in | Claude compatibility regresses or HTML silently triggers paid images |
 | verification-is-kernel-compatible | Plans hide code checks in shell choreography or send inspection prose to the command runner |
+| workflow-profile-is-explicit-and-safe | Plans omit route metadata, downgrade defects/incidents, or imply unsafe parallel authority |
 
 ## Fresh-source protocol
 

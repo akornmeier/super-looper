@@ -1,6 +1,7 @@
 import path from "node:path"
 import { z } from "zod"
-import { workflowStateSchema } from "../workflows/contracts"
+import { isolationStateSchema, workflowStateSchema } from "../workflows/contracts"
+import { profileNameSchema } from "../workflows/profiles"
 
 const idSchema = z
   .string()
@@ -119,6 +120,8 @@ export const executionPlanSchema = z
   .object({
     schema_version: z.literal(1),
     goal: z.string().min(1),
+    plan_type: z.string().min(1).optional(),
+    workflow_profile: z.enum(["chore", "bug", "feature", "hotfix"]).optional(),
     requirements: z.array(z.string().min(1)).default([]),
     phases: z.array(executionPhaseSchema).min(1),
   })
@@ -326,6 +329,9 @@ export const phasePacketSchema = z
       .nullable()
       .default(null),
     verification_commands: z.array(z.string().min(1)).min(1),
+    workflow_profile: profileNameSchema.optional(),
+    profile_required_evidence: z.array(z.string().min(1)).optional(),
+    isolation: isolationStateSchema.nullable().optional(),
   })
   .strict()
 

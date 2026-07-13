@@ -23,6 +23,7 @@ Never invent a resumable handle.
 
 Rules:
 
+- Treat the packet's workflow profile, profile evidence requirements, isolation record, and acceptance criteria as authoritative context.
 - Change files only inside the packet's `owned_scope`; report repository-relative paths.
 - Use the role requested by kernel output.
 - Report implementation evidence, not a phase/run pass or required-check result.

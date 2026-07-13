@@ -6,13 +6,16 @@ const SKILL = await Bun.file(path.join(ROOT, "SKILL.md")).text()
 const ENGINE = await Bun.file(path.join(ROOT, "references/state-engine.md")).text()
 const AGENT = await Bun.file(path.join(ROOT, "references/agent-contract.md")).text()
 const VERIFIER = await Bun.file(path.join(ROOT, "references/verifier-contract.md")).text()
+const ROUTER = await Bun.file(path.join(ROOT, "references/router-contract.md")).text()
+const TEAM = await Bun.file(path.join(ROOT, "references/team-execution.md")).text()
 const EVALS = JSON.parse(await Bun.file(path.join(ROOT, "evals/evals.json")).text())
 
-describe("sl-run U6 code-owned workflow contract", () => {
-  test("makes the kernel the serial transition authority", () => {
+describe("sl-run U7 routed workflow contract", () => {
+  test("makes the kernel the transition and routing authority", () => {
     expect(SKILL).toContain("bundled kernel selects every transition")
     expect(SKILL).toContain("Make the kernel the only run-state writer")
-    expect(SKILL).toContain("Keep execution serial in U6")
+    expect(SKILL).toContain("Let code select the least expensive safe profile")
+    expect(SKILL).toContain("U7 records bounded parallel eligibility")
     expect(SKILL).toContain("Perform only the `next_action` it emits")
   })
 
@@ -39,6 +42,15 @@ describe("sl-run U6 code-owned workflow contract", () => {
     expect(VERIFIER).toContain('"repair_unit_id"')
   })
 
+  test("bounds routing, hotfix approval, and isolation mechanically", () => {
+    expect(SKILL).toContain("A user override may raise cost or review depth but cannot lower")
+    expect(SKILL).toContain("await-hotfix-proposal-approval")
+    expect(SKILL).toContain("Approval never grants delivery authority")
+    expect(ROUTER).toContain('"role": "router"')
+    expect(TEAM).toContain("shared-checkout")
+    expect(TEAM).toContain("hard cap is three")
+  })
+
   test("defines strict implementation and verifier results", () => {
     for (const field of [
       "schema_version",
@@ -60,7 +72,7 @@ describe("sl-run U6 code-owned workflow contract", () => {
     }
   })
 
-  test("carries behavioral evals for U6 boundaries", () => {
+  test("carries behavioral evals for U6 execution and U7 routing boundaries", () => {
     expect(EVALS.evals.map((entry: any) => entry.name)).toEqual([
       "serial-review-ready",
       "code-check-same-session-repair",
@@ -69,6 +81,10 @@ describe("sl-run U6 code-owned workflow contract", () => {
       "phase-boundary-resume",
       "in-progress-agent-reconciliation",
       "goal-drift-refusal",
+      "chore-routes-without-frontier-cost",
+      "ambiguous-route-is-one-bounded-agent",
+      "hotfix-needs-proposal-approval",
+      "isolation-and-overlap-bound-concurrency",
     ])
   })
 })

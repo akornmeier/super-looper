@@ -11,12 +11,15 @@ type: plan
 date: YYYY-MM-DD
 schema_version: 1
 goal: <one stable outcome>
+workflow_profile: chore | bug | feature | hotfix
 strategy: <repo-relative STRATEGY.md path or none>
 origin: <repo-relative source path or none>
 ---
 ```
 
 Do not add a plan-level `status` field. Run state owns execution status.
+
+`workflow_profile` is required for newly generated plans. Use `chore` for bounded maintenance, `bug` for defect/reproduction work, `feature` for product, refactor, or cross-cutting work, and `hotfix` for an active production incident. The workflow kernel may reject a profile below mechanically observed risk. Legacy plans without this field route conservatively or invoke the bounded router only when their signals are genuinely ambiguous.
 
 ## Body shape
 
@@ -79,7 +82,7 @@ Each executable `Verification` item must be one argument-vector-compatible comma
 
 | Markdown field | Structured field |
 |---|---|
-| frontmatter `schema_version`, `goal` | plan `schema_version`, `goal` |
+| frontmatter `schema_version`, `goal`, `type`, `workflow_profile` | plan `schema_version`, `goal`, `plan_type`, `workflow_profile` |
 | Requirements list | plan `requirements[]` |
 | phase code ID, Goal, Depends on, Risks, completion gate | phase `id`, `goal`, `depends_on`, `risks`, `completion_gate` |
 | unit code ID, Scope, Files or area, Acceptance, Verification, Depends on, Non-goals | unit fields of the same names |

@@ -21,4 +21,11 @@ describe("sl-plan to workflow-kernel command boundary", () => {
     expect(evalCase).toBeDefined()
     expect(evalCase.expected_context).toHaveLength(3)
   })
+
+  test("writes explicit safe workflow profile metadata", () => {
+    expect(SKILL).toContain("Select one `workflow_profile` for frontmatter")
+    expect(CONTRACT).toContain("workflow_profile: chore | bug | feature | hotfix")
+    expect(CONTRACT).toContain("may reject a profile below mechanically observed risk")
+    expect(EVALS.evals.find((entry: any) => entry.name === "workflow-profile-is-explicit-and-safe")).toBeDefined()
+  })
 })

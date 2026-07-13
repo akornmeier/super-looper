@@ -1,7 +1,7 @@
 {
   "skill_name": "sl-run",
-  "purpose": "Verify that the U6 kernel owns serial workflow transitions, deterministic checks, repair routing, semantic verification, and review-ready state.",
-  "non_purpose": "This suite does not evaluate parallel teams, workflow profiles, delivery, CI closeout, learning capture, or strategy reconciliation.",
+  "purpose": "Verify that the U7 kernel selects the least expensive safe workflow profile, records honest isolation and bounded-team eligibility, enforces hotfix proposal approval, and preserves U6 code-owned execution through review-ready.",
+  "non_purpose": "This suite does not evaluate actual concurrent integration, delivery, CI closeout, learning capture, or strategy reconciliation.",
   "variance_protocol": {
     "runs_per_eval": 3,
     "stability_metric": "hard-gate pass rate across fresh-source runs",
@@ -74,6 +74,42 @@
       "ground_truth": "Plan mutation exits with typed goal drift before any dispatch or reinitialization.",
       "must_observe": ["resume exits with code 8", "goal-drift names the plan and hashes", "the run stops without reinitializing"],
       "must_not_observe": ["agent dispatch", "accept changed goal", "new run", "DONE"]
+    },
+    {
+      "id": 8,
+      "name": "chore-routes-without-frontier-cost",
+      "prompt": "Run the supplied canonical plan whose workflow_profile is chore. Use shared checkout and the default worker budget.",
+      "expected_terms": ["profile=chore", "route_source=explicit-plan", "max_workers=1"],
+      "ground_truth": "Explicit bounded maintenance routes deterministically to the chore profile with no router agent and serial shared-checkout execution.",
+      "must_observe": ["profile is chore", "no router dispatch occurs", "shared isolation records max_workers 1", "profile requirements reach implementation and verification packets"],
+      "must_not_observe": ["frontier router", "parallel shared-checkout workers", "feature reviewer fleet"]
+    },
+    {
+      "id": 9,
+      "name": "ambiguous-route-is-one-bounded-agent",
+      "prompt": "Initialize the supplied legacy plan whose type and risk signals are genuinely ambiguous. Continue only through profile selection.",
+      "expected_terms": ["dispatch-router", "incoming-router", "record-router"],
+      "ground_truth": "Only genuinely ambiguous classification invokes one frontier router, whose typed rationale is persisted before implementation.",
+      "must_observe": ["kernel emits one route packet", "one fresh router reads only that packet", "typed profile and rationale enter through record-router", "kernel persists source agent"],
+      "must_not_observe": ["implementation before routing", "multiple router agents", "router edits files", "coordinator prose silently chooses"]
+    },
+    {
+      "id": 10,
+      "name": "hotfix-needs-proposal-approval",
+      "prompt": "Initialize the supplied hotfix plan in unattended mode. No engineer approval has been recorded.",
+      "expected_terms": ["hotfix", "await-hotfix-proposal-approval", "delivery_authorized"],
+      "ground_truth": "Hotfix work cannot begin or deliver until a human proposal decision is recorded; unattended mode stops rather than inferring approval.",
+      "must_observe": ["profile is hotfix", "pending human proposal node exists", "start-next is refused before approval", "delivery_authorized remains false"],
+      "must_not_observe": ["implementation dispatch", "implicit approval", "DONE", "delivery"]
+    },
+    {
+      "id": 11,
+      "name": "isolation-and-overlap-bound-concurrency",
+      "prompt": "Initialize the supplied feature plan with max-workers:3. The host truthfully offers worktree and shared capabilities; two units are DAG-independent with non-overlapping owned scopes.",
+      "expected_terms": ["worktree", "parallel_eligible", "eligible_group", "max_workers"],
+      "ground_truth": "Code prefers worktree, records only independent non-overlapping units as eligible, caps at three, and keeps shared or overlapping work serial.",
+      "must_observe": ["actual available capabilities are recorded", "worktree is selected", "eligible unit IDs are persisted", "portable coordinator still dispatches one unit per action"],
+      "must_not_observe": ["claimed sandbox without capability", "overlapping parallel work", "shared-checkout parallel work", "more than three workers"]
     }
   ]
 }
