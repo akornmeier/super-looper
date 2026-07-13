@@ -26,8 +26,8 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 
 - [x] U1: baseline evals and observability (`f7e99fe`)
 - [x] U2: shared plan, run-state, phase-packet, and worker-result contracts (`f7e99fe`)
-- [x] U3: Claude preservation gates, native Codex packaging, release lockstep, and cross-host smoke seam
-- [ ] U4: lean frontier planner
+- [x] U3: Claude preservation gates, native Codex packaging, release lockstep, and cross-host smoke seam (`d7c95e0`)
+- [x] U4: lean frontier planner (implementation boundary; see `docs/evals/sl-plan-u4-report.md` for the token-telemetry caveat)
 - [ ] U5: resumable `sl-run` coordinator
 - [ ] U6: bounded phase teams and risk-selected verification
 - [ ] U7: delivery, learning, and strategy closeout

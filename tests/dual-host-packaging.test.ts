@@ -110,6 +110,68 @@ describe("dual-host plugin packaging", () => {
     }
   })
 
+  test("keeps the migrated planner semantics aligned across hosts", async () => {
+    const claudeRoot = path.join(pluginRoot, "skills", "sl-plan")
+    const codexRoot = path.join(codexPluginRoot, "skills", "sl-plan")
+    const claudeSkill = await Bun.file(path.join(claudeRoot, "SKILL.md")).text()
+    const codexSkill = await Bun.file(path.join(codexRoot, "SKILL.md")).text()
+
+    const semanticBody = (content: string) =>
+      content
+        .replace(/^---\n[\s\S]*?\n---\n/, "")
+        .replace(
+          /^\*\*Runtime adapter:\*\* this (?:Claude Code|Codex) package uses `references\/runtime-(?:claude|codex)\.md`\./m,
+          "**Runtime adapter:** this host package uses its selected runtime adapter.",
+        )
+
+    expect(semanticBody(codexSkill)).toBe(semanticBody(claudeSkill))
+
+    for (const relativeFile of [
+      "references/plan-contract.md",
+      "references/optional-renderer.md",
+      "references/runtime-claude.md",
+      "references/runtime-codex.md",
+      "references/html-rendering.md",
+      "references/html-plan-template.md",
+      "references/plan-sections.md",
+      "scripts/generate-plan-images.py",
+      "scripts/wire-plan-references.py",
+    ]) {
+      expect(await Bun.file(path.join(codexRoot, relativeFile)).text()).toBe(
+        await Bun.file(path.join(claudeRoot, relativeFile)).text(),
+      )
+    }
+  })
+
+  test("cuts the planner hot-path instructions by more than 70 percent", async () => {
+    const baseline = await readJson("docs/evals/core-loop-baseline.json")
+    const prior = baseline.baseline.components.find(
+      (component: any) => component.path === "plugins/super-looper/skills/sl-plan/SKILL.md",
+    )
+    const current = Bun.file(path.join(pluginRoot, "skills", "sl-plan", "SKILL.md")).size
+
+    expect(prior.bytes).toBe(92956)
+    expect(current).toBeLessThan(prior.bytes * 0.3)
+  })
+
+  test("keeps host mechanics in planner adapters", async () => {
+    const shared = await Bun.file(
+      path.join(pluginRoot, "skills", "sl-plan", "SKILL.md"),
+    ).text()
+    const claude = await Bun.file(
+      path.join(pluginRoot, "skills", "sl-plan", "references", "runtime-claude.md"),
+    ).text()
+    const codex = await Bun.file(
+      path.join(pluginRoot, "skills", "sl-plan", "references", "runtime-codex.md"),
+    ).text()
+
+    expect(shared).not.toMatch(/AskUserQuestion|ToolSearch|\bAgent\b|\bTask\b|CLAUDE_SKILL_DIR/)
+    expect(claude).toContain("AskUserQuestion")
+    expect(claude).toContain("${CLAUDE_SKILL_DIR}")
+    expect(codex).toContain("Codex subagent collaboration tool")
+    expect(codex).not.toContain("${CLAUDE_SKILL_DIR}")
+  })
+
   test("uses the documented plugin-root compatibility variable for hooks", async () => {
     const hooks = await readJson("plugins/super-looper/hooks/hooks.json")
     expect(hooks.hooks.PreToolUse[0].hooks[0].command).toContain("${CLAUDE_PLUGIN_ROOT}")
