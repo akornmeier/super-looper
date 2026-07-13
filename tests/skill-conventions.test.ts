@@ -597,6 +597,10 @@ const PLATFORM_VAR_ACKNOWLEDGED = new Map<string, string>([
     "plugins/super-looper/skills/sl-plan/SKILL.md#CLAUDE_SKILL_DIR",
     "generate-plan-images.py is invoked as a single pinned command (pinned via allowed-tools Bash(python3 *generate-plan-images.py*)) rather than an `if [ -f ]` guard, per the AGENTS.md permission caveat. The prose at the 5.2b call states the fallback: any non-zero exit or unparseable stdout -- including an unresolved CLAUDE_SKILL_DIR failing loudly -- means the image slots stay as placeholder comments and the skill continues; image failure never blocks the plan.",
   ],
+  [
+    "plugins/super-looper/skills/sl-host-smoke/references/runtime-claude.md#CLAUDE_SKILL_DIR",
+    "Claude-only runtime adapter: host detection selects this file only on Claude Code, where CLAUDE_SKILL_DIR resolves. An unresolved path makes the pinned Bash call fail loudly and the adapter explicitly reports a failed diagnostic rather than silently missing the bundled script; Codex selects runtime-codex.md and resolves its absolute skill source path instead.",
+  ],
 ])
 
 /** Rule 4 scanner for one markdown file: every non-graceful occurrence. */
@@ -1197,4 +1201,3 @@ describe("findPlatformVarViolations", () => {
     expect(findPlatformVarViolations(sample).map((v) => v.variable)).toEqual(["CLAUDE_SKILL_DIR"])
   })
 })
-

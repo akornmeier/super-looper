@@ -1,0 +1,20 @@
+{
+  "name": "super-looper",
+  "interface": {
+    "displayName": "Super Looper"
+  },
+  "plugins": [
+    {
+      "name": "super-looper",
+      "source": {
+        "source": "local",
+        "path": "./plugins/super-looper/codex/super-looper"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

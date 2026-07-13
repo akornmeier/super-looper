@@ -113,7 +113,7 @@ Reach for `/lfg` or `scripts/loop.sh` when the task is clear and self-contained 
 
 After installing, run `/sl-setup` in any project. It checks your environment, installs missing tools, and bootstraps project config.
 
-The `super-looper` plugin currently ships 39 skills and 42 agents. See the [full component reference](plugins/super-looper/README.md) for the complete inventory.
+The `super-looper` plugin currently ships 40 skills and 42 agents. See the [full component reference](plugins/super-looper/README.md) for the complete inventory.
 
 ## Install
 
@@ -123,6 +123,15 @@ In Claude Code:
 /plugin marketplace add akornmeier/super-looper
 /plugin install super-looper
 ```
+
+In Codex, add the native repo marketplace and install its plugin:
+
+```bash
+codex plugin marketplace add akornmeier/super-looper --ref main
+codex plugin add super-looper@super-looper
+```
+
+Codex packaging and the cross-host adapter seam are available; migration of the legacy core workflows is still in progress. Run `$sl-host-smoke` in a fresh thread to validate the installed host path.
 
 ## Local Development
 

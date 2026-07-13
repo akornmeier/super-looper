@@ -45,7 +45,11 @@ async function makeFixtureRoot(pluginVersion: string): Promise<string> {
   await mkdir(path.join(root, "plugins", "super-looper", ".claude-plugin"), {
     recursive: true,
   })
+  await mkdir(path.join(root, "plugins", "super-looper", "codex", "super-looper", ".codex-plugin"), {
+    recursive: true,
+  })
   await mkdir(path.join(root, ".claude-plugin"), { recursive: true })
+  await mkdir(path.join(root, ".agents", "plugins"), { recursive: true })
 
   await writeFile(
     path.join(root, ".github", "release-please-config.json"),
@@ -85,7 +89,30 @@ async function makeFixtureRoot(pluginVersion: string): Promise<string> {
   )
   await writeFile(
     path.join(root, "plugins", "super-looper", ".claude-plugin", "plugin.json"),
-    JSON.stringify({ version: pluginVersion, description: pluginDescription }, null, 2),
+    JSON.stringify(
+      {
+        name: "super-looper",
+        version: pluginVersion,
+        description: pluginDescription,
+        author: { name: "Example" },
+      },
+      null,
+      2,
+    ),
+  )
+  await writeFile(
+    path.join(root, "plugins", "super-looper", "codex", "super-looper", ".codex-plugin", "plugin.json"),
+    JSON.stringify(
+      {
+        name: "super-looper",
+        version: pluginVersion,
+        description: pluginDescription,
+        author: { name: "Example" },
+        skills: "./skills/",
+      },
+      null,
+      2,
+    ),
   )
   await writeFile(
     path.join(root, ".claude-plugin", "marketplace.json"),
@@ -93,6 +120,25 @@ async function makeFixtureRoot(pluginVersion: string): Promise<string> {
       {
         metadata: { version: MANIFEST_MARKETPLACE_VERSION, description: "marketplace" },
         plugins: [{ name: "super-looper", description: marketplaceDescription }],
+      },
+      null,
+      2,
+    ),
+  )
+  await writeFile(
+    path.join(root, ".agents", "plugins", "marketplace.json"),
+    JSON.stringify(
+      {
+        name: "super-looper",
+        interface: { displayName: "Super Looper" },
+        plugins: [
+          {
+            name: "super-looper",
+            source: { source: "local", path: "./plugins/super-looper/codex/super-looper" },
+            policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+            category: "Productivity",
+          },
+        ],
       },
       null,
       2,
@@ -122,5 +168,24 @@ describe("release:validate manifest/plugin.json version sync", () => {
     const root = await makeFixtureRoot(MANIFEST_SUPER_LOOPER_VERSION)
     const exitCode = await runValidate(root)
     expect(exitCode).toBe(0)
+  })
+
+  test("exits non-zero when the Codex manifest drifts from Claude", async () => {
+    const root = await makeFixtureRoot(MANIFEST_SUPER_LOOPER_VERSION)
+    const codexPath = path.join(
+      root,
+      "plugins",
+      "super-looper",
+      "codex",
+      "super-looper",
+      ".codex-plugin",
+      "plugin.json",
+    )
+    const codex = JSON.parse(await Bun.file(codexPath).text())
+    codex.version = "5.0.1"
+    await writeFile(codexPath, JSON.stringify(codex, null, 2))
+
+    const exitCode = await runValidate(root)
+    expect(exitCode).not.toBe(0)
   })
 })

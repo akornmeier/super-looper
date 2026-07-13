@@ -39,7 +39,7 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 | Component | Count |
 |-----------|-------|
 | Agents | 42 |
-| Skills | 39 |
+| Skills | 40 |
 
 ## Skills
 
@@ -96,6 +96,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-setup`](../../docs/skills/sl-setup.md) | Diagnose environment, install missing tools, and bootstrap project config |
 | [`/sl-update`](../../docs/skills/sl-update.md) | Check super-looper plugin version and fix stale cache (Claude Code only) |
 | [`/sl-release-notes`](../../docs/skills/sl-release-notes.md) | Summarize recent super-looper plugin releases, or answer a question about a past release with a version citation |
+| [`/sl-host-smoke`](../../docs/skills/sl-host-smoke.md) | Explicit, non-mutating diagnostic for shared Claude Code and Codex plugin loading, questions, bundled scripts, references, and worker dispatch |
 
 ### Development Frameworks
 
@@ -197,7 +198,7 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 
 ## Installation
 
-See the repo root [Install section](../../README.md#install) for current installation instructions for Claude Code.
+See the repo root [Install section](../../README.md#install) for Claude Code and Codex installation instructions.
 
 Then run `/sl-setup` to check your environment and install recommended tools.
 

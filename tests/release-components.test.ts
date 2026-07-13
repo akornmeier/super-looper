@@ -38,6 +38,12 @@ describe("release component detection", () => {
     expect(components.get("marketplace")).toEqual([".claude-plugin/marketplace.json"])
     expect(components.get("super-looper")).toEqual([])
   })
+
+  test("maps the native Codex marketplace to the shared marketplace component", () => {
+    const components = detectComponentsFromFiles([".agents/plugins/marketplace.json"])
+    expect(components.get("marketplace")).toEqual([".agents/plugins/marketplace.json"])
+    expect(components.get("super-looper")).toEqual([])
+  })
 })
 
 describe("release intent parsing", () => {

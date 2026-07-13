@@ -20,7 +20,19 @@ Review, testing, repair, commit/PR work, learning capture, and resume behavior b
 
 The redesign preserves the strongest existing mechanisms: immutable goals, checksum-based goal-drift detection, independent verification, honest failure terminals, structured run records, isolated workers, and durable solution docs. It removes repeated context gathering, fixed reviewer fleets, duplicated progress channels, and full-skill handoffs between every stage.
 
-The streamlined core ships as one dual-host product. Existing Claude Code installation and behavior remain supported throughout the migration, while the same plugin root gains a native Codex manifest, marketplace entry, and runtime adapters. No workflow is considered migrated until it passes both host contracts; Codex support is not a later port of a Claude-only redesign.
+The streamlined core ships as one dual-host product. Existing Claude Code installation and behavior remain supported throughout the migration, while the same release component gains a separate native Codex package, marketplace entry, and runtime adapters. No workflow is considered migrated until it passes both host contracts; Codex support is not a later port of a Claude-only redesign.
+
+## Implementation Progress
+
+- [x] U1: baseline evals and observability (`f7e99fe`)
+- [x] U2: shared plan, run-state, phase-packet, and worker-result contracts (`f7e99fe`)
+- [x] U3: Claude preservation gates, native Codex packaging, release lockstep, and cross-host smoke seam
+- [ ] U4: lean frontier planner
+- [ ] U5: resumable `sl-run` coordinator
+- [ ] U6: bounded phase teams and risk-selected verification
+- [ ] U7: delivery, learning, and strategy closeout
+- [ ] U8: caller migration and public-surface reduction
+- [ ] U9: two-host evaluation and promotion
 
 ---
 
@@ -110,7 +122,7 @@ The work is complete when:
 - Review breadth is selected from actual risk signals instead of dispatching a standing persona catalog.
 - A successful run may produce no learning and no strategy edit; no-op is a valid high-signal outcome.
 - Token use is measured per role and phase when the host exposes usage, with stable structural proxies otherwise.
-- The same `super-looper` skill source installs and runs through both Claude Code and Codex packaging.
+- The same `super-looper` semantic skill workflow installs and runs through both Claude Code and Codex packaging, with packaged copies protected by drift tests where host metadata cannot coexist.
 - Claude Code behavior does not regress while Codex support is added; host-specific degradation is explicit and tested rather than silently skipped.
 
 ---
@@ -190,15 +202,18 @@ Responsibilities:
 
 ### 3. Dual-host packaging and runtime adapters
 
-Use one plugin root with host-native manifests and marketplaces:
+Use one release component with separate host package roots. This preserves Claude-only skill frontmatter while Codex receives only migrated, validator-compliant skills:
 
 ```text
 plugins/super-looper/
 ├── .claude-plugin/plugin.json
-├── .codex-plugin/plugin.json
 ├── skills/
 ├── agents/                    # Claude Code agent definitions during migration
 ├── hooks/
+├── codex/
+│   └── super-looper/
+│       ├── .codex-plugin/plugin.json
+│       └── skills/            # only skills proven on Codex; drift-checked against shared semantics
 ├── assets/
 ├── .mcp.json                  # only when MCP servers exist
 └── .app.json                  # only when a Codex/ChatGPT app exists
@@ -209,15 +224,15 @@ plugins/super-looper/
 
 Packaging rules:
 
-- Keep the plugin folder, Claude manifest name, Codex manifest name, and marketplace entry name identical: `super-looper`.
+- Keep both host package folder basenames, both manifest names, and both marketplace entry names identical: `super-looper`.
 - Keep both plugin manifest versions in the existing `super-looper` release component. Release automation updates and validates them together; routine feature PRs never hand-bump either version.
 - Preserve the existing Claude marketplace as a supported distribution surface.
 - Add a native repo Codex marketplace with `policy.installation`, `policy.authentication`, and `category`; do not rely only on Codex's legacy-compatible Claude marketplace reader.
-- Point the Codex manifest at `./skills/` and only declare companion MCP/app files when those files exist.
+- Point the Codex manifest at its package-local `./skills/`, migrate skills into that package only after their two-host contract passes, and only declare companion MCP/app files when those files exist.
 - Let Codex discover `hooks/hooks.json` through its documented plugin default unless the current validator accepts and requires an explicit manifest path; do not add a manifest field that the checked-in validator rejects.
 - Add Codex `interface` metadata and optional per-skill `agents/openai.yaml` presentation/invocation policy without making Claude Code depend on those files.
 
-Keep each core skill on a common portable instruction body plus co-located runtime references:
+Keep each migrated core skill on a common portable instruction body plus co-located runtime references. Until packaging supports shared source imports safely, contract-test packaged copies byte for byte and treat the Claude copy as the authoring source:
 
 ```text
 skills/sl-run/
@@ -477,6 +492,8 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 
 ### U1. Establish baseline evals and observability
 
+**Status:** Complete in `f7e99fe`.
+
 **Goal:** Measure the current workflow before simplifying it, so removals are judged by outcomes and token use rather than prompt size alone.
 
 **Dependencies:** none.
@@ -502,6 +519,8 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 **Acceptance:** A checked-in baseline report exists; every later unit can compare quality and efficiency against the same tasks.
 
 ### U2. Define the shared plan and run-state contracts
+
+**Status:** Complete in `f7e99fe`.
 
 **Goal:** Make planning and execution communicate through small, stable artifacts instead of skill-specific prose assumptions.
 
@@ -529,6 +548,8 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 
 ### U3. Establish dual-host packaging and compatibility contracts
 
+**Status:** Complete on this branch; enforced by dual-host packaging, release, and smoke contract tests.
+
 **Goal:** Make Claude Code preservation and native Codex support executable gates before core workflow prose changes.
 
 **Dependencies:** U1-U2.
@@ -536,7 +557,7 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 **Files:**
 
 - `plugins/super-looper/.claude-plugin/plugin.json` (preserve and validate)
-- `plugins/super-looper/.codex-plugin/plugin.json` (new)
+- `plugins/super-looper/codex/super-looper/.codex-plugin/plugin.json` (new native package; separate root preserves Claude-only skill metadata)
 - `.claude-plugin/marketplace.json` (preserve and validate)
 - `.agents/plugins/marketplace.json` (new repo marketplace)
 - `src/release/components.ts`
@@ -549,7 +570,7 @@ Capture per-role and per-phase token usage when the host exposes it. When it doe
 
 **Approach:**
 
-- Add a valid Codex manifest with the same normalized plugin name and release-managed version as the Claude manifest.
+- Add a valid Codex package with the same normalized plugin name and release-managed version as the Claude manifest. Keep its package root separate because Codex rejects Claude's `disable-model-invocation: true` frontmatter while Claude depends on those explicit-invocation guards.
 - Add the native Codex repo marketplace entry with required policy and category fields while preserving the existing Claude marketplace.
 - Extend metadata synchronization and `release:validate` so shared version, description, author, and skill path fields cannot drift.
 - Define a compatibility matrix for skill frontmatter, blocking questions, subagent dispatch, model roles, worktrees, script paths, plugin cache/update behavior, and hooks.
@@ -813,7 +834,7 @@ This is a product-architecture change across the plugin, not a local skill refac
 - Plugin README, root README, generated skill docs, component counts, and descriptions will change.
 - Skills and agents will change behavior and therefore require `skill-creator` behavioral evaluation in fresh subagents.
 - `scripts/loop.sh`, progress contracts, run-record fields, and their tests will evolve.
-- A native `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` become release/validation surfaces alongside the existing Claude files.
+- A native Codex package manifest under `plugins/super-looper/codex/super-looper/` and `.agents/plugins/marketplace.json` become release/validation surfaces alongside the existing Claude files.
 - Release metadata synchronization must keep Claude and Codex plugin metadata in lockstep, but routine PRs must not bump versions manually.
 - The strategy document's current approach still broadly applies. A later interactive `sl-strategy` revision should update its wording from enforcing every named skill stage to enforcing the smaller strategy -> plan -> run -> learn lifecycle after the new path is proven.
 - Claude Code remains a first-class supported host rather than a legacy compatibility mode.

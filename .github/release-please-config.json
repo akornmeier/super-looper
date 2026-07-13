@@ -12,6 +12,11 @@
           "type": "json",
           "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "codex/super-looper/.codex-plugin/plugin.json",
+          "jsonpath": "$.version"
         }
       ]
     },

@@ -26,6 +26,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-dogfood-beta`](./sl-dogfood-beta.md) | [BETA] Dogfood the active branch end-to-end as a QA engineer |
 | [`sl-frontend-design`](./sl-frontend-design.md) | Build web interfaces with genuine design quality, not AI slop |
 | [`sl-handoff`](./sl-handoff.md) | Compact the current session into a clean handoff document a fresh agent can pick up, referencing existing artifacts (plan, brainstorm, ADRs) by path instead of duplicating them |
+| [`sl-host-smoke`](./sl-host-smoke.md) | Run an explicit, non-mutating compatibility diagnostic for the super-looper plugin |
 | [`sl-ideate`](./sl-ideate.md) | Generate and critically evaluate grounded ideas about a topic |
 | [`sl-learn`](./sl-learn.md) | Capture a ship-time learning at the close of an autopilot run: invoke sl-compound headless against the still-hot session context, then commit its docs/solutions learning (plus any CONCEPTS.md and instruction-file edits it produced) into the run's open PR and re-confirm CI green before the loop reports done |
 | [`sl-optimize`](./sl-optimize.md) | Run metric-driven iterative optimization loops -- define a measurable goal, run parallel experiments, measure each against hard gates or LLM-as-judge scores, keep improvements, and converge on the best solution |

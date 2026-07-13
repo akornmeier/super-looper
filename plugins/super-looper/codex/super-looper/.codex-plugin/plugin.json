@@ -1,0 +1,38 @@
+{
+  "name": "super-looper",
+  "version": "0.6.1",
+  "description": "AI-powered development tools for code review, research, design, and workflow automation.",
+  "author": {
+    "name": "Anthony Kornmeier",
+    "email": "tony@kornmeier.me",
+    "url": "https://github.com/akornmeier"
+  },
+  "homepage": "https://github.com/akornmeier/super-looper",
+  "repository": "https://github.com/akornmeier/super-looper",
+  "license": "MIT",
+  "keywords": [
+    "ai-powered",
+    "super-looper",
+    "workflow-automation",
+    "code-review",
+    "typescript",
+    "knowledge-management"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Super Looper",
+    "shortDescription": "Plan, execute, review, and learn",
+    "longDescription": "AI-powered development workflows for planning, implementation, review, and durable learning.",
+    "developerName": "Anthony Kornmeier",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/akornmeier/super-looper",
+    "defaultPrompt": [
+      "Plan and execute this engineering task with Super Looper.",
+      "Review these changes and identify the highest-risk issues."
+    ]
+  }
+}
