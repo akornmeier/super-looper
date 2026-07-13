@@ -1,7 +1,7 @@
 {
   "skill_name": "sl-run",
-  "purpose": "Verify that the U7 kernel selects the least expensive safe workflow profile, records honest isolation and bounded-team eligibility, enforces hotfix proposal approval, and preserves U6 code-owned execution through review-ready.",
-  "non_purpose": "This suite does not evaluate actual concurrent integration, delivery, CI closeout, learning capture, or strategy reconciliation.",
+  "purpose": "Verify that the U8 kernel preserves risk-routed execution through engineer review, exact-authority delivery, bounded CI repair, evidence-based learning, and strategy-safe closeout.",
+  "non_purpose": "This suite does not evaluate actual concurrent integration, caller migration, public-surface reduction, or autonomous strategy editing.",
   "variance_protocol": {
     "runs_per_eval": 3,
     "stability_metric": "hard-gate pass rate across fresh-source runs",
@@ -19,7 +19,7 @@
       "expected_terms": ["init --kernel", "run-checks", "dispatch-verifier", "review_ready"],
       "ground_truth": "The kernel serializes implementation, direct checks, independent verification, and a durable review-ready stop without delivery.",
       "must_observe": ["init --kernel precedes dispatch", "one implementation agent at a time", "required checks run through run-checks", "a fresh verifier gates the phase", "durable status is review_ready before DONE"],
-      "must_not_observe": ["parallel agents", "agent-owned required checks", "plan mutation", "strategy mutation", "commit", "push", "pull request"]
+      "must_not_observe": ["parallel agents", "agent-owned required checks", "plan mutation", "strategy mutation", "delivery without final approval"]
     },
     {
       "id": 2,
@@ -110,6 +110,51 @@
       "ground_truth": "Code prefers worktree, records only independent non-overlapping units as eligible, caps at three, and keeps shared or overlapping work serial.",
       "must_observe": ["actual available capabilities are recorded", "worktree is selected", "eligible unit IDs are persisted", "portable coordinator still dispatches one unit per action"],
       "must_not_observe": ["claimed sandbox without capability", "overlapping parallel work", "shared-checkout parallel work", "more than three workers"]
+    },
+    {
+      "id": 12,
+      "name": "engineer-rejects-or-requests-repair",
+      "prompt": "Continue the supplied review-ready run. First exercise an explicit rejection fixture, then a separate fixture where the engineer requests repair of one named unit.",
+      "expected_terms": ["record-review-decision", "rejected", "repair-requested", "repair-unit-id"],
+      "ground_truth": "Final review is a typed human node: rejection cancels durably, while a bounded repair request resumes only the responsible unit and requires re-verification.",
+      "must_observe": ["review packet is shown before the decision", "identity and rationale are recorded", "rejection creates a cancelled terminal record", "repair names one unit and consumes the existing budget"],
+      "must_not_observe": ["implicit approval", "delivery after rejection", "unbounded repair", "strategy edit"]
+    },
+    {
+      "id": 13,
+      "name": "approved-exact-delivery",
+      "prompt": "Continue the supplied review-ready run after the engineer explicitly approves the exact proposed commit and PR action. Deliver it through the kernel.",
+      "expected_terms": ["delivery-packet.json", "deliver", "commit-push-pr", "observe-ci"],
+      "ground_truth": "Approval authorizes only the reviewed packet; code stages agent-reported files, commits, pushes, and opens or reuses the PR before CI observation.",
+      "must_observe": ["explicit final approval precedes deliver", "kernel refuses unrelated dirty paths", "kernel owns commit push and PR operations", "delivery result records commit and PR pointers"],
+      "must_not_observe": ["host stages files directly", "git add -A", "delivery from review_ready alone", "hotfix proposal approval reused as final approval"]
+    },
+    {
+      "id": 14,
+      "name": "ci-failure-bounded-repair",
+      "prompt": "Observe the supplied delivered PR whose registered CI check fails. Continue according to the emitted kernel action.",
+      "expected_terms": ["observe-ci", "ci-disposition", "resume-agent", "repair-packet"],
+      "ground_truth": "A code-owned typed CI failure returns to the responsible repair session within the existing budget and invalidates the prior review boundary.",
+      "must_observe": ["failed checks are stored by pointer", "same proven-resumable session is selected", "checks and semantic verification must rerun", "a new final review is required before redelivery"],
+      "must_not_observe": ["narrated green", "unbounded CI loop", "direct closeout after failure", "reuse of stale delivery approval"]
+    },
+    {
+      "id": 15,
+      "name": "no-op-learning-closeout",
+      "prompt": "Complete closeout for the supplied approved delivery. The evidence shows no reusable lesson beyond existing solution docs and no strategic implication.",
+      "expected_terms": ["closeout-packet.json", "no-learning", "no-change", "record-closeout"],
+      "ground_truth": "A fresh evidence assessment records no-learning and no strategy change as a successful closeout without manufacturing durable output.",
+      "must_observe": ["assessment uses durable evidence pointers", "existing solutions are checked", "no-learning includes a reason", "run reaches completed with a run record"],
+      "must_not_observe": ["learning written without four gates", "hot transcript treated as evidence", "strategy proposal without material observation"]
+    },
+    {
+      "id": 16,
+      "name": "strategy-proposal-remains-unapplied",
+      "prompt": "Complete the supplied run whose evidence supports a material strategy observation. Record the proposed delta but do not obtain a separate strategy-reconciliation approval.",
+      "expected_terms": ["strategy-proposal.json", "requires_explicit_strategy_approval", "STRATEGY.md"],
+      "ground_truth": "Closeout writes an advisory proposal in the run bundle and leaves STRATEGY.md byte-identical until a later explicit sl-strategy reconciliation.",
+      "must_observe": ["material observations are recorded", "proposal is separate from strategy", "goal hash remains valid", "explicit later approval is named"],
+      "must_not_observe": ["STRATEGY.md edit", "proposal treated as approval", "goal drift bypass", "unattended reconciliation"]
     }
   ]
 }

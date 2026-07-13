@@ -26,6 +26,10 @@ Use the returned agent identifier as an opaque handle only when the collaboratio
 
 Dispatch a fresh Codex subagent with the verifier packet. Do not send verifier work to the implementation or repair agent.
 
+## Closeout
+
+Dispatch a fresh Codex subagent with only the closeout packet and contract. It may inspect named evidence and write one gated solution document, but it must not edit strategy or run state.
+
 ## Questions
 
 Use the available structured user-input tool for required interactive reconciliation. If no blocking structured-input tool exists, ask one concise chat question and wait.

@@ -46,6 +46,10 @@ KERNEL_STAGES = {
     "awaiting-repair",
     "awaiting-verifier",
     "review-ready",
+    "delivery-ready",
+    "awaiting-ci",
+    "awaiting-closeout",
+    "completed",
     "failed",
 }
 PROFILE_NAMES = {"chore", "bug", "feature", "hotfix"}
@@ -83,6 +87,22 @@ def atomic_write(path: Path, value: Any) -> None:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temp_name)
+
+
+def atomic_write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(value)
+            if not value.endswith("\n"):
+                handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(temp_name)
@@ -669,6 +689,12 @@ def summary(state: dict[str, Any], state_path: Path, **extra: Any) -> dict[str, 
         next_action = "none"
     elif flow and flow["stage"] == "review-ready":
         next_action = "await-engineer-review"
+    elif flow and flow["stage"] == "delivery-ready":
+        next_action = "deliver"
+    elif flow and flow["stage"] == "awaiting-ci":
+        next_action = "observe-ci"
+    elif flow and flow["stage"] == "awaiting-closeout":
+        next_action = "dispatch-closeout"
     elif flow and flow["stage"] == "awaiting-router":
         next_action = "reconcile-in-progress-router"
     elif flow and flow["stage"] == "awaiting-proposal-approval":
@@ -770,6 +796,20 @@ def initial_state(
             "route": route,
             "isolation": isolation,
             "review": {"status": "not-ready", "packet_path": None},
+            "delivery": {
+                "status": "not-authorized",
+                "packet_path": None,
+                "commit_sha": None,
+                "pr_url": None,
+                "ci_path": None,
+            },
+            "closeout": {
+                "status": "not-started",
+                "packet_path": None,
+                "result_path": None,
+                "learning": "pending",
+                "strategy": "pending",
+            },
         }
     return state
 
@@ -807,6 +847,194 @@ def open_hotfix_proposal_gate(
     )
     flow["stage"] = "awaiting-proposal-approval"
     return str(packet_path)
+
+
+def run_changed_files(state: dict[str, Any]) -> list[str]:
+    return sorted(
+        {
+            changed
+            for phase in state["phases"]
+            for unit in phase["units"]
+            for changed in unit["changed_files"]
+        }
+    )
+
+
+def conventional_title(plan: dict[str, Any]) -> str:
+    plan_type = plan.get("plan_type", "chore").lower()
+    prefix = {
+        "feature": "feat",
+        "feat": "feat",
+        "fix": "fix",
+        "bug": "fix",
+        "hotfix": "fix",
+        "refactor": "refactor",
+        "docs": "docs",
+        "test": "test",
+        "ci": "ci",
+        "build": "build",
+    }.get(plan_type, "chore")
+    goal = plan["goal"].strip().rstrip(".")
+    summary_text = goal[:1].lower() + goal[1:]
+    return f"{prefix}(run): {summary_text}"[:120]
+
+
+def create_review_packet(
+    state: dict[str, Any], plan: dict[str, Any], meta: dict[str, Any], state_path: Path, target: Path
+) -> str:
+    flow = workflow(state)
+    changed_files = run_changed_files(state)
+    diff_summary = git(target, "diff", "--stat", state["git"]["base_ref"], check=False)
+    checks: list[dict[str, Any]] = []
+    semantic: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    for node in flow["nodes"]:
+        node_evidence = [
+            {"summary": item["summary"], "path": item.get("path")}
+            for item in node.get("evidence", [])
+        ]
+        if node["kind"] == "code" and node["id"].startswith("code.check"):
+            checks.extend(node_evidence)
+        if node["kind"] == "agent" and node["id"].startswith("agent.verifier"):
+            semantic.extend(node_evidence)
+        if node["status"] in {"failed", "blocked"}:
+            failed.extend(node_evidence or [{"summary": f"{node['id']} ended {node['status']}", "path": None}])
+    unresolved = sorted(
+        {
+            item
+            for phase in state["phases"]
+            for unit in phase["units"]
+            for item in unit["unresolved"]
+        }
+        | {risk for phase in plan["phases"] for risk in phase["risks"]}
+    )
+    title = conventional_title(plan)
+    body_path = state_path.parent / "proposed-pr-body.md"
+    atomic_write_text(
+        body_path,
+        "\n".join(
+            [
+                f"## Summary\n\n{plan['goal']}",
+                "## Verification\n\n" + ("\n".join(f"- {item['summary']}" for item in checks + semantic) or "- Review packet contains the recorded evidence."),
+                "## Risks\n\n" + ("\n".join(f"- {item}" for item in unresolved) or "- No unresolved risks recorded."),
+            ]
+        ),
+    )
+    proposal_decision = state_path.parent / "hotfix-proposal-decision.json"
+    proposal_approved = False
+    if proposal_decision.is_file():
+        proposal_approved = read_json(proposal_decision, "hotfix proposal decision").get("decision") == "approved"
+    packet = {
+        "schema_version": 1,
+        "run_id": state["run_id"],
+        "status": "review_ready",
+        "intent": {"goal": plan["goal"], "requirements": plan["requirements"]},
+        "scope": {"changed_files": changed_files, "diff_summary": diff_summary},
+        "deterministic_checks": checks,
+        "semantic_verification": semantic,
+        "failed_attempts": failed,
+        "unresolved_risks": unresolved,
+        "workflow_profile": flow["route"]["profile"],
+        "route_rationale": flow["route"]["rationale"],
+        "authority": {
+            "proposal_approved": proposal_approved,
+            "delivery_authorized": False,
+            "final_engineer_approval_required": True,
+        },
+        "proposed_delivery": {
+            "action": meta.get("delivery_action", "commit-push-pr"),
+            "commit_message": title,
+            "pr_title": title,
+            "pr_body_path": str(body_path),
+        },
+        "generated_at": now(),
+    }
+    review_path = state_path.parent / "review-packet.json"
+    atomic_write(review_path, packet)
+    return str(review_path)
+
+
+def create_closeout_gate(state: dict[str, Any], state_path: Path, target: Path) -> str:
+    flow = workflow(state)
+    solution_index: list[dict[str, str]] = []
+    solutions_root = target / "docs" / "solutions"
+    if solutions_root.is_dir():
+        for solution in sorted(solutions_root.rglob("*.md")):
+            relative = solution.relative_to(target).as_posix()
+            first_heading = next(
+                (line.removeprefix("# ").strip() for line in solution.read_text(encoding="utf-8").splitlines() if line.startswith("# ")),
+                relative,
+            )
+            solution_index.append({"path": relative, "title": first_heading})
+    evidence_paths = sorted(
+        {
+            path
+            for node in flow["nodes"]
+            for path in [*node.get("input_paths", []), *node.get("output_paths", [])]
+            if path
+        }
+    )
+    packet = {
+        "schema_version": 1,
+        "run_id": state["run_id"],
+        "review_packet_path": flow["review"]["packet_path"],
+        "review_decision_path": flow["review"].get("decision_path"),
+        "delivery": flow["delivery"],
+        "changed_files": run_changed_files(state),
+        "failed_attempts": [node["id"] for node in flow["nodes"] if node["status"] in {"failed", "blocked"}],
+        "evidence_paths": evidence_paths,
+        "existing_solutions": solution_index,
+        "learning_gate": ["reusable", "evidence_backed", "novel", "behavior_changing"],
+        "strategy_rule": "record observations or a proposal; never edit STRATEGY.md during the run",
+    }
+    packet_path = state_path.parent / "closeout-packet.json"
+    atomic_write(packet_path, packet)
+    append_node(
+        state,
+        identifier="agent.closeout.0",
+        kind="agent",
+        status="running",
+        attempt=0,
+        phase_id=None,
+        unit_id=None,
+        input_paths=[str(packet_path)],
+        next_action="record-closeout",
+    )
+    flow["stage"] = "awaiting-closeout"
+    flow["closeout"] = {
+        "status": "awaiting-assessment",
+        "packet_path": str(packet_path),
+        "result_path": None,
+        "learning": "pending",
+        "strategy": "pending",
+    }
+    return str(packet_path)
+
+
+def write_run_record(state: dict[str, Any], state_path: Path) -> str:
+    flow = workflow(state)
+    record = {
+        "schema_version": 1,
+        "run_id": state["run_id"],
+        "outcome": state["status"],
+        "profile": flow.get("route", {}).get("profile"),
+        "started_at": state["started_at"],
+        "ended_at": state.get("terminal", {}).get("ended_at") if state.get("terminal") else None,
+        "pointers": {
+            "state": str(state_path),
+            "review_packet": flow.get("review", {}).get("packet_path"),
+            "review_decision": flow.get("review", {}).get("decision_path"),
+            "delivery_packet": flow.get("delivery", {}).get("packet_path"),
+            "ci": flow.get("delivery", {}).get("ci_path"),
+            "closeout": flow.get("closeout", {}).get("result_path"),
+            "pr_url": flow.get("delivery", {}).get("pr_url"),
+        },
+        "learning": flow.get("closeout", {}).get("learning"),
+        "strategy": flow.get("closeout", {}).get("strategy"),
+    }
+    record_path = state_path.parent / "run-record.json"
+    atomic_write(record_path, record)
+    return str(record_path)
 
 
 def command_init(args: argparse.Namespace) -> None:
@@ -858,6 +1086,7 @@ def command_init(args: argparse.Namespace) -> None:
         "strategy": {"path": strategy_rel, "absent": strategy_absent},
         "isolation_capabilities": isolation_capabilities,
         "requested_workers": args.max_workers,
+        "delivery_action": args.delivery_action,
     }
     state_path.parent.mkdir(parents=True, exist_ok=True)
     with state_lock(state_path):
@@ -1656,8 +1885,8 @@ def command_record_verifier(args: argparse.Namespace) -> None:
     result = read_json(result_path, "verifier result")
     validate_verifier_result(result)
     with state_lock(state_path):
-        state, _, meta = load_bundle(state_path)
-        check_resume(state, meta)
+        state, plan, meta = load_bundle(state_path)
+        target = check_resume(state, meta)
         flow = workflow(state)
         if flow["stage"] != "awaiting-verifier":
             raise RunError(EX_STATE, "workflow is not awaiting semantic verification", stage=flow["stage"])
@@ -1689,29 +1918,11 @@ def command_record_verifier(args: argparse.Namespace) -> None:
             phase["status"] = "completed"
             state["current_phase"] = None
             if all(item["status"] == "completed" for item in state["phases"]):
-                review_packet = {
-                    "schema_version": 1,
-                    "run_id": state["run_id"],
-                    "plan": state["plan"],
-                    "status": "review_ready",
-                    "workflow_profile": flow["route"]["profile"],
-                    "route": flow["route"],
-                    "isolation": flow["isolation"],
-                    "completed_phases": [item["id"] for item in state["phases"]],
-                    "nodes": [item["id"] for item in flow["nodes"]],
-                    "unresolved": [
-                        finding
-                        for item in state["phases"]
-                        for unit in item["units"]
-                        for finding in unit["unresolved"]
-                    ],
-                    "delivery_authorized": False,
-                }
-                review_path = state_path.parent / "review-packet.json"
-                atomic_write(review_path, review_packet)
+                review_path = Path(create_review_packet(state, plan, meta, state_path, target))
+                review_attempt = sum(1 for item in flow["nodes"] if item["id"].startswith("human.final-review."))
                 append_node(
                     state,
-                    identifier="human.final-review.0",
+                    identifier=f"human.final-review.{review_attempt}",
                     kind="human",
                     status="pending",
                     attempt=0,
@@ -1721,7 +1932,14 @@ def command_record_verifier(args: argparse.Namespace) -> None:
                     next_action="await-engineer-review",
                 )
                 flow["stage"] = "review-ready"
-                flow["review"] = {"status": "ready", "packet_path": str(review_path)}
+                flow["review"] = {"status": "ready", "packet_path": str(review_path), "decision_path": None}
+                flow["delivery"] = {
+                    "status": "not-authorized",
+                    "packet_path": None,
+                    "commit_sha": None,
+                    "pr_url": None,
+                    "ci_path": None,
+                }
                 state["status"] = "review_ready"
                 next_action = "await-engineer-review"
                 packet_path = str(review_path)
@@ -1750,6 +1968,460 @@ def command_record_verifier(args: argparse.Namespace) -> None:
         state["updated_at"] = now()
         atomic_write(state_path, state)
     emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, verifier_result_path=str(stored_result)))
+
+
+def command_record_review_decision(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    with state_lock(state_path):
+        state, _, meta = load_bundle(state_path)
+        check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "review-ready" or flow["review"]["status"] != "ready":
+            raise RunError(EX_STATE, "workflow is not awaiting final engineer review", stage=flow["stage"])
+        if args.decision == "repair-requested" and not args.repair_unit_id:
+            raise RunError(EX_INVALID, "repair-requested requires --repair-unit-id")
+        if args.decision != "repair-requested" and args.repair_unit_id:
+            raise RunError(EX_INVALID, "--repair-unit-id is valid only for repair-requested")
+        decision = {
+            "schema_version": 1,
+            "run_id": state["run_id"],
+            "decision": args.decision,
+            "decided_by": args.decided_by,
+            "rationale": args.rationale,
+            "repair_unit_id": args.repair_unit_id,
+            "decided_at": now(),
+        }
+        review_attempt = sum(1 for item in flow["nodes"] if item["id"].startswith("human.final-review.")) - 1
+        decision_path = state_path.parent / f"review-decision-{max(0, review_attempt)}.json"
+        if decision_path.exists():
+            raise RunError(EX_STATE, "immutable review decision already exists", path=str(decision_path))
+        atomic_write(decision_path, decision)
+        evidence = [{"summary": f"final review {args.decision} by {args.decided_by}: {args.rationale}", "path": str(decision_path), "command": None, "exit_code": None}]
+        flow["review"]["status"] = args.decision if args.decision != "repair-requested" else "repair-requested"
+        flow["review"]["decision_path"] = str(decision_path)
+        packet_path: str | None = None
+        run_record_path: str | None = None
+        if args.decision == "approved":
+            finish_current_node(state, "passed", evidence=evidence, next_action="deliver")
+            review_packet = read_json(Path(flow["review"]["packet_path"]), "review packet")
+            proposed = review_packet["proposed_delivery"]
+            delivery_packet = {
+                "schema_version": 1,
+                "run_id": state["run_id"],
+                "authorized_by": args.decided_by,
+                "review_decision_path": str(decision_path),
+                "action": proposed["action"],
+                "changed_files": run_changed_files(state),
+                "commit_message": proposed["commit_message"],
+                "pr_title": proposed["pr_title"],
+                "pr_body_path": proposed["pr_body_path"],
+            }
+            delivery_path = state_path.parent / "delivery-packet.json"
+            atomic_write(delivery_path, delivery_packet)
+            flow["delivery"] = {
+                "status": "authorized",
+                "packet_path": str(delivery_path),
+                "commit_sha": None,
+                "pr_url": None,
+                "ci_path": None,
+            }
+            flow["stage"] = "delivery-ready"
+            state["status"] = "running"
+            next_action = "deliver"
+            packet_path = str(delivery_path)
+        elif args.decision == "rejected":
+            finish_current_node(state, "blocked", evidence=evidence, next_action=None)
+            flow["stage"] = "failed"
+            state["status"] = "cancelled"
+            state["terminal"] = {"status": "cancelled", "reason": f"engineer rejected final review: {args.rationale}", "ended_at": now()}
+            next_action = "none"
+        else:
+            finish_current_node(state, "passed", evidence=evidence, next_action="repair")
+            phase = next((item for item in state["phases"] if any(unit["id"] == args.repair_unit_id for unit in item["units"])), None)
+            unit = next((item for item in phase["units"] if item["id"] == args.repair_unit_id), None) if phase else None
+            if not phase or not unit:
+                raise RunError(EX_INVALID, "review repair names an unknown unit", repair_unit_id=args.repair_unit_id)
+            phase["verification"] = {"status": "not_run", "evidence": []}
+            next_action, packet_path = route_repair(
+                state,
+                state_path,
+                phase,
+                unit,
+                f"engineer requested repair: {args.rationale}",
+                [str(decision_path), flow["review"]["packet_path"]],
+            )
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+        if state["status"] in TERMINAL_STATUSES:
+            run_record_path = write_run_record(state, state_path)
+    emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, review_decision_path=str(decision_path), run_record_path=run_record_path))
+
+
+def command_deliver(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    with state_lock(state_path):
+        state, _, meta = load_bundle(state_path)
+        target = check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "delivery-ready" or flow["delivery"]["status"] != "authorized":
+            raise RunError(EX_STATE, "workflow does not have delivery authority", stage=flow["stage"])
+        packet = read_json(Path(flow["delivery"]["packet_path"]), "delivery packet")
+        if packet.get("run_id") != state["run_id"]:
+            raise RunError(EX_INVALID, "delivery packet run_id does not match state")
+        allowed = set(packet["changed_files"])
+        dirty = set(filter(None, git(target, "diff", "--name-only").splitlines()))
+        dirty.update(filter(None, git(target, "diff", "--cached", "--name-only").splitlines()))
+        dirty.update(filter(None, git(target, "ls-files", "--others", "--exclude-standard").splitlines()))
+        unexpected = sorted(dirty - allowed)
+        if unexpected:
+            raise RunError(EX_STATE, "delivery found changes outside agent-reported scope", paths=unexpected)
+        if dirty:
+            git(target, "add", "--", *sorted(dirty))
+            staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=target)
+            if staged.returncode == 1:
+                git(target, "commit", "-m", packet["commit_message"])
+            elif staged.returncode not in {0, 1}:
+                raise RunError(EX_STATE, "unable to inspect staged delivery changes")
+        commit_sha = git(target, "rev-parse", "HEAD")
+        if commit_sha == state["git"]["base_ref"] and not dirty:
+            raise RunError(EX_STATE, "delivery has no change to commit")
+        state["git"]["head_sha"] = commit_sha
+        pr_url: str | None = None
+        action = packet["action"]
+        if action == "commit-push-pr":
+            git(target, "push", "-u", args.remote, "HEAD")
+            try:
+                existing = subprocess.run(
+                    ["gh", "pr", "view", "--json", "url", "--jq", ".url"],
+                    cwd=target,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except FileNotFoundError as error:
+                raise RunError(EX_STATE, "gh is required for the approved commit-push-pr delivery") from error
+            if existing.returncode == 0 and existing.stdout.strip():
+                pr_url = existing.stdout.strip()
+            else:
+                created = subprocess.run(
+                    ["gh", "pr", "create", "--title", packet["pr_title"], "--body-file", packet["pr_body_path"]],
+                    cwd=target,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                if created.returncode != 0 or not created.stdout.strip():
+                    raise RunError(EX_STATE, f"gh pr create failed: {created.stderr.strip()}")
+                pr_url = created.stdout.strip().splitlines()[-1]
+        delivery_result_path = state_path.parent / "delivery-result.json"
+        atomic_write(
+            delivery_result_path,
+            {
+                "schema_version": 1,
+                "run_id": state["run_id"],
+                "action": action,
+                "commit_sha": commit_sha,
+                "pr_url": pr_url,
+                "delivered_at": now(),
+            },
+        )
+        append_node(
+            state,
+            identifier="code.delivery.0",
+            kind="code",
+            status="passed",
+            attempt=0,
+            phase_id=None,
+            unit_id=None,
+            input_paths=[flow["delivery"]["packet_path"]],
+            output_paths=[str(delivery_result_path)],
+            evidence=[{"summary": f"approved delivery created commit {commit_sha}", "path": str(delivery_result_path), "command": None, "exit_code": 0}],
+            next_action="observe-ci" if pr_url else "dispatch-closeout",
+        )
+        flow["delivery"].update({"status": "awaiting-ci" if pr_url else "committed", "commit_sha": commit_sha, "pr_url": pr_url})
+        if pr_url:
+            flow["stage"] = "awaiting-ci"
+            next_action = "observe-ci"
+            packet_path = None
+        else:
+            packet_path = create_closeout_gate(state, state_path, target)
+            next_action = "dispatch-closeout"
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+    emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, delivery_result_path=str(delivery_result_path), pr_url=pr_url))
+
+
+def command_observe_ci(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    with state_lock(state_path):
+        state, _, meta = load_bundle(state_path)
+        target = check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "awaiting-ci" or not flow["delivery"].get("pr_url"):
+            raise RunError(EX_STATE, "workflow is not awaiting pull-request CI", stage=flow["stage"])
+        process = subprocess.run(
+            ["gh", "pr", "checks", flow["delivery"]["pr_url"], "--json", "bucket,link,name,state"],
+            cwd=target,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if process.returncode != 0:
+            raise RunError(EX_STATE, f"gh pr checks failed: {process.stderr.strip()}")
+        try:
+            checks = json.loads(process.stdout)
+        except json.JSONDecodeError as error:
+            raise RunError(EX_INVALID, "gh pr checks returned invalid JSON") from error
+        if not isinstance(checks, list):
+            raise RunError(EX_INVALID, "gh pr checks did not return an array")
+        buckets = {str(item.get("bucket", "pending")).lower() for item in checks}
+        if buckets & {"fail", "cancel"}:
+            disposition = "failed"
+        elif checks and buckets <= {"pass", "skipping"}:
+            disposition = "passed"
+        else:
+            disposition = "pending"
+        attempt = len(list(state_path.parent.glob("ci-disposition-*.json")))
+        ci_path = state_path.parent / f"ci-disposition-{attempt}.json"
+        atomic_write(
+            ci_path,
+            {
+                "schema_version": 1,
+                "run_id": state["run_id"],
+                "disposition": disposition,
+                "checks": [
+                    {
+                        "name": str(item.get("name", "unknown")),
+                        "bucket": str(item.get("bucket", "pending")),
+                        "state": str(item.get("state", "unknown")),
+                        "link": item.get("link"),
+                    }
+                    for item in checks
+                ],
+                "observed_at": now(),
+            },
+        )
+        append_node(
+            state,
+            identifier=f"code.ci.{attempt}",
+            kind="code",
+            status="failed" if disposition == "failed" else "passed",
+            attempt=attempt,
+            phase_id=None,
+            unit_id=None,
+            output_paths=[str(ci_path)],
+            evidence=[{"summary": f"CI disposition: {disposition}", "path": str(ci_path), "command": ["gh", "pr", "checks"], "exit_code": process.returncode}],
+            next_action="repair" if disposition == "failed" else "dispatch-closeout" if disposition == "passed" else "observe-ci",
+        )
+        flow["delivery"]["ci_path"] = str(ci_path)
+        packet_path: str | None = None
+        run_record_path: str | None = None
+        if disposition == "passed" and flow.get("closeout", {}).get("status") == "completed":
+            flow["delivery"]["status"] = "passed"
+            flow["stage"] = "completed"
+            state["status"] = "completed"
+            state["terminal"] = {"status": "completed", "reason": "approved delivery and evidence closeout completed", "ended_at": now()}
+            next_action = "none"
+        elif disposition == "passed":
+            flow["delivery"]["status"] = "passed"
+            packet_path = create_closeout_gate(state, state_path, target)
+            next_action = "dispatch-closeout"
+        elif disposition == "pending":
+            next_action = "observe-ci"
+        elif flow.get("closeout", {}).get("status") == "completed":
+            flow["delivery"]["status"] = "failed"
+            key = "closeout"
+            attempts = flow["repair_attempts"].get(key, 0)
+            if attempts >= flow["max_repair_attempts"]:
+                flow["stage"] = "failed"
+                state["status"] = "failed"
+                state["terminal"] = {"status": "failed", "reason": "closeout CI repair budget exhausted", "ended_at": now()}
+                next_action = None
+            else:
+                attempt_number = attempts + 1
+                flow["repair_attempts"][key] = attempt_number
+                repair_packet = {
+                    "schema_version": 1,
+                    "run_id": state["run_id"],
+                    "reason": "CI failed after the evidence closeout commit",
+                    "prior_closeout_result": flow["closeout"]["result_path"],
+                    "failure_evidence_paths": [str(ci_path)],
+                    "required_action": "repair only the written learning, then return the closeout result contract again",
+                }
+                closeout_repair_path = state_path.parent / f"closeout-repair-packet-{attempt_number}.json"
+                atomic_write(closeout_repair_path, repair_packet)
+                append_node(
+                    state,
+                    identifier=f"agent.closeout.{attempt_number}",
+                    kind="agent",
+                    status="running",
+                    attempt=attempt_number,
+                    phase_id=None,
+                    unit_id=None,
+                    input_paths=[str(closeout_repair_path), str(ci_path)],
+                    next_action="record-closeout",
+                )
+                flow["stage"] = "awaiting-closeout"
+                flow["closeout"].update({"status": "awaiting-assessment", "packet_path": str(closeout_repair_path), "learning": "pending"})
+                packet_path = str(closeout_repair_path)
+                next_action = "dispatch-closeout"
+        else:
+            flow["delivery"]["status"] = "failed"
+            phase = next((item for item in reversed(state["phases"]) if any(unit["changed_files"] for unit in item["units"])), state["phases"][-1])
+            unit = next((item for item in reversed(phase["units"]) if item["changed_files"]), phase["units"][-1])
+            phase["verification"] = {"status": "not_run", "evidence": []}
+            next_action, packet_path = route_repair(
+                state,
+                state_path,
+                phase,
+                unit,
+                "pull-request CI failed after approved delivery",
+                [str(ci_path)],
+            )
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+        if state["status"] in TERMINAL_STATUSES:
+            run_record_path = write_run_record(state, state_path)
+    emit(summary(state, state_path, next_action=next_action, packet_path=packet_path, ci_path=str(ci_path), ci_disposition=disposition, run_record_path=run_record_path))
+
+
+CLOSEOUT_KEYS = {"schema_version", "run_id", "learning", "strategy"}
+LEARNING_KEYS = {"status", "reason", "claim", "path", "reusable", "evidence_backed", "novel", "behavior_changing", "existing_matches", "evidence_paths"}
+STRATEGY_KEYS = {"observations", "proposed_delta"}
+
+
+def validate_closeout_result(value: dict[str, Any]) -> None:
+    if set(value) != CLOSEOUT_KEYS or value.get("schema_version") != 1:
+        raise RunError(EX_INVALID, "closeout result fields do not match the workflow contract")
+    learning = value.get("learning")
+    strategy = value.get("strategy")
+    if not isinstance(learning, dict) or set(learning) != LEARNING_KEYS:
+        raise RunError(EX_INVALID, "learning closeout fields do not match the workflow contract")
+    if not isinstance(strategy, dict) or set(strategy) != STRATEGY_KEYS:
+        raise RunError(EX_INVALID, "strategy closeout fields do not match the workflow contract")
+    if learning["status"] not in {"no-learning", "written"} or not isinstance(learning["reason"], str) or not learning["reason"]:
+        raise RunError(EX_INVALID, "learning closeout has an invalid status or reason")
+    for field in ("reusable", "evidence_backed", "novel", "behavior_changing"):
+        if not isinstance(learning[field], bool):
+            raise RunError(EX_INVALID, f"learning closeout field must be boolean: {field}")
+    for field in ("existing_matches", "evidence_paths"):
+        if not isinstance(learning[field], list) or not all(isinstance(item, str) and item for item in learning[field]):
+            raise RunError(EX_INVALID, f"learning closeout field must be an array of strings: {field}")
+    if not isinstance(strategy["observations"], list) or not all(isinstance(item, str) and item for item in strategy["observations"]):
+        raise RunError(EX_INVALID, "strategy observations must be an array of strings")
+    if strategy["proposed_delta"] is not None and (not isinstance(strategy["proposed_delta"], str) or not strategy["proposed_delta"]):
+        raise RunError(EX_INVALID, "strategy proposed_delta must be null or a non-empty string")
+
+
+def command_record_closeout(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
+    result_path = Path(args.result).resolve()
+    if result_path.name.startswith("closeout-result-"):
+        raise RunError(EX_INVALID, "closeout result input uses a kernel-reserved filename; use incoming-closeout-*.json")
+    result = read_json(result_path, "closeout result")
+    validate_closeout_result(result)
+    with state_lock(state_path):
+        state, _, meta = load_bundle(state_path)
+        target = check_resume(state, meta)
+        flow = workflow(state)
+        if flow["stage"] != "awaiting-closeout":
+            raise RunError(EX_STATE, "workflow is not awaiting closeout assessment", stage=flow["stage"])
+        if result["run_id"] != state["run_id"]:
+            raise RunError(EX_INVALID, "closeout result run_id does not match state")
+        learning = result["learning"]
+        passes = all(learning[field] for field in ("reusable", "evidence_backed", "novel", "behavior_changing"))
+        learning_rel: str | None = None
+        if learning["status"] == "written":
+            if not passes or learning["existing_matches"] or not learning["claim"] or not learning["path"]:
+                raise RunError(EX_INVALID, "written learning did not pass every evidence and novelty gate")
+            learning_path, learning_rel = resolve_inside(target, learning["path"], "learning")
+            if not learning_rel.startswith("docs/solutions/"):
+                raise RunError(EX_INVALID, "written learning must live under docs/solutions/", path=learning_rel)
+            if not learning_path.is_file():
+                raise RunError(EX_INVALID, "written learning path does not exist", path=learning_rel)
+            state["learning_candidates"] = [learning["claim"]]
+            learning_status = "written"
+        else:
+            if learning["path"] is not None:
+                raise RunError(EX_INVALID, "no-learning cannot name a written path")
+            learning_status = "no-learning"
+        proposal_path: str | None = None
+        observations = result["strategy"]["observations"]
+        state["strategy_observations"] = observations
+        if result["strategy"]["proposed_delta"]:
+            proposal = {
+                "schema_version": 1,
+                "run_id": state["run_id"],
+                "observations": observations,
+                "proposed_delta": result["strategy"]["proposed_delta"],
+                "requires_explicit_strategy_approval": True,
+            }
+            proposal_file = state_path.parent / "strategy-proposal.json"
+            atomic_write(proposal_file, proposal)
+            proposal_path = str(proposal_file)
+            strategy_status = "proposed"
+        else:
+            strategy_status = "no-change"
+        closeout_attempt = len(list(state_path.parent.glob("closeout-result-*.json")))
+        stored_result = state_path.parent / f"closeout-result-{closeout_attempt}.json"
+        atomic_write(stored_result, result)
+        finish_current_node(
+            state,
+            "passed",
+            output_paths=[str(stored_result), *([proposal_path] if proposal_path else [])],
+            evidence=[{"summary": f"closeout recorded {learning_status}; strategy {strategy_status}", "path": str(stored_result), "command": None, "exit_code": None}],
+            next_action=None,
+        )
+        flow["closeout"] = {
+            "status": "completed",
+            "packet_path": flow["closeout"]["packet_path"],
+            "result_path": str(stored_result),
+            "learning": learning_status,
+            "strategy": strategy_status,
+        }
+        next_action = "none"
+        if learning_status == "written":
+            dirty = set(filter(None, git(target, "diff", "--name-only").splitlines()))
+            dirty.update(filter(None, git(target, "diff", "--cached", "--name-only").splitlines()))
+            dirty.update(filter(None, git(target, "ls-files", "--others", "--exclude-standard").splitlines()))
+            if dirty != {learning_rel}:
+                raise RunError(EX_STATE, "closeout writer must leave only the validated learning dirty", expected=learning_rel, actual=sorted(dirty))
+            git(target, "add", "--", learning_rel)
+            git(target, "commit", "-m", "docs(run): capture evidence-backed learning")
+            learning_commit = git(target, "rev-parse", "HEAD")
+            state["git"]["head_sha"] = learning_commit
+            if flow["delivery"].get("pr_url"):
+                git(target, "push", "origin", "HEAD")
+            append_node(
+                state,
+                identifier=f"code.learning-delivery.{closeout_attempt}",
+                kind="code",
+                status="passed",
+                attempt=closeout_attempt,
+                phase_id=None,
+                unit_id=None,
+                input_paths=[str(stored_result)],
+                evidence=[{"summary": f"validated learning committed as {learning_commit}", "path": learning_rel, "command": None, "exit_code": 0}],
+                next_action="observe-ci" if flow["delivery"].get("pr_url") else None,
+            )
+            if flow["delivery"].get("pr_url"):
+                flow["delivery"]["status"] = "awaiting-ci"
+                flow["stage"] = "awaiting-ci"
+                state["status"] = "running"
+                state["terminal"] = None
+                next_action = "observe-ci"
+            else:
+                flow["stage"] = "completed"
+                state["status"] = "completed"
+                state["terminal"] = {"status": "completed", "reason": "approved delivery and evidence closeout completed", "ended_at": now()}
+        else:
+            flow["stage"] = "completed"
+            state["status"] = "completed"
+            state["terminal"] = {"status": "completed", "reason": "approved delivery and evidence closeout completed", "ended_at": now()}
+        state["updated_at"] = now()
+        atomic_write(state_path, state)
+        run_record_path = write_run_record(state, state_path) if state["status"] in TERMINAL_STATUSES else None
+    emit(summary(state, state_path, next_action=next_action, closeout_result_path=str(stored_result), strategy_proposal_path=proposal_path, run_record_path=run_record_path))
 
 
 def command_verify_phase(args: argparse.Namespace) -> None:
@@ -1806,6 +2478,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--isolation-capability", action="append", choices=sorted(ISOLATION_MODES))
     init.add_argument("--max-workers", type=int, default=1, choices=range(1, 4))
     init.add_argument("--max-repair-attempts", type=int, default=None, choices=range(0, 4))
+    init.add_argument("--delivery-action", default="commit-push-pr", choices=("commit", "commit-push-pr"))
     init.set_defaults(handler=command_init)
     for name, handler in (("inspect", command_inspect), ("resume", command_resume)):
         command = commands.add_parser(name)
@@ -1840,6 +2513,24 @@ def parser() -> argparse.ArgumentParser:
     verifier.add_argument("--state", required=True)
     verifier.add_argument("--result", required=True)
     verifier.set_defaults(handler=command_record_verifier)
+    review = commands.add_parser("record-review-decision")
+    review.add_argument("--state", required=True)
+    review.add_argument("--decision", required=True, choices=("approved", "rejected", "repair-requested"))
+    review.add_argument("--decided-by", required=True)
+    review.add_argument("--rationale", required=True)
+    review.add_argument("--repair-unit-id")
+    review.set_defaults(handler=command_record_review_decision)
+    deliver = commands.add_parser("deliver")
+    deliver.add_argument("--state", required=True)
+    deliver.add_argument("--remote", default="origin")
+    deliver.set_defaults(handler=command_deliver)
+    ci = commands.add_parser("observe-ci")
+    ci.add_argument("--state", required=True)
+    ci.set_defaults(handler=command_observe_ci)
+    closeout = commands.add_parser("record-closeout")
+    closeout.add_argument("--state", required=True)
+    closeout.add_argument("--result", required=True)
+    closeout.set_defaults(handler=command_record_closeout)
     verify = commands.add_parser("verify-phase")
     verify.add_argument("--state", required=True)
     verify.add_argument("--status", required=True, choices=("passed", "failed"))

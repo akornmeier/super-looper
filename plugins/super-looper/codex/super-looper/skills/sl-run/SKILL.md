@@ -1,13 +1,13 @@
 ---
 name: sl-run
-description: "Execute or resume a canonical sl-plan artifact through a code-owned developer workflow that selects a chore, bug, feature, or hotfix profile, records isolation and bounded-team eligibility, runs direct deterministic checks, routes bounded repair, performs independent semantic verification, protects immutable goals, and stops review-ready. Use when the user says run, execute, continue, or resume a plan, provides plan:path or state:path, selects a workflow profile, or asks for the streamlined implementation workflow."
+description: "Execute or resume a canonical sl-plan artifact through a code-owned developer workflow that selects a risk-sized profile, runs deterministic checks and bounded repair, performs independent verification, assembles engineer review, controls approved commit/PR delivery and CI repair, and closes with evidence-based learning and strategy observations. Use when the user says run, execute, continue, resume, review, or deliver a plan; provides plan:path or state:path; or asks for the streamlined implementation workflow."
 ---
 
 # Run a code-owned workflow
 
 Act as the host adapter and user interface, not the workflow engine or implementation worker. The bundled kernel selects every transition. Perform only the `next_action` it emits, return the requested typed result, then ask the kernel what follows.
 
-Before the first script call or dispatch, select `references/runtime-claude.md` on Claude Code or `references/runtime-codex.md` on Codex. Read `references/state-engine.md` and `references/workflow-profiles.json`. Read `references/router-contract.md`, `references/team-execution.md`, `references/agent-contract.md`, or `references/verifier-contract.md` only before the corresponding action.
+Before the first script call or dispatch, select `references/runtime-claude.md` on Claude Code or `references/runtime-codex.md` on Codex. Read `references/state-engine.md` and `references/workflow-profiles.json`. Read the action-specific agent, verifier, review, delivery, or closeout reference only immediately before that action.
 
 ## Invariants
 
@@ -21,7 +21,10 @@ Before the first script call or dispatch, select `references/runtime-claude.md` 
 - Use a fresh independent verifier. An implementation or repair agent cannot certify its own phase.
 - Stop honestly on goal drift, malformed state/result, unsafe command syntax, branch mismatch, unreachable head, exhausted repair budget, or failed verification.
 - A hotfix cannot start implementation before the kernel records an explicit engineer proposal decision. Approval never grants delivery authority.
-- Do not commit, push, create a pull request, watch CI, write learnings, update strategy, or approve the final review packet in U7.
+- Treat final engineer review as a separate authority gate. No profile, including hotfix, may deliver from verification alone.
+- Perform commit, push, pull-request, and CI operations only through kernel-emitted delivery actions. Stage only agent-reported files.
+- Build learning from the durable closeout packet, not the hot transcript. `no-learning` is a normal successful outcome.
+- Never edit `STRATEGY.md` during a run. Closeout may record a proposal artifact; only a later explicit `sl-strategy` reconciliation may apply it.
 
 ## Resolve input
 
@@ -49,13 +52,13 @@ For `state:`:
 
 1. Invoke `resume` before inspecting or changing implementation files.
 2. Never redispatch when it reports `reconcile-in-progress-agent` or `reconcile-in-progress-verifier`. The prior process may have changed the worktree without recording a result. Require an explicit reconciliation decision in interactive mode; unattended mode stops honestly.
-3. Continue directly from `start-next`, `run-checks`, or `await-engineer-review` when the kernel reports that action. Completed nodes and phase gates do not repeat.
+3. Continue directly from the emitted action, including review, delivery, CI, or closeout. Completed nodes and phase gates do not repeat.
 
 Exit `8` is terminal goal drift. Report the changed file and expected/actual hash; never reinitialize against the changed goal in the same run.
 
 ## Execute emitted actions
 
-Repeat until the kernel reaches `review_ready`, `blocked`, or `failed`:
+Repeat until the kernel reaches `review_ready`, `completed`, `cancelled`, `blocked`, or `failed`:
 
 ### `dispatch-router`
 
@@ -91,6 +94,22 @@ Dispatch one fresh agent with only the verifier packet and `references/verifier-
 
 A failed verifier may route one identified unit through the remaining repair budget. A passing final verifier produces `review_ready` and `review-packet.json`.
 
+### `await-engineer-review`
+
+Read `references/review-packet.md` and show the exact packet. In unattended mode, stop at durable `review_ready`; never infer a decision. In interactive mode, record only the engineer's explicit `approved`, `rejected`, or `repair-requested` decision with identity and rationale. A repair request must name one unit. Rejection cancels honestly; repair consumes the bounded repair budget; approval authorizes only the exact delivery packet.
+
+### `deliver`
+
+Read `references/delivery.md`, then invoke kernel `deliver`. Do not stage, commit, push, or call `gh` yourself. The kernel refuses unreported dirty paths, stages the reported set, creates the approved commit, and opens or reuses the PR only when the approved action says `commit-push-pr`.
+
+### `observe-ci`
+
+Invoke kernel `observe-ci`. A pending disposition remains resumable. A typed failure returns the responsible unit to its existing repair budget and requires checks, verification, and engineer review again. A passing disposition emits the closeout packet.
+
+### `dispatch-closeout`
+
+Read `references/closeout.md`. Dispatch one fresh agent with only the closeout packet and that contract. It must check the indexed solution corpus before writing, may write under `docs/solutions/` only after every learning gate passes, and otherwise returns `no-learning`. Write its exact JSON to `incoming-closeout-*.json`, then invoke `record-closeout`. Strategy observations may produce `strategy-proposal.json`; they never authorize a strategy edit.
+
 ## Surface status
 
 After each operation, report only this compact tuple plus a blocker when present:
@@ -104,8 +123,8 @@ state=<absolute state_path> terminal_reason=<reason|none>
 
 Interactive mode asks only for safe recovery or new authority. Unattended mode never asks or widens scope.
 
-## Stop at review-ready
+## Stop and completion semantics
 
-`review_ready` means the selected profile's implementation, direct code checks, and independent semantic verification passed. It is not engineer approval or delivery. Report the route, actual isolation mode, state, and review-packet paths and perform no closeout action.
+`review_ready` means implementation, direct checks, and independent verification passed. It is the default unattended stop, not approval or delivery. `completed` additionally means an engineer-approved delivery and evidence closeout were durably recorded.
 
-In unattended mode, emit `<promise>DONE</promise>` as the final non-empty line only after durable `review_ready` state. Never emit it for blocked, failed, or merely narrated completion.
+In unattended mode, emit `<promise>DONE</promise>` as the final non-empty line only after durable `review_ready` or `completed` state. Never emit it for cancelled, blocked, failed, or merely narrated completion.

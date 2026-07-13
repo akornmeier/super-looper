@@ -8,9 +8,12 @@ const AGENT = await Bun.file(path.join(ROOT, "references/agent-contract.md")).te
 const VERIFIER = await Bun.file(path.join(ROOT, "references/verifier-contract.md")).text()
 const ROUTER = await Bun.file(path.join(ROOT, "references/router-contract.md")).text()
 const TEAM = await Bun.file(path.join(ROOT, "references/team-execution.md")).text()
+const REVIEW = await Bun.file(path.join(ROOT, "references/review-packet.md")).text()
+const DELIVERY = await Bun.file(path.join(ROOT, "references/delivery.md")).text()
+const CLOSEOUT = await Bun.file(path.join(ROOT, "references/closeout.md")).text()
 const EVALS = JSON.parse(await Bun.file(path.join(ROOT, "evals/evals.json")).text())
 
-describe("sl-run U7 routed workflow contract", () => {
+describe("sl-run U8 routed workflow contract", () => {
   test("makes the kernel the transition and routing authority", () => {
     expect(SKILL).toContain("bundled kernel selects every transition")
     expect(SKILL).toContain("Make the kernel the only run-state writer")
@@ -34,12 +37,21 @@ describe("sl-run U7 routed workflow contract", () => {
     expect(AGENT).toContain("Never invent a resumable handle")
   })
 
-  test("keeps semantic verification independent and stops review-ready", () => {
+  test("keeps semantic verification independent and review authority explicit", () => {
     expect(SKILL).toContain("Use a fresh independent verifier")
     expect(SKILL).toContain("An implementation or repair agent cannot certify its own phase")
-    expect(SKILL).toContain("durable `review_ready` state")
-    expect(SKILL).toContain("Do not commit, push, create a pull request")
+    expect(SKILL).toContain("stop at durable `review_ready`")
+    expect(SKILL).toContain("record only the engineer's explicit")
+    expect(REVIEW).toContain("Do not translate silence")
     expect(VERIFIER).toContain('"repair_unit_id"')
+  })
+
+  test("keeps delivery, CI repair, learning, and strategy under typed policy", () => {
+    expect(SKILL).toContain("only through kernel-emitted delivery actions")
+    expect(DELIVERY).toContain("refuses unreported dirty paths")
+    expect(DELIVERY).toContain("must pass deterministic checks, independent verification, and final engineer review again")
+    expect(CLOSEOUT).toContain("all four")
+    expect(CLOSEOUT).toContain("never edit `STRATEGY.md`")
   })
 
   test("bounds routing, hotfix approval, and isolation mechanically", () => {
@@ -72,7 +84,7 @@ describe("sl-run U7 routed workflow contract", () => {
     }
   })
 
-  test("carries behavioral evals for U6 execution and U7 routing boundaries", () => {
+  test("carries behavioral evals through U8 closeout boundaries", () => {
     expect(EVALS.evals.map((entry: any) => entry.name)).toEqual([
       "serial-review-ready",
       "code-check-same-session-repair",
@@ -85,6 +97,11 @@ describe("sl-run U7 routed workflow contract", () => {
       "ambiguous-route-is-one-bounded-agent",
       "hotfix-needs-proposal-approval",
       "isolation-and-overlap-bound-concurrency",
+      "engineer-rejects-or-requests-repair",
+      "approved-exact-delivery",
+      "ci-failure-bounded-repair",
+      "no-op-learning-closeout",
+      "strategy-proposal-remains-unapplied",
     ])
   })
 })

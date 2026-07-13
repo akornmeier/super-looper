@@ -1,6 +1,6 @@
 # `sl-run`
 
-`sl-run` is the streamlined entry into a code-owned developer workflow for canonical Markdown plans from `sl-plan`. Deterministic code selects a chore, bug, feature, or hotfix profile and controls state, isolation policy, commands, conditions, repair budgets, and transitions. Bounded agents implement or make semantic judgments. The workflow stops with evidence ready for engineer review.
+`sl-run` is the streamlined entry into a code-owned developer workflow for canonical Markdown plans from `sl-plan`. Deterministic code selects a chore, bug, feature, or hotfix profile and controls state, checks, review authority, delivery, CI repair, and closeout. Bounded agents implement or make semantic judgments; engineers approve consequential delivery.
 
 ## Use it
 
@@ -22,7 +22,7 @@ Optional controls are `profile:chore|bug|feature|hotfix` and `max-workers:1|2|3`
 
 ## Routed workflow
 
-U7 chooses the least expensive safe profile before the U6 execution graph:
+The kernel chooses the least expensive safe profile before execution:
 
 ```text
 explicit metadata/risk signals -> profile
@@ -34,6 +34,9 @@ profile -> implementation agent -> code checks
                          | failure  |
                          +----------+
 code checks pass -> independent verifier -> review_ready
+review_ready -> engineer approve/reject/repair
+approve -> code-owned commit/PR -> CI pass or bounded repair
+CI pass -> evidence closeout -> completed
 ```
 
 The kernel emits one typed `next_action`. The host adapter performs only that action and returns its result. Agents never decide whether a required command passed, mutate run state, or certify their own phase. A chore does not pay for the router or feature verifier lenses. Bug, feature, and hotfix packets carry their own evidence requirements.
@@ -44,7 +47,11 @@ Required verification commands run directly through the kernel as argument vecto
 
 When the host exposes a real resumable agent handle, failed checks return to the responsible session. Otherwise the kernel explicitly requests a fresh repair agent. Repair budgets come from the selected profile and remain bounded.
 
-After code checks pass, a fresh agent evaluates the integrated phase goal and completion gate. Passing the last phase writes `review-packet.json` and changes durable state to `review_ready`.
+After code checks pass, a fresh agent evaluates the integrated phase goal and completion gate. Passing the last phase writes a packet with intent, scope, diff/check evidence, failed attempts, unresolved risk, authority, and the exact proposed delivery action. Unattended mode stops at `review_ready`.
+
+Interactive review records one explicit approval, rejection, or named repair request. Approval creates an immutable delivery packet. The kernel rejects unrelated dirty files, stages only agent-reported paths, creates the approved commit and PR, observes registered CI checks, and routes a typed failure through the existing repair budget. Repaired work must pass checks, verification, and engineer review again.
+
+After CI passes, one fresh closeout agent works from durable evidence pointers and the indexed solution corpus. It writes a solution only when the lesson is reusable, evidence-backed, novel, and behavior-changing; otherwise `no-learning` is normal success. A written solution is committed and CI-checked again by the kernel. Material strategy observations become a separate proposal artifact that requires later explicit `sl-strategy` reconciliation.
 
 ## Durable execution contract
 
@@ -59,7 +66,9 @@ The state journal distinguishes `code`, `agent`, and `human` nodes, stores actua
 - Changed-file claims must stay inside the unit's owned scope.
 - A hotfix cannot start until an engineer explicitly approves its proposal; unattended mode stops at that boundary.
 - Proposal approval does not authorize delivery.
-- Unattended mode emits `<promise>DONE</promise>` only after durable `review_ready` state.
-- `review_ready` is not approval or delivery. U7 does not commit, push, open a pull request, watch CI, capture learnings, or update strategy.
+- Unattended mode emits `<promise>DONE</promise>` only after durable `review_ready` or `completed` state.
+- `review_ready` is not approval or delivery. Every delivery requires an explicit final engineer decision.
+- CI failure invalidates stale delivery authority and returns through bounded repair and review.
+- Closeout may propose strategy reconciliation but never edits `STRATEGY.md`.
 
-The older `sl-work` and `lfg` entry points remain available during migration. The stacked-PR `loop-phases.sh` path explicitly selects legacy `lfg` until delivery is folded into the new workflows.
+The older `sl-work` and `lfg` entry points remain available during migration. The stacked-PR `loop-phases.sh` path still explicitly selects legacy `lfg` until caller migration in U9.

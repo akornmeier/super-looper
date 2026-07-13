@@ -24,13 +24,13 @@ Super looper is a loop, not a toolbox: set direction once, then run the loop per
 | 1 | `/sl-ideate` | Pick the highest-leverage next slice — ranks grounded ideas against strategy and past learnings. Optional once direction is clear. |
 | 2 | `/sl-brainstorm` | Explore the chosen idea into a requirements doc (the *what*: scope, success criteria, boundaries). |
 | 3 | `/sl-plan` | Turn requirements into an implementation plan (the *how*: dependency-ordered units, test scenarios). |
-| 4 | `/sl-run` | Route and resume the plan through a code-owned workflow that stops review-ready. |
+| 4 | `/sl-run` | Route and resume the plan through review, approved delivery, CI, and evidence closeout. |
 | 5 | `/sl-compound` | Capture the learning from anything non-trivial you solved. Read back automatically by ideate, plan, and review on later passes. |
 
 **Step 4 has two policies over the same workflow kernel**
 
 - **Interactive:** `/sl-run plan:<path>` selects a chore, bug, feature, or hotfix profile, records actual isolation, advances one bounded node at a time, runs required checks directly in code, and asks only when recovery or new authority is required.
-- **Unattended:** `scripts/loop.sh --plan-file <path> --verify-cmd ...` supervises the same kernel with timeout, retry, goal-drift, and terminal-record guards. U7 stops at hotfix proposal approval when needed or at `review_ready` after deterministic checks and an independent verifier; delivery and learning remain explicit until closeout lands.
+- **Unattended:** `scripts/loop.sh --plan-file <path> --verify-cmd ...` supervises the same kernel with timeout, retry, goal-drift, and terminal-record guards. It stops at hotfix proposal approval when needed or at `review_ready`; interactive continuation records final engineer review before code-owned delivery and evidence closeout.
 
 The existing `/sl-work` and `/lfg` workflows remain available during migration. `loop-phases.sh` deliberately uses `loop.sh --legacy-lfg-plan` to preserve its stacked-PR behavior.
 

@@ -18,7 +18,7 @@ const RUN_TRANSITIONS: Record<RunState["status"], readonly RunState["status"][]>
   initialized: ["running", "failed", "cancelled"],
   running: ["blocked", "review_ready", "completed", "failed", "cancelled"],
   blocked: ["running", "failed", "cancelled"],
-  review_ready: [],
+  review_ready: ["running", "cancelled"],
   completed: [],
   failed: [],
   cancelled: [],

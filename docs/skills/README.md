@@ -28,7 +28,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-handoff`](./sl-handoff.md) | Compact the current session into a clean handoff document a fresh agent can pick up, referencing existing artifacts (plan, brainstorm, ADRs) by path instead of duplicating them |
 | [`sl-host-smoke`](./sl-host-smoke.md) | Run an explicit, non-mutating compatibility diagnostic for the super-looper plugin |
 | [`sl-ideate`](./sl-ideate.md) | Generate and critically evaluate grounded ideas about a topic |
-| [`sl-learn`](./sl-learn.md) | Capture a ship-time learning at the close of an autopilot run: invoke sl-compound headless against the still-hot session context, then commit its docs/solutions learning (plus any CONCEPTS.md and instruction-file edits it produced) into the run's open PR and re-confirm CI green before the loop reports done |
+| [`sl-learn`](./sl-learn.md) | Compatibility learning seam for the legacy lfg pipeline: invoke sl-compound headless, evaluate the result, commit an accepted docs/solutions learning into the open PR, and re-confirm CI |
 | [`sl-optimize`](./sl-optimize.md) | Run metric-driven iterative optimization loops -- define a measurable goal, run parallel experiments, measure each against hard gates or LLM-as-judge scores, keep improvements, and converge on the best solution |
 | [`sl-plan`](./sl-plan.md) | Create an executable phased plan for a multi-step task |
 | [`sl-polish`](./sl-polish.md) | Start the dev server, open the feature in a browser, and iterate on improvements together |
@@ -39,12 +39,12 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-report-bug`](./sl-report-bug.md) | Report a bug in the super-looper plugin |
 | [`sl-resolve-pr-feedback`](./sl-resolve-pr-feedback.md) | Resolve PR review feedback by evaluating validity and fixing issues in parallel |
 | [`sl-riffrec-feedback-analysis`](./sl-riffrec-feedback-analysis.md) | Riffrec product-feedback workflow |
-| [`sl-run`](./sl-run.md) | Execute or resume a canonical sl-plan artifact through a code-owned developer workflow that selects a chore, bug, feature, or hotfix profile, records isolation and bounded-team eligibility, runs direct deterministic checks, routes bounded repair, performs independent semantic verification, protects immutable goals, and stops review-ready |
+| [`sl-run`](./sl-run.md) | Execute or resume a canonical sl-plan artifact through a code-owned developer workflow that selects a risk-sized profile, runs deterministic checks and bounded repair, performs independent verification, assembles engineer review, controls approved commit/PR delivery and CI repair, and closes with evidence-based learning and strategy observations |
 | [`sl-sessions`](./sl-sessions.md) | Search and ask questions about Claude Code session history |
 | [`sl-setup`](./sl-setup.md) | Diagnose and configure super-looper environment |
 | [`sl-simplify-code`](./sl-simplify-code.md) | Simplify and refine recently changed code for clarity, reuse, quality, and efficiency while preserving behavior |
 | [`sl-slack-research`](./sl-slack-research.md) | Search Slack for interpreted organizational context -- decisions, constraints, and discussion arcs -- and produce a synthesized research digest with cross-cutting analysis |
-| [`sl-strategy`](./sl-strategy.md) | Create or maintain STRATEGY.md - the product's target problem, approach, users, key metrics, and tracks of work |
+| [`sl-strategy`](./sl-strategy.md) | Create or maintain STRATEGY.md - the product's target problem, approach, users, key metrics, and tracks of work - or interactively reconcile an evidence-backed sl-run strategy proposal |
 | [`sl-test-browser`](./sl-test-browser.md) | Run browser tests on pages affected by current PR or branch |
 | [`sl-test-xcode`](./sl-test-xcode.md) | Build and test iOS apps on simulator using XcodeBuildMCP |
 | [`sl-update`](./sl-update.md) | Check if the super-looper plugin is up to date and recommend the update command if not |

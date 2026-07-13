@@ -11,6 +11,13 @@ const nodeIdSchema = z
   .min(1)
   .regex(/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/, "must be a lowercase dotted identifier")
 
+const repoPathSchema = z.string().min(1).superRefine((value, ctx) => {
+  const normalized = value.replaceAll("\\", "/")
+  if (normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized) || normalized.split("/").includes("..")) {
+    ctx.addIssue({ code: "custom", message: "must stay inside the repository" })
+  }
+})
+
 export const agentSessionSchema = z
   .object({
     handle: z.string().min(1),
@@ -69,6 +76,10 @@ export const workflowStateSchema = z
       "awaiting-router",
       "awaiting-proposal-approval",
       "review-ready",
+      "delivery-ready",
+      "awaiting-ci",
+      "awaiting-closeout",
+      "completed",
       "failed",
     ]),
     current_node: nodeIdSchema.nullable(),
@@ -90,12 +101,86 @@ export const workflowStateSchema = z
     isolation: isolationStateSchema.optional(),
     review: z
       .object({
-        status: z.enum(["not-ready", "ready"]),
+        status: z.enum(["not-ready", "ready", "approved", "rejected", "repair-requested"]),
         packet_path: z.string().min(1).nullable(),
+        decision_path: z.string().min(1).nullable().default(null),
+      })
+      .strict(),
+    delivery: z
+      .object({
+        status: z.enum(["not-authorized", "authorized", "committed", "awaiting-ci", "passed", "failed"]),
+        packet_path: z.string().min(1).nullable(),
+        commit_sha: z.string().regex(/^[a-f0-9]{7,64}$/).nullable(),
+        pr_url: z.string().url().nullable(),
+        ci_path: z.string().min(1).nullable(),
+      })
+      .strict()
+      .optional(),
+    closeout: z
+      .object({
+        status: z.enum(["not-started", "awaiting-assessment", "completed"]),
+        packet_path: z.string().min(1).nullable(),
+        result_path: z.string().min(1).nullable(),
+        learning: z.enum(["pending", "no-learning", "written"]),
+        strategy: z.enum(["pending", "no-change", "proposed"]),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+
+export const reviewDecisionSchema = z
+  .object({
+    schema_version: z.literal(1),
+    run_id: z.string().min(1),
+    decision: z.enum(["approved", "rejected", "repair-requested"]),
+    decided_by: z.string().min(1),
+    rationale: z.string().min(1),
+    repair_unit_id: idSchema.nullable().default(null),
+    decided_at: z.string().datetime(),
+  })
+  .strict()
+
+export const closeoutResultSchema = z
+  .object({
+    schema_version: z.literal(1),
+    run_id: z.string().min(1),
+    learning: z
+      .object({
+        status: z.enum(["no-learning", "written"]),
+        reason: z.string().min(1),
+        claim: z.string().min(1).nullable(),
+        path: repoPathSchema.nullable(),
+        reusable: z.boolean(),
+        evidence_backed: z.boolean(),
+        novel: z.boolean(),
+        behavior_changing: z.boolean(),
+        existing_matches: z.array(repoPathSchema),
+        evidence_paths: z.array(z.string().min(1)),
+      })
+      .strict(),
+    strategy: z
+      .object({
+        observations: z.array(z.string().min(1)),
+        proposed_delta: z.string().min(1).nullable(),
       })
       .strict(),
   })
   .strict()
+  .superRefine((result, ctx) => {
+    const learning = result.learning
+    const passes = learning.reusable && learning.evidence_backed && learning.novel && learning.behavior_changing
+    if (learning.status === "written") {
+      if (!passes || learning.existing_matches.length > 0 || !learning.path || !learning.claim) {
+        ctx.addIssue({ code: "custom", message: "written learning must pass every evidence and novelty gate", path: ["learning"] })
+      }
+      if (learning.path && !learning.path.startsWith("docs/solutions/")) {
+        ctx.addIssue({ code: "custom", message: "written learning must live under docs/solutions/", path: ["learning", "path"] })
+      }
+    } else if (learning.path !== null) {
+      ctx.addIssue({ code: "custom", message: "no-learning cannot name a written path", path: ["learning", "path"] })
+    }
+  })
 
 export const agentResultSchema = z
   .object({
@@ -161,5 +246,7 @@ export type WorkflowNode = z.infer<typeof workflowNodeSchema>
 export type AgentResult = z.infer<typeof agentResultSchema>
 export type VerifierResult = z.infer<typeof verifierResultSchema>
 export type RouterResult = z.infer<typeof routerResultSchema>
+export type ReviewDecision = z.infer<typeof reviewDecisionSchema>
+export type CloseoutResult = z.infer<typeof closeoutResultSchema>
 export type CommandSpec = z.infer<typeof commandSpecSchema>
 export type CommandResult = z.infer<typeof commandResultSchema>

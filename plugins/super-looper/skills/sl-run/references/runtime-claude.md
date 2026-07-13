@@ -28,6 +28,10 @@ When Claude returns a stable agent/session identifier and the current tool suppo
 
 Dispatch a fresh general-purpose worker through `Agent` or `Task` with the verifier packet. Do not resume or reuse an implementation session.
 
+## Closeout
+
+Dispatch a fresh general-purpose worker through `Agent` or `Task` with only the closeout packet and contract. It may inspect named evidence and write one gated solution document, but it must not edit strategy or run state.
+
 ## Questions
 
 For required interactive reconciliation, use `AskUserQuestion` after `ToolSearch` when needed. Fall back to one concise chat question if unavailable.

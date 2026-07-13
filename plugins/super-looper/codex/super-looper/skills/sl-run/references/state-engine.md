@@ -25,6 +25,10 @@ The bundled `scripts/run-state.py` is the sole state writer and transition autho
 <kernel> record-agent --state <absolute-state-path> --result <absolute-result-path>
 <kernel> run-checks --state <absolute-state-path> [--timeout <1..1800>]
 <kernel> record-verifier --state <absolute-state-path> --result <absolute-result-path>
+<kernel> record-review-decision --state <absolute-state-path> --decision approved|rejected|repair-requested --decided-by <identity> --rationale <text> [--repair-unit-id <id>]
+<kernel> deliver --state <absolute-state-path> [--remote <name>]
+<kernel> observe-ci --state <absolute-state-path>
+<kernel> record-closeout --state <absolute-state-path> --result <absolute-result-path>
 ```
 
 `init --kernel` parses the canonical Markdown into `execution-plan.json`, selects or requests a workflow profile, records actual isolation capabilities and bounded-team eligibility, hashes the raw plan and strategy, records branch/base/head, creates the workflow journal, and atomically writes `run-state.json`. The default state path is `/tmp/super-looper/sl-run/<run-id>/run-state.json`.
@@ -45,7 +49,10 @@ The kernel emits actions; the host adapter performs them:
 | `reconcile-in-progress-agent` | Stop and reconcile; do not blindly redispatch |
 | `reconcile-in-progress-verifier` | Stop and reconcile; do not blindly redispatch |
 | `reconcile-in-progress-router` | Stop and reconcile; do not blindly redispatch |
-| `await-engineer-review` | Stop at the emitted review packet; U6 has no approval/delivery transition |
+| `await-engineer-review` | Stop unattended; interactively record one explicit approve, reject, or repair decision |
+| `deliver` | Invoke kernel-owned staging, commit, push, and PR delivery for the approved packet |
+| `observe-ci` | Let the kernel inspect PR checks and route pending, pass, or bounded repair |
+| `dispatch-closeout` | Start one fresh evidence assessor/writer with only the closeout packet |
 
 `run-checks` converts plan command entries to argument vectors, rejects shell control flow and shell `-c`, applies timeouts, writes stdout/stderr logs, and records a code node. Entries beginning with `Inspect ` are forwarded to the verifier packet instead of executed. A failed check is a successful kernel operation whose JSON routes repair; it is not a CLI failure.
 
@@ -56,3 +63,7 @@ Profiles are data in `workflow-profiles.json`. Clear plan metadata and risk sign
 Isolation selection prefers declared `sandbox`, then `worktree`, then `shared`. The kernel records a parallel-eligible group only when requested capacity, profile policy, isolation, dependency independence, and owned-scope non-overlap all pass. Shared checkout always records `max_workers: 1`. U7's portable coordinator remains one-dispatch-at-a-time even when a group is eligible.
 
 The legacy U5 `record-worker` and `verify-phase` operations remain available only for compatibility fixtures. New runs use the kernel operations above.
+
+Final review approval authorizes the exact `delivery-packet.json`, not arbitrary repository changes. The kernel rejects dirty paths outside the agent-reported set. CI repair invalidates the prior review boundary and returns through checks, semantic verification, and a new engineer decision.
+
+Closeout validates a typed `no-learning` or `written` result. Written learnings must live under `docs/solutions/`, have no indexed overlap, and pass reusable, evidence-backed, novel, and behavior-changing gates. Strategy deltas are written only to the run bundle as proposals.

@@ -76,7 +76,7 @@ silent fallback to planning.
   bar.
 - **Command mode.** `--verify-cmd <cmd...>` runs a local command **in the target
   directory**; success requires it to exit `0`. Use for targets without Actions.
-- **U7 plan mode requires command mode.** `sl-run` deliberately stops at
+- **Unattended plan mode requires command mode.** `sl-run` deliberately stops at
   `review_ready` before
   commit/PR delivery at this boundary, so GitHub-CI verification is unavailable
   until closeout lands. Omitting `--verify-cmd` fails fast with exit 4.

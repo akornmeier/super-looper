@@ -31,13 +31,13 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 - [x] U5: resumable `sl-run` coordinator (`docs/evals/sl-run-u5-report.md`)
 - [x] U6: extract the code-owned workflow kernel and deterministic validation graph (`docs/evals/sl-run-u6-report.md`)
 - [x] U7: add risk-routed workflow profiles and bounded isolation (`docs/evals/sl-run-u7-report.md`)
-- [ ] U8: add engineer review, delivery, learning, and strategy closeout
+- [x] U8: add engineer review, delivery, learning, and strategy closeout (`docs/evals/sl-run-u8-report.md`)
 - [ ] U9: migrate callers and reduce the public surface
 - [ ] U10: two-host evaluation and promotion
 
 ## Continuation Checkpoint
 
-Work stopped cleanly at the U7/U8 boundary on branch `plan/streamline-super-looper`. U1-U7 are complete and validated. U7 added data-defined chore, bug, feature, and hotfix profiles; deterministic risk routing with a typed ambiguity seam; no-downgrade overrides; hotfix proposal approval; capability-reported isolation; and mechanically bounded team eligibility. See `docs/evals/sl-run-u7-report.md`. No U8 implementation has started.
+Work stopped cleanly at the U8/U9 boundary on branch `plan/streamline-super-looper`. U1-U8 are complete and validated. U8 added complete engineer review packets; explicit approve, reject, and named-repair decisions; exact-authority code-owned commit/PR delivery; typed CI observation and bounded repair; evidence-gated learning with a valid `no-learning` outcome; code-owned delivery and CI for written learnings; separate strategy proposal artifacts; and terminal run records. See `docs/evals/sl-run-u8-report.md`. No U9 migration or public-surface reduction has started.
 
 The continuation strategy remains the three-actor model described in the supplied Dan Eisler transcript:
 
@@ -45,7 +45,7 @@ The continuation strategy remains the three-actor model described in the supplie
 - **Deterministic code** owns routing, state, conditions, validation commands, budgets, isolation policy, and audit records.
 - **Agents** perform bounded discovery, planning, implementation, repair, and semantic verification where judgment is actually required.
 
-The next slice is U8 only: add one engineer acceptance packet, code-owned delivery control, and evidence-based closeout while preserving the mandatory hotfix proposal and final delivery approvals. Do not delete compatibility skills or expand the public surface in this slice. This checkpoint is the durable resume note for the next implementation session.
+The next slice is U9 only: migrate primary callers to `sl-strategy -> sl-plan -> sl-run`, reduce the documented public surface, and keep compatibility wrappers explicit. Do not begin U10 promotion in the same slice. This checkpoint is the durable resume note for the next implementation session.
 
 ---
 
@@ -1008,17 +1008,17 @@ This is a product-architecture change across the plugin, not a local skill refac
 
 ## Recommended Next Slice
 
-Resume at U8 only: add engineer acceptance, code-owned delivery, and evidence closeout over the proven routed kernel. Do not delete old skills or migrate callers in the same PR.
+Resume at U9 only: make the three-command code-first workflow the documented default while preserving explicit compatibility routes. Do not start U10 promotion or delete compatibility components in the same slice.
 
 That PR should produce:
 
-- One compact review packet containing intent, scope, diff evidence, checks, semantic findings, unresolved risk, selected profile, authority, and the proposed delivery action.
-- `review_ready` as the default unattended terminal, with explicit engineer approval required before delivery.
-- Code-owned commit, pull-request, CI-observation, and delivery transitions with typed failures and bounded repair routing.
-- Evidence-derived learning candidates with deduplication and a valid `no_learning` outcome.
-- Strategy observations kept separate from strategy edits, with explicit approval required for reconciliation.
-- Mandatory hotfix proposal and final delivery approval throughout the refactor.
-- Cross-host contract tests and fresh-source behavioral evidence for review rejection, approval, CI failure, no-op learning, and strategy protection.
-- No old-skill deletion, caller migration, or public-surface reduction.
+- `lfg` as a short unattended compatibility wrapper over `sl-run`.
+- `sl-work` as an interactive compatibility wrapper over `sl-run`.
+- A narrowed `sl-handoff` purpose for genuinely cross-session, non-run handoffs.
+- README onboarding centered on `sl-strategy -> sl-plan -> sl-run` and the four workflow profiles.
+- Internal callers migrated away from demoted fixed agent names and full-skill pipeline handoffs.
+- Direct replacement guidance wherever a compatibility surface is deprecated.
+- Cross-host contract and fresh-source behavioral coverage for the wrapper routes.
+- No component deletion or U10 promotion.
 
-This is the smallest boundary that completes one review-to-closeout workflow without conflating delivery authority, learning evidence, and strategy ownership.
+This is the smallest boundary that changes the product's primary path without conflating compatibility migration with evidence-based promotion or deletion.
