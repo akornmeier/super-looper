@@ -71,7 +71,9 @@ describe("dual-host plugin packaging", () => {
     expect(shared).not.toMatch(/AskUserQuestion|ToolSearch|\bAgent\b|\bTask\b|CLAUDE_SKILL_DIR/)
     expect(claude).toContain("AskUserQuestion")
     expect(claude).toContain("${CLAUDE_SKILL_DIR}")
-    expect(codex).toContain("Codex subagent collaboration tool")
+    expect(codex).toContain("`spawn_agent` collaboration primitive")
+    expect(codex).toContain("non-empty returned agent identifier")
+    expect(codex).toContain("do not compute it from the known inputs")
     expect(codex).not.toContain("${CLAUDE_SKILL_DIR}")
   })
 

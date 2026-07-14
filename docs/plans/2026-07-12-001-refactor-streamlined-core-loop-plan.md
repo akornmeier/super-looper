@@ -33,11 +33,11 @@ The streamlined core ships as one dual-host product. Existing Claude Code instal
 - [x] U7: add risk-routed workflow profiles and bounded isolation (`docs/evals/sl-run-u7-report.md`)
 - [x] U8: add engineer review, delivery, learning, and strategy closeout (`docs/evals/sl-run-u8-report.md`)
 - [x] U9: migrate callers and reduce the public surface (`docs/evals/sl-run-u9-report.md`)
-- [ ] U10: two-host evaluation and promotion
+- [x] U10: two-host evaluation and promotion (complete with no profiles promoted; `docs/evals/sl-run-u10-comparison.md`)
 
 ## Continuation Checkpoint
 
-Work stopped cleanly at the U9/U10 boundary on branch `plan/streamline-super-looper`. U1-U9 are complete and validated. U9 made `sl-strategy -> sl-plan -> sl-run` the documented path on both hosts; reduced `lfg` and `sl-work` to short compatibility adapters; isolated their retired Claude-only workflows behind explicit legacy modes; narrowed `sl-handoff` to non-run transitions; migrated primary callers; and added fresh-source behavioral and repository contract coverage. See `docs/evals/sl-run-u9-report.md`. No U10 comparison, promotion, or compatibility deletion has started.
+U1-U10 are complete on branch `plan/streamline-super-looper`. The final U10 comparison passes the structural instruction budgets but correctly promotes no profile because comparable token and scored-quality baselines are missing, Claude's fresh CLI process is unauthenticated, and the installed Codex CLI smoke fails real-worker provenance. See `docs/evals/sl-run-u10-comparison.md`. Compatibility components remain in place.
 
 The continuation strategy remains the three-actor model described in the supplied Dan Eisler transcript:
 
@@ -45,7 +45,7 @@ The continuation strategy remains the three-actor model described in the supplie
 - **Deterministic code** owns routing, state, conditions, validation commands, budgets, isolation policy, and audit records.
 - **Agents** perform bounded discovery, planning, implementation, repair, and semantic verification where judgment is actually required.
 
-The next slice is U10 only, after explicit continuation: compare both hosts and every workflow profile against the established baselines, then promote only what earns the plan's evidence gates. Keep compatibility components until that evaluation supports a separately approved removal. This checkpoint is the durable resume note for the next implementation session.
+Any future promotion must close the recorded evidence gaps first: authenticated fresh Claude execution, installed Codex execution with a real spawn receipt, and comparable old/new token and scored-quality measurements for each profile. Keep compatibility components until those gates support a separately approved promotion or removal. This checkpoint is the durable completion note for the streamlined core-loop plan.
 
 ---
 
@@ -1006,11 +1006,9 @@ This is a product-architecture change across the plugin, not a local skill refac
 
 ---
 
-## Recommended Next Slice
+## Future Promotion Follow-up
 
-Resume at U10 only after explicit continuation: validate, compare, and promote behind evidence. Do not delete compatibility components as part of an unproven promotion.
-
-That PR should produce:
+U10 closed safely with no profiles promoted. A separately approved promotion follow-up must not delete compatibility components until it produces:
 
 - Same-fixture comparisons for chore, bug, feature, hotfix, resume, repair, and host-gap paths.
 - Per-profile quality floors and efficiency evidence for Claude Code and Codex.

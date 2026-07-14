@@ -13,7 +13,7 @@ Run the same bounded diagnostic on Claude Code and Codex. Do not edit the user's
    - Codex: read `references/runtime-codex.md`.
    - Unknown or ambiguous: return a failed result instead of guessing.
 3. Follow the selected adapter to ask the payload's question, execute the bundled script, and dispatch exactly one worker.
-4. Verify that the reference, script, question response, and worker result agree on the host and selected choice.
+4. Verify that the reference, script, question response, and worker result agree on the host and selected choice. A worker result is valid only when the adapter captured a non-empty dispatch identifier and then received the marker verbatim in that worker's final response. Never derive or fill in the worker marker in the coordinator.
 5. Return one JSON object with this shape:
 
 ```json
@@ -29,4 +29,4 @@ Run the same bounded diagnostic on Claude Code and Codex. Do not edit the user's
 }
 ```
 
-Report `passed` only when all four diagnostic surfaces completed. Never fabricate an unavailable tool result or silently substitute coordinator work for the worker.
+Report `passed` only when all four diagnostic surfaces completed with worker provenance. Never fabricate an unavailable tool result, call a wait primitive without a live worker identifier, or silently substitute coordinator work for the worker.

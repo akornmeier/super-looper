@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-07-13",
+  "status": "complete-no-promotions",
+  "structural_comparison": {
+    "baseline_primary_instruction_bytes": 160728,
+    "current_primary_instruction_bytes": 27493,
+    "primary_reduction_percent": 82.89,
+    "baseline_planner_instruction_bytes": 92956,
+    "current_planner_instruction_bytes": 10269,
+    "planner_reduction_percent": 88.95,
+    "strategy_plan_run_budget_bytes": 120000,
+    "strategy_plan_run_budget_passed": true,
+    "measurement_kind": "instruction-byte-proxy"
+  },
+  "runtime_evidence": {
+    "claude": {
+      "source_manifest": "passed",
+      "marketplace_and_release_contract": "passed",
+      "fresh_session": "not_measured",
+      "worker_provenance": "not_measured",
+      "reason": "Claude Code 2.1.207 is installed but reports authMethod none, so a fresh --plugin-dir model run cannot execute."
+    },
+    "codex": {
+      "source_manifest": "passed",
+      "isolated_marketplace_install": "passed",
+      "fresh_session_discovery": "passed",
+      "co_located_reference": "passed",
+      "bundled_script": "passed",
+      "worker_provenance": "failed",
+      "reason": "The isolated Codex CLI session loaded the cached 0.7.0 skill through its namespaced invocation and ran its bundled script, but issued an empty wait without spawn_agent and fabricated a passed worker marker."
+    }
+  },
+  "measurement_gaps": {
+    "token_reduction_percent": null,
+    "quality_delta_percent": null,
+    "reason": "The checked-in baseline explicitly contains no comparable two-host token or scored-quality telemetry. Current instruction bytes are proxies and cannot satisfy the measured 40 percent token gate."
+  },
+  "profiles": [
+    {
+      "profile": "chore",
+      "hosts": {
+        "claude": { "fresh_session": "not_measured", "shared_contracts": "passed" },
+        "codex": { "fresh_session": "passed", "worker": "failed", "shared_contracts": "passed" }
+      },
+      "quality_delta_percent": null,
+      "token_reduction_percent": null
+    },
+    {
+      "profile": "bug",
+      "hosts": {
+        "claude": { "fresh_session": "not_measured", "shared_contracts": "passed" },
+        "codex": { "fresh_session": "passed", "worker": "failed", "shared_contracts": "passed" }
+      },
+      "quality_delta_percent": null,
+      "token_reduction_percent": null
+    },
+    {
+      "profile": "feature",
+      "hosts": {
+        "claude": { "fresh_session": "not_measured", "shared_contracts": "passed" },
+        "codex": { "fresh_session": "passed", "worker": "failed", "shared_contracts": "passed" }
+      },
+      "quality_delta_percent": null,
+      "token_reduction_percent": null
+    },
+    {
+      "profile": "hotfix",
+      "hosts": {
+        "claude": { "fresh_session": "not_measured", "shared_contracts": "passed" },
+        "codex": { "fresh_session": "passed", "worker": "failed", "shared_contracts": "passed" }
+      },
+      "quality_delta_percent": null,
+      "token_reduction_percent": null
+    }
+  ]
+}
