@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-07-12",
+  "capture_command": "bun run scripts/core-loop/capture-baseline.ts",
+  "coverage": "Structural pre-refactor snapshot. Bytes and dispatch/tool references are efficiency proxies, not fabricated token counts.",
+  "baseline": {
+    "schema_version": 1,
+    "components": [
+      {
+        "path": "plugins/super-looper/skills/lfg/SKILL.md",
+        "lines": 196,
+        "bytes": 22060
+      },
+      {
+        "path": "plugins/super-looper/skills/sl-plan/SKILL.md",
+        "lines": 855,
+        "bytes": 92956
+      },
+      {
+        "path": "plugins/super-looper/skills/sl-work/SKILL.md",
+        "lines": 452,
+        "bytes": 39517
+      },
+      {
+        "path": "plugins/super-looper/skills/sl-code-review/SKILL.md",
+        "lines": 698,
+        "bytes": 67068
+      },
+      {
+        "path": "plugins/super-looper/skills/sl-learn/SKILL.md",
+        "lines": 105,
+        "bytes": 13500
+      },
+      {
+        "path": "plugins/super-looper/skills/sl-compound/SKILL.md",
+        "lines": 656,
+        "bytes": 47464
+      },
+      {
+        "path": "plugins/super-looper/skills/sl-strategy/SKILL.md",
+        "lines": 97,
+        "bytes": 6195
+      }
+    ],
+    "totals": {
+      "main_instruction_lines": 3059,
+      "main_instruction_bytes": 288760,
+      "markdown_lines_in_core_skill_trees": 8058,
+      "markdown_bytes_in_core_skill_trees": 648210,
+      "agents": 42,
+      "skills": 39,
+      "eval_suites": 8
+    },
+    "host_coupling": {
+      "blocking_question_tools": {
+        "files": 11,
+        "occurrences": 46
+      },
+      "claude_skill_dir": {
+        "files": 2,
+        "occurrences": 9
+      },
+      "claude_paths_or_commands": {
+        "files": 1,
+        "occurrences": 2
+      },
+      "typed_agent_dispatch": {
+        "files": 3,
+        "occurrences": 3
+      }
+    }
+  },
+  "behavioral_measurement": {
+    "status": "pending-two-host-harness",
+    "reason": "Current skill evals grade load-bearing decisions but do not expose comparable per-role token telemetry. U3 adds the dual-host smoke/eval harness before any core skill rewrite.",
+    "required_metrics": [
+      "plan_quality",
+      "goal_fidelity",
+      "completion",
+      "dispatch_count",
+      "wall_time",
+      "tokens_when_host_reports_them",
+      "context_packet_bytes",
+      "response_bytes"
+    ]
+  }
+}

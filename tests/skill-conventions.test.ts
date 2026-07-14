@@ -594,8 +594,12 @@ const PLATFORM_VAR_ACKNOWLEDGED = new Map<string, string>([
     "Same core-script skill as full-mode.md: get-thread-for-comment is invoked as a single pinned command (pinned via allowed-tools), not a bare relative path, so the Bash CWD (project root) cannot silently miss the bundled script.",
   ],
   [
-    "plugins/super-looper/skills/sl-plan/SKILL.md#CLAUDE_SKILL_DIR",
-    "generate-plan-images.py is invoked as a single pinned command (pinned via allowed-tools Bash(python3 *generate-plan-images.py*)) rather than an `if [ -f ]` guard, per the AGENTS.md permission caveat. The prose at the 5.2b call states the fallback: any non-zero exit or unparseable stdout -- including an unresolved CLAUDE_SKILL_DIR failing loudly -- means the image slots stay as placeholder comments and the skill continues; image failure never blocks the plan.",
+    "plugins/super-looper/skills/sl-plan/references/runtime-claude.md#CLAUDE_SKILL_DIR",
+    "Claude-only runtime adapter: renderer commands are pinned via allowed-tools rather than wrapped in an inline guard. The adapter states that unresolved CLAUDE_SKILL_DIR fails loudly, the renderer action is reported as skipped, and the already-complete plan is preserved; Codex selects its absolute-path adapter instead.",
+  ],
+  [
+    "plugins/super-looper/skills/sl-run/references/runtime-claude.md#CLAUDE_SKILL_DIR",
+    "Claude-only runtime adapter: kernel operations are single pinned commands rather than compound existence guards. The adapter states that unresolved CLAUDE_SKILL_DIR stops with an unavailable installed-path error and forbids retrying with a project-relative path; Codex selects its absolute-path adapter instead.",
   ],
 ])
 
@@ -1197,4 +1201,3 @@ describe("findPlatformVarViolations", () => {
     expect(findPlatformVarViolations(sample).map((v) => v.variable)).toEqual(["CLAUDE_SKILL_DIR"])
   })
 })
-

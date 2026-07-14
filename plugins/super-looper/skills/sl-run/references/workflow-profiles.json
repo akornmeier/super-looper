@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "chore": {
+      "risk_rank": 0,
+      "max_repair_attempts": 1,
+      "max_workers": 1,
+      "requires_proposal_approval": false,
+      "verifier_lenses": ["completion"],
+      "required_evidence": ["configured checks"]
+    },
+    "bug": {
+      "risk_rank": 1,
+      "max_repair_attempts": 2,
+      "max_workers": 1,
+      "requires_proposal_approval": false,
+      "verifier_lenses": ["reproduction", "regression", "correctness"],
+      "required_evidence": ["reproduction or causal evidence", "regression coverage"]
+    },
+    "feature": {
+      "risk_rank": 2,
+      "max_repair_attempts": 2,
+      "max_workers": 3,
+      "requires_proposal_approval": false,
+      "verifier_lenses": ["acceptance", "correctness", "testing", "scope"],
+      "required_evidence": ["acceptance evidence", "configured checks"]
+    },
+    "hotfix": {
+      "risk_rank": 3,
+      "max_repair_attempts": 1,
+      "max_workers": 3,
+      "requires_proposal_approval": true,
+      "verifier_lenses": ["incident impact", "surgical scope", "regression", "rollback"],
+      "required_evidence": ["incident impact", "smallest safe remedy", "rollback plan"]
+    }
+  }
+}

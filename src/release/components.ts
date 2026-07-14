@@ -20,7 +20,10 @@ const FILE_COMPONENT_MAP: Array<{ component: ReleaseComponent; prefixes: string[
   },
   {
     component: "marketplace",
-    prefixes: [".claude-plugin/marketplace.json"],
+    prefixes: [
+      ".claude-plugin/marketplace.json",
+      ".agents/plugins/marketplace.json",
+    ],
   },
 ]
 
@@ -154,11 +157,20 @@ export function bumpVersion(version: string, bump: BumpLevel | null): string | n
 }
 
 export async function loadCurrentVersions(cwd = process.cwd()): Promise<VersionSources> {
-  const ce = await readJson<PluginManifest>(`${cwd}/plugins/super-looper/.claude-plugin/plugin.json`)
+  const claude = await readJson<PluginManifest>(`${cwd}/plugins/super-looper/.claude-plugin/plugin.json`)
+  const codex = await readJson<PluginManifest>(
+    `${cwd}/plugins/super-looper/codex/super-looper/.codex-plugin/plugin.json`,
+  )
   const marketplace = await readJson<MarketplaceManifest>(`${cwd}/.claude-plugin/marketplace.json`)
 
+  if (claude.version !== codex.version) {
+    throw new Error(
+      `Plugin manifest versions differ: Claude ${claude.version}, Codex ${codex.version}`,
+    )
+  }
+
   return {
-    "super-looper": ce.version,
+    "super-looper": claude.version,
     marketplace: marketplace.metadata.version,
   }
 }

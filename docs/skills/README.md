@@ -29,7 +29,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-ideate`](./sl-ideate.md) | Generate and critically evaluate grounded ideas about a topic |
 | [`sl-learn`](./sl-learn.md) | Capture a ship-time learning at the close of an autopilot run: invoke sl-compound headless against the still-hot session context, then commit its docs/solutions learning (plus any CONCEPTS.md and instruction-file edits it produced) into the run's open PR and re-confirm CI green before the loop reports done |
 | [`sl-optimize`](./sl-optimize.md) | Run metric-driven iterative optimization loops -- define a measurable goal, run parallel experiments, measure each against hard gates or LLM-as-judge scores, keep improvements, and converge on the best solution |
-| [`sl-plan`](./sl-plan.md) | Create structured plans for multi-step tasks -- software features, research workflows, events, study plans, or any goal that benefits from breakdown |
+| [`sl-plan`](./sl-plan.md) | Create an executable phased plan for a multi-step task |
 | [`sl-polish`](./sl-polish.md) | Start the dev server, open the feature in a browser, and iterate on improvements together |
 | [`sl-product-pulse`](./sl-product-pulse.md) | Generate a time-windowed pulse report on what users experienced and how the product performed - usage, quality, errors, signals worth investigating |
 | [`sl-promote`](./sl-promote.md) | Draft user-facing announcement and marketing copy for a feature that just shipped — an X post or thread, a changelog blurb, a LinkedIn post, an email, a blog intro, or a short demo script |
@@ -38,6 +38,7 @@ For runtime behavior and contributor reference, the `SKILL.md` in each skill's s
 | [`sl-report-bug`](./sl-report-bug.md) | Report a bug in the super-looper plugin |
 | [`sl-resolve-pr-feedback`](./sl-resolve-pr-feedback.md) | Resolve PR review feedback by evaluating validity and fixing issues in parallel |
 | [`sl-riffrec-feedback-analysis`](./sl-riffrec-feedback-analysis.md) | Riffrec product-feedback workflow |
+| [`sl-run`](./sl-run.md) | Execute or resume a canonical sl-plan artifact through a code-owned developer workflow that selects a risk-sized profile, runs deterministic checks and bounded repair, performs independent verification, assembles engineer review, controls approved commit/PR delivery and CI repair, and closes with evidence-based learning and strategy observations |
 | [`sl-sessions`](./sl-sessions.md) | Search and ask questions about Claude Code session history |
 | [`sl-setup`](./sl-setup.md) | Diagnose and configure super-looper environment |
 | [`sl-simplify-code`](./sl-simplify-code.md) | Simplify and refine recently changed code for clarity, reuse, quality, and efficiency while preserving behavior |
