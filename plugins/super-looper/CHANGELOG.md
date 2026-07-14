@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.7.0...super-looper-v0.8.0) (2026-07-14)
+
+
+### Features
+
+* **run:** add dual-host workflow core ([#50](https://github.com/akornmeier/super-looper/issues/50)) ([eae6d15](https://github.com/akornmeier/super-looper/commit/eae6d152b69bbfd449554d2c17ed94852b7e05a2))
+
 ## [0.7.0](https://github.com/akornmeier/super-looper/compare/super-looper-v0.6.1...super-looper-v0.7.0) (2026-07-12)
 
 
