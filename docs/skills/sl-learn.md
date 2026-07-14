@@ -13,7 +13,7 @@ When legacy `lfg` invokes learning at ship-time, `sl-learn` captures what was le
 | Question | Answer |
 |----------|--------|
 | What does it do? | Runs `sl-compound` headless in-session, commits the learning (plus any `CONCEPTS.md` / instruction-file edits) into the run's PR, and re-confirms CI green |
-| When to use it | Automatically, by legacy `lfg` only (`mode:legacy-pipeline` / `loop.sh --legacy-lfg-plan`), at the close of an autopilot run — not invoked from new `sl-run` workflows or manual invocation |
+| When to use it | Automatically, by legacy `lfg` only (`mode:legacy-pipeline` / `loop.sh --legacy-lfg-plan`), at the close of an autopilot run — never invoked from new `sl-run` workflows or manually |
 | What it produces | A `docs(<scope>):` commit on the PR branch, on a verified-green PR — or a clean skip |
 | Skip when | No open PR exists, or the run ended with CI unresolved (the seam self-skips). New `sl-run` workflows never fire it — they handle their own closeout |
 
