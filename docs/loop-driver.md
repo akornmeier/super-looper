@@ -66,7 +66,7 @@ silent fallback to planning.
 
 ## Verification modes (one is always required)
 
-- **GitHub-CI mode (explicit legacy default).** When the target has a git remote and no
+- **GitHub-CI mode (default for seed and legacy workflows).** When the target has a git remote and no
   `--verify-cmd` is given, success requires an **open PR** for the target branch
   with **green `gh pr checks`**. A PR with **zero checks** is treated as *not*
   green — there is no unverified success. This is the faithful "reach CI-green"
