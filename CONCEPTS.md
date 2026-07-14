@@ -22,7 +22,7 @@ The catalog metadata listing installable plugins and their versions for distribu
 The methodology this project embodies: structure engineering work so each unit makes the next one easier, capturing reusable knowledge as you go so the toolset gets smarter with every use.
 
 ### Pipeline
-The chained progression of Skills that carries a piece of work from strategy and ideation through brainstorm, plan, execution, and review, and closes by capturing what was learned. Each stage hands a durable artifact to the next, and research is gathered at the stage that needs it rather than re-gathered downstream.
+The chained progression of Skills that carries a piece of work from strategy and ideation through brainstorm, plan, execution, and review, and closes by capturing what was learned. Each stage hands a durable artifact to the next, and research is gathered at the stage that needs it rather than re-gathered downstream. The legacy stacked-skill path runs through `/lfg` (or `loop.sh --legacy-lfg-plan`); the current [core workflow](#core-loop) is `/sl-strategy` → `/sl-plan` → `/sl-run`, where `sl-run` owns routing, worker dispatch, [verification](#review-ready-boundary), engineer review, approved delivery, and [closeout](#closeout-packet).
 
 ### Learning
 A documented solution to a past problem — a bug fix, a convention, or a workflow pattern — stored as the unit of compounded knowledge so future work can find and reuse it. Also called a solution doc. Carries structured metadata (category, tags, problem type) for retrieval and is classified by its problem type onto a bug or knowledge Track; its creation date lives in the entry, not the filename.
@@ -49,6 +49,29 @@ The paired mechanism that refuses to let an unattended run change its own goal a
 
 ### Attempt lineage
 The chain of attempts within one run that shares surviving working-tree state — a cold attempt plus every resumed attempt that skipped the reset because a validated progress record carried the state forward. Invariants captured "per attempt" are actually scoped per lineage: any baseline, snapshot, or budget that assumes a reset ran must be captured where the reset happens (the cold attempt) and inherited across resumes, or a skip-reset path silently narrows what the invariant measures.
+
+## Core loop
+
+### Workflow profile
+The risk-sized profile — chore, bug, feature, or hotfix — that `sl-run` selects deterministically from the plan and repository evidence. Each profile owns verification lenses, repair budgets, worker count eligibility, and required evidence gates: chore requires configured checks and completion; bug requires reproduction or causal evidence plus regression coverage; feature requires acceptance, scope, testing, and independent verification; hotfix requires incident impact, surgical scope, rollback evidence, and an explicit engineer proposal approval before implementation starts. The selection cannot be lowered from the deterministic floor — a user override may raise cost or review depth, but the recorded safety floor stands.
+
+### Run state
+The code-owned state file under `/tmp/super-looper/sl-run/<run-id>/run-state.json` written by the [state engine](#state-engine) (run-state.py script). It holds the canonical current status, completed work, independent verification evidence, commits, usage, and closeout observations — the durable resume and audit handle for a run. Resuming requires revalidating the schema, goal hashes, branch identity, and completed gates before continuing; terminal runs cannot resume.
+
+### Review-ready boundary
+The durable state marking implementation, direct checks, and independent verification passed. It is the default unattended stop for a run — never approval or delivery authority. `review_ready` gates the review packet showing intent, scope, diff, checks, findings, and risks; engineer review is a separate authority gate. `completed` additionally means an engineer-approved delivery plus evidence closeout were durably recorded — the terminal state indicating both approval and delivery happened.
+
+### Closeout packet
+The durable evidence artifact `sl-run` builds when a run reaches terminal state. It holds indexed solution corpus checks, learning candidates, strategy observations, and closure metadata. Learning is derived from the closeout packet (not the hot transcript), and `no-learning` is a normal successful outcome. Strategy deltas are written only to the run bundle as proposals; they never authorize a strategy edit without a later explicit `sl-strategy` reconciliation.
+
+### Host adapter
+The runtime reference seam (runtime-claude.md / runtime-codex.md) that allows the same skill to run on both Claude Code and Codex hosts. The adapter mediates questions, worker dispatch, model selection, worktree isolation, script execution, plugin updates, and hook payload handling between the shared semantic SKILL.md and each host's native capabilities — making the skill portable across both platforms.
+
+### Host smoke
+The explicit diagnostic (`sl-host-smoke`) that validates plugin loading, reference file resolution, bundled script execution, and worker dispatch on the installed host without modifying the target repository. Its two packaged copies (Claude Code and Codex) are drift-checked byte-for-byte; it is the first executable proof the host-adapter seam works.
+
+### State engine
+The bundled `scripts/run-state.py` kernel that is the sole state writer and transition authority for a run. It owns plan parsing, profile selection, phase management, unit routing, boundary gates, and terminal decisions. It emits one JSON summary on stdout and returns typed errors on stderr; the host adapter performs only the `next_action` it emits and routes results back through kernel record operations. Exit codes carry semantics: 0 = success or typed check failure, 2 = CLI usage error, 3 = invalid plan/state/packet, 4 = resume safety failure, 5 = illegal state transition, 8 = plan or strategy goal drift.
 
 ## Skill orchestration
 
