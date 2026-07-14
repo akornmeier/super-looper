@@ -1,0 +1,6 @@
+interface:
+  display_name: "Work Compatibility"
+  short_description: "Route interactive work through plan and run"
+  default_prompt: "Use $sl-work to route this existing work request through the streamlined interactive workflow."
+policy:
+  allow_implicit_invocation: false

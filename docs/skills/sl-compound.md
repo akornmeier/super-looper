@@ -4,7 +4,7 @@
 
 `sl-compound` is the **knowledge-capture** skill. After you solve a non-trivial problem, this skill writes a structured doc to `docs/solutions/` covering symptoms, root cause, what didn't work, the working solution, and prevention strategies. Future runs of `sl-plan`, `sl-ideate`, `sl-debug`, and `sl-work` consult this folder as institutional memory — so the same investigation never has to happen twice.
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-compound` is the **closing loop** — captured at the end of a debugging or build session, the doc feeds back upstream as grounding for future runs. The first time you solve "N+1 query in brief generation" takes 30 minutes of research; the second time, you find the doc and the fix takes 2 minutes.
+`sl-compound` is the standalone learning workflow for a verified debugging or build session. `/sl-run` performs its own evidence-gated closeout from durable run state and treats `no-learning` as a valid result.
 
 ---
 

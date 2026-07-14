@@ -1,0 +1,6 @@
+interface:
+  display_name: "LFG Compatibility"
+  short_description: "Route unattended work through plan and run"
+  default_prompt: "Use $lfg to plan this software task and run it unattended through the streamlined workflow."
+policy:
+  allow_implicit_invocation: false

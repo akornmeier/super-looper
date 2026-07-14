@@ -6,7 +6,7 @@
 
 It right-sizes. Trivial bugs (typos, missing imports, obvious one-line fixes) take an explicit fast-path in Phase 0 — fix it, leave a one-line note, stop. Anything else flows through the full framework, with complex bugs spending more time in each phase naturally. The fix is optional — diagnosis-only is a first-class outcome.
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-debug` is the bug-shaped sibling to `/sl-work` — when the input is broken behavior rather than a feature to build, this skill takes over. It can also escalate to `/sl-brainstorm` when investigation reveals the bug isn't really a bug; it's a design problem.
+`sl-debug` remains a standalone bug investigation and repair workflow. Use it when the root cause is unknown; use `/sl-plan` -> `/sl-run` when the defect already needs a canonical, resumable implementation plan.
 
 ---
 

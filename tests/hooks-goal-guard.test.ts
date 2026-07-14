@@ -307,11 +307,13 @@ describe("loop.sh forwards LOOP_GOAL_GUARD_PATHS through env -i", () => {
     const { exitCode } = await runLoop(
       [
         "--target", target, "--plugin-dir", plugin,
-        "--plan-file", "docs/plans/p.md", "--verify-cmd", "true",
+        "--plan-file", "docs/plans/p.md", "--max-retries", "0", "--verify-cmd", "true",
       ],
       { LOOP_CLAUDE_BIN: dumpEnvClaude(marker), LOOP_TIMEOUT_BIN: timeoutStub() },
     )
-    expect(exitCode).toBe(0)
+    // The stub intentionally does not create sl-run's durable completed state,
+    // so the supervisor refuses its DONE signal after forwarding the guard.
+    expect(exitCode).toBe(5)
     const forwarded = fs.readFileSync(marker, "utf8")
     const ct = fs.realpathSync(target)
     expect(forwarded).toBe(`${ct}/STRATEGY.md\n${ct}/docs/plans/p.md`)
