@@ -73,7 +73,7 @@ codex plugin marketplace add akornmeier/super-looper --ref main
 codex plugin add super-looper@super-looper
 ```
 
-Codex packaging and the cross-host adapter seam are available; migration of the legacy core workflows is still in progress. Run `$sl-host-smoke` in a fresh thread to validate the installed host path.
+Codex packaging and the cross-host adapter seam are available; migration of the legacy core workflows is still in progress. Run `/sl-host-smoke` (Claude Code) or `$super-looper:sl-host-smoke` (Codex) in a fresh thread to validate the installed host path.
 
 ## Local Development
 
