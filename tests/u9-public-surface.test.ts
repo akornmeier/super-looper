@@ -10,10 +10,11 @@ async function read(relativePath: string): Promise<string> {
 describe("U9 public workflow surface", () => {
   test("onboarding teaches three core commands and four profiles", async () => {
     const readme = await read("README.md")
-    const onboarding = readme.slice(
-      readme.indexOf("## Three-command workflow"),
-      readme.indexOf("## Install"),
-    )
+    const start = readme.indexOf("## Three-command workflow")
+    const end = readme.indexOf("## Install")
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    const onboarding = readme.slice(start, end)
 
     expect(onboarding).toContain("`/sl-strategy`")
     expect(onboarding).toContain("`/sl-plan`")
