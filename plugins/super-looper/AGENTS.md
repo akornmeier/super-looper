@@ -27,7 +27,7 @@ The repo uses an automated release process to prepare plugin releases, including
 
 ### Contributor Rules
 
-- Do **not** manually bump `.claude-plugin/plugin.json` version in a normal feature PR — release-please owns this via `extra-files` in `.github/release-please-config.json`.
+- Do **not** manually bump `.claude-plugin/plugin.json` or `codex/super-looper/.codex-plugin/plugin.json` in a normal feature PR — release-please owns both via `extra-files` in `.github/release-please-config.json`.
 - Do **not** manually bump `.claude-plugin/marketplace.json` plugin version in a normal feature PR.
 - Do **not** cut a release section in the canonical root `CHANGELOG.md` for a normal feature PR.
 - Do update substantive docs that are part of the actual change, such as `README.md`, component tables, usage instructions, or counts when they would otherwise become inaccurate.
@@ -37,6 +37,7 @@ The repo uses an automated release process to prepare plugin releases, including
 Before committing ANY changes:
 
 - [ ] No manual release-version bump in `.claude-plugin/plugin.json`
+- [ ] No manual release-version bump in `codex/super-looper/.codex-plugin/plugin.json`
 - [ ] No manual release-version bump in `.claude-plugin/marketplace.json`
 - [ ] No manual release entry added to the root `CHANGELOG.md`
 - [ ] `bun run release:validate` passes

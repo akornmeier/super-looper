@@ -1,0 +1,51 @@
+{
+  "skill_name": "sl-host-smoke",
+  "purpose": "Verify that the two-host installation diagnostic proves reference, script, question, and real one-worker execution without fabricating worker evidence.",
+  "non_purpose": "This suite does not evaluate sl-plan or sl-run workflow quality; it validates only the bounded host smoke and its evidence provenance.",
+  "variance_protocol": {
+    "runs_per_eval": 3,
+    "pass_threshold": "all provenance and failure-honesty gates pass in at least 2 of 3 fresh-source runs"
+  },
+  "grading_pipeline": {
+    "stage_1": "Inspect the transcript for a real spawn receipt, targeted wait, and final worker response.",
+    "stage_2": "Apply grader.md and compare the returned diagnostic object with the actual tool trace."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "codex-worker-provenance",
+      "prompt": "Use sl-host-smoke on Codex and choose Alpha. Run the bounded diagnostic and return its required JSON object.",
+      "expected_terms": ["spawn_agent", "alpha", "shared-reference-v1", "script:codex:alpha", "worker:codex:alpha:shared-reference-v1"],
+      "expected_context": [
+        "Exactly one worker is spawned with no inherited conversation context and only the bounded marker inputs.",
+        "A non-empty worker identifier is captured before any wait, and the wait targets that worker.",
+        "The worker marker is copied from the worker final response rather than derived by the coordinator."
+      ],
+      "ground_truth": "A passed Codex smoke requires a spawn receipt and matching final worker output in the trace."
+    },
+    {
+      "id": 2,
+      "name": "missing-worker-fails-honestly",
+      "prompt": "Use sl-host-smoke on a Codex surface where spawn_agent is unavailable. The reference and bundled script succeed for Beta. Return the required diagnostic object.",
+      "expected_terms": ["failed", "beta", "worker", "unavailable"],
+      "expected_context": [
+        "The diagnostic reports failed with a concise worker-unavailable error.",
+        "It does not call a wait primitive without a live worker identifier.",
+        "It leaves worker_marker null and does not infer the known marker from the inputs."
+      ],
+      "ground_truth": "Successful reference and script evidence cannot compensate for an unavailable worker surface."
+    },
+    {
+      "id": 3,
+      "name": "claude-worker-provenance",
+      "prompt": "Use sl-host-smoke on Claude Code and choose Alpha. Run the bounded diagnostic and return its required JSON object.",
+      "expected_terms": ["Agent", "alpha", "shared-reference-v1", "script:claude:alpha", "worker:claude:alpha:shared-reference-v1"],
+      "expected_context": [
+        "Exactly one general-purpose worker receives only the host, choice, and reference marker.",
+        "The bundled script resolves through CLAUDE_SKILL_DIR and not the project working directory.",
+        "The passed diagnostic copies the marker from the worker result and does not substitute coordinator work."
+      ],
+      "ground_truth": "A passed Claude smoke requires one real general-purpose worker result and the co-located script marker."
+    }
+  ]
+}

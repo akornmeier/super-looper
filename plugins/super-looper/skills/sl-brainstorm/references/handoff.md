@@ -49,7 +49,7 @@ Present only the options that apply. Renumber so visible options stay contiguous
 2. **Agent review of requirements doc with `sl-doc-review`** - Dispatch reviewer agents to check the doc for coherence, feasibility, scope, and other persona-specific issues; auto-apply safe fixes; route remaining findings interactively. Shown only when a requirements document exists **and `OUTPUT_FORMAT=md`** — sl-doc-review's walkthrough applies markdown-only mutations (`##`/`###` heading inserts, single-file markdown edits via apply-set) and would corrupt an HTML artifact, so HTML brainstorms skip this option until sl-doc-review gains HTML-aware mutation support. Under HTML mode, surface a one-line note above the menu: `Agent review unavailable in output:html mode — sl-doc-review is markdown-only today. Switch to output:md if you want a review pass.`
 3. **Open in Proof — review and comment to iterate with the agent** - Open the doc in Every's Proof editor, iterate with the agent via comments, or copy a link to share with others. Shown only when a requirements document exists. **Render only when `OUTPUT_FORMAT=md`** (Proof operates on markdown and cannot ingest HTML).
 3. **Open in browser** — open the HTML requirements file locally for review and sharing. Shown only when a requirements document exists. **Render only when `OUTPUT_FORMAT=html`.** Replaces "Open in Proof" at the same slot under exclusive output mode — the doc is either markdown OR HTML, never both, so exactly one of the two labels applies per run.
-4. **Build it now with `sl-work` (skip planning)** - Skip planning and move to `sl-work`; suited to lightweight, well-defined changes. Shown only when `Resolve Before Planning` is empty **and** scope is lightweight, success criteria are clear, scope boundaries are clear, and no meaningful technical or research questions remain (the "direct-to-work gate").
+4. **Plan and run it now** - Continue through `sl-plan` and then `sl-run` in the current session; suited to lightweight, well-defined changes. Shown only when `Resolve Before Planning` is empty **and** scope is lightweight, success criteria are clear, scope boundaries are clear, and no meaningful technical or research questions remain (the "direct-to-run gate").
 5. **More clarifying questions to sharpen the doc** - Keep refining scope, edge cases, constraints, and preferences through further dialogue. Always shown.
 6. **Done for now** - Pause; the requirements doc is saved and can be resumed later. Always shown.
 
@@ -67,9 +67,9 @@ Immediately load the `sl-plan` skill in the current session. Pass the requiremen
 
 Load the `sl-doc-review` skill, passing the requirements document path as the argument. When sl-doc-review returns "Review complete", return to the Phase 4 options and re-render the menu (the doc may have changed, so re-evaluate `Resolve Before Planning`, direct-to-work gate, and residual findings). If residual P0/P1 findings remain unaddressed, include the post-review nudge above the menu. Do not show the closing summary yet.
 
-**If user selects "Build it now with `sl-work` (skip planning)":**
+**If user selects "Plan and run it now":**
 
-Immediately load the `sl-work` skill in the current session using the finalized brainstorm output as context. If a compact requirements document exists, pass its path. Do not print the closing summary first.
+Immediately load `sl-plan` in the current session using the finalized brainstorm output as context. If a compact requirements document exists, pass its path. When it returns canonical Markdown, invoke `sl-run` with `plan:<returned-path> mode:interactive`. Do not print the closing summary first and do not route through `sl-work`.
 
 **If user selects "More clarifying questions to sharpen the doc":** Return to Phase 1.3 (Collaborative Dialogue) and continue asking the user clarifying questions one at a time to further refine scope, edge cases, constraints, and preferences. Continue until the user is satisfied, then return to Phase 4. Do not show the closing summary yet.
 

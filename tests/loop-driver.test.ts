@@ -42,6 +42,61 @@ function claudeStub(name: string, transcript: string, exitCode: number, marker: 
   )
 }
 
+function slRunResumeStub(marker: string, promptLog: string): string {
+  return writeExec(
+    path.join(work, "sl-run-claude"),
+    `#!/usr/bin/env bash
+prompt=""
+for a in "$@"; do
+  case "$a" in *plan:*|*state:*) prompt="$a" ;; esac
+done
+printf '%s\n---PROMPT---\n' "$prompt" >> '${promptLog}'
+printf 'RUN\n' >> '${marker}'
+state_path="$(printf '%s\n' "$prompt" | sed -n -e 's/^state-path://p' -e 's/^state://p' | head -1)"
+run_id="$(printf '%s\n' "$prompt" | sed -n 's/^run-id://p' | head -1)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+head_sha="$(git rev-parse HEAD)"
+mkdir -p "$(dirname "$state_path")"
+if printf '%s\n' "$prompt" | grep -q '^state:'; then
+  status=review_ready
+  phase_status=completed
+  unit_status=completed
+  verification_status=passed
+  workflow_stage=review-ready
+  review_status=ready
+else
+  status=initialized
+  phase_status=pending
+  unit_status=pending
+  verification_status=not_run
+  workflow_stage=idle
+  review_status=not-ready
+fi
+cat > "$state_path" <<EOF
+{
+  "schema_version": 1,
+  "run_id": "$run_id",
+  "plan": {"path":"docs/plans/p.md","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+  "strategy": null,
+  "git": {"branch":"$branch","base_ref":"$head_sha","head_sha":"$head_sha"},
+  "status": "$status",
+  "current_phase": null,
+  "workflow": {"schema_version":1,"stage":"$workflow_stage","current_node":null,"max_repair_attempts":1,"repair_attempts":{},"sessions":{},"nodes":[],"review":{"status":"$review_status","packet_path":"$state_path.review.json"}},
+  "phases": [{"id":"phase-one","depends_on":[],"status":"$phase_status","units":[{"id":"unit-one","depends_on":[],"status":"$unit_status","worker_id":null,"changed_files":[],"evidence":[],"unresolved":[]}],"verification":{"status":"$verification_status","evidence":[]},"commits":[]}],
+  "usage": {"available":false,"by_role":{},"by_phase":{}},
+  "learning_candidates": [],
+  "strategy_observations": [],
+  "started_at": "2026-07-13T12:00:00.000Z",
+  "updated_at": "2026-07-13T12:00:01.000Z",
+  "terminal": null
+}
+EOF
+if [ "$status" = review_ready ]; then printf '<promise>DONE</promise>\n'; exit 0; fi
+exit 1
+`,
+  )
+}
+
 // Generic gh stub. Runs outside `env -i`, so it reads STUB_GH_* from the test env.
 function ghStub(): string {
   return writeExec(
@@ -670,7 +725,7 @@ describe("plan-input mode", () => {
     fs.writeFileSync(handoff, "HANDOFF_SENTINEL_XYZ rationale and rejected alternatives")
     const { exitCode, stdout } = await runLoop([
       "--target", target, "--plugin-dir", plugin,
-      "--plan-file", planRel, "--handoff-file", handoff, "--dry-run",
+      "--plan-file", planRel, "--legacy-lfg-plan", "--handoff-file", handoff, "--dry-run",
     ])
     expect(exitCode).toBe(0)
     expect(stdout).toContain(`handoff-file: ${handoff}`)
@@ -750,13 +805,107 @@ describe("plan-input mode", () => {
     expect(stdout).toContain("do not re-plan")
   })
 
+  test("sl-run plan mode resumes durable state and preserves it in the terminal record", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    gitInit(target, false)
+    const planRel = writePlan(target, "docs/plans/p.md", "## Phases\n")
+    const marker = path.join(work, "sl-run-attempts.log")
+    const promptLog = path.join(work, "sl-run-prompts.log")
+    const logDir = mkdirInWork("logs")
+    const verify = printargsStub(path.join(work, "verify-args"), path.join(work, "verify-cwd"))
+    const claude = slRunResumeStub(marker, promptLog)
+    const { exitCode } = await runLoop(
+      [
+        "--target", target,
+        "--plugin-dir", plugin,
+        "--plan-file", planRel,
+        "--max-retries", "1",
+        "--log-dir", logDir,
+        "--verify-cmd", verify,
+      ],
+      { env: { LOOP_CLAUDE_BIN: claude, LOOP_TIMEOUT_BIN: timeoutStub() } },
+    )
+
+    expect(exitCode).toBe(0)
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n")).toHaveLength(2)
+    const prompts = fs.readFileSync(promptLog, "utf8").split("---PROMPT---").filter(Boolean)
+    expect(prompts[0]).toContain(`plan:${planRel}`)
+    expect(prompts[0]).toContain("state-path:/tmp/super-looper/sl-run/")
+    expect(prompts[1]).toContain("state:/tmp/super-looper/sl-run/")
+    expect(prompts[1]).not.toContain(`plan:${planRel}`)
+
+    const record = readRecord(logDir)
+    expect(record.coordinator).toMatchObject({
+      status: "review_ready",
+      completed_gates: ["phase-one"],
+      next_action: "await-engineer-review",
+      terminal_reason: null,
+    })
+    expect(fs.existsSync(record.coordinator.state_path)).toBe(true)
+    fs.rmSync(path.dirname(record.coordinator.state_path), { recursive: true, force: true })
+  })
+
+  test("sl-run refuses DONE without durable review-ready state", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    gitInit(target, false)
+    const planRel = writePlan(target, "docs/plans/p.md", "## Phases\n")
+    const marker = path.join(work, "invalid-done.log")
+    const claude = claudeStub("invalid-done", SENTINEL, 0, marker)
+    const verify = printargsStub(path.join(work, "verify-args"), path.join(work, "verify-cwd"))
+    const { exitCode, stderr } = await runLoop(
+      [
+        "--target", target,
+        "--plugin-dir", plugin,
+        "--plan-file", planRel,
+        "--max-retries", "0",
+        "--log-dir", mkdirInWork("invalid-done-logs"),
+        "--verify-cmd", verify,
+      ],
+      { env: { LOOP_CLAUDE_BIN: claude, LOOP_TIMEOUT_BIN: timeoutStub() } },
+    )
+
+    expect(exitCode).toBe(5)
+    expect(stderr).toContain("cap-exhausted")
+  })
+
+  test("sl-run process exit after plan mutation stays typed goal drift", async () => {
+    const target = mkdirInWork("target")
+    const plugin = mkdirInWork("plugin")
+    gitInit(target, false)
+    const planRel = writePlan(target, "docs/plans/p.md", "## Phases\n")
+    const marker = path.join(work, "drift-attempts.log")
+    const claude = writeExec(
+      path.join(work, "sl-run-drift"),
+      `#!/usr/bin/env bash\nprintf 'RUN\\n' >> '${marker}'\nprintf 'mutated\\n' >> docs/plans/p.md\nexit 8\n`,
+    )
+    const logDir = mkdirInWork("drift-logs")
+    const verify = printargsStub(path.join(work, "verify-args"), path.join(work, "verify-cwd"))
+    const { exitCode, stderr } = await runLoop(
+      [
+        "--target", target,
+        "--plugin-dir", plugin,
+        "--plan-file", planRel,
+        "--log-dir", logDir,
+        "--verify-cmd", verify,
+      ],
+      { env: { LOOP_CLAUDE_BIN: claude, LOOP_TIMEOUT_BIN: timeoutStub() } },
+    )
+
+    expect(exitCode).toBe(8)
+    expect(stderr).toContain("goal drift")
+    expect(fs.readFileSync(marker, "utf8").trim().split("\n")).toHaveLength(1)
+    expect(readRecord(logDir).typed_failure).toBe("goal-drift")
+  })
+
   test("--handoff-file pointing at a missing path fails fast", async () => {
     const target = mkdirInWork("target")
     const plugin = mkdirInWork("plugin")
     const planRel = writePlan(target, "docs/plans/p.md", "## Implementation Units\n")
     const { exitCode, stderr } = await runLoop([
       "--target", target, "--plugin-dir", plugin,
-      "--plan-file", planRel, "--handoff-file", path.join(work, "nope.md"), "--dry-run",
+      "--plan-file", planRel, "--legacy-lfg-plan", "--handoff-file", path.join(work, "nope.md"), "--dry-run",
     ])
     expect(exitCode).toBe(2)
     expect(stderr).toContain("handoff file not found")
@@ -1072,7 +1221,7 @@ describe("goal-drift guard (R1-R3)", () => {
       marker,
     )
     const { exitCode, stderr } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     expect(exitCode).toBe(8)
@@ -1103,7 +1252,7 @@ describe("goal-drift guard (R1-R3)", () => {
       marker,
     )
     const { exitCode } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     expect(exitCode).toBe(8)
@@ -1122,7 +1271,7 @@ describe("goal-drift guard (R1-R3)", () => {
     const { marker, env } = stubs()
     const claude = claudeMutateStub("claude", "rm -f docs/plans/p.md", `done\n${SENTINEL}`, 0, marker)
     const { exitCode, stderr } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     expect(exitCode).toBe(8)
@@ -1167,7 +1316,7 @@ describe("goal-drift guard (R1-R3)", () => {
       marker,
     )
     const { exitCode } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     // Assert the concrete success shape, not merely `not 8` — a run that died of a
@@ -1202,7 +1351,7 @@ describe("goal-drift guard (R1-R3)", () => {
       marker,
     )
     const { exitCode, stderr } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     expect(exitCode).toBe(8)
@@ -1231,7 +1380,7 @@ describe("goal-drift guard (R1-R3)", () => {
       marker,
     )
     const { exitCode, stderr } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     expect(exitCode).toBe(8)
@@ -1304,7 +1453,7 @@ describe("goal-drift guard (R1-R3)", () => {
       marker,
     )
     const { exitCode, stderr } = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--max-retries", "2", "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--max-retries", "2", "--log-dir", dir],
       {
         env: {
           ...env,
@@ -1351,7 +1500,7 @@ describe("goal-drift guard (R1-R3)", () => {
     const { marker, env } = stubs()
     const claude = claudeMutateStub("claude", "printf 'DRIFT\\n' >> docs/plans/p.md", `done\n${SENTINEL}`, 0, marker)
     const loop = await runLoop(
-      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--log-dir", dir],
+      ["--target", target, "--plugin-dir", plugin, "--plan-file", planRel, "--legacy-lfg-plan", "--log-dir", dir],
       { env: { ...env, LOOP_CLAUDE_BIN: claude, STUB_GH_PR_STATE: "OPEN", STUB_GH_CHECK_BUCKETS: "pass" } },
     )
     expect(loop.exitCode).toBe(8)

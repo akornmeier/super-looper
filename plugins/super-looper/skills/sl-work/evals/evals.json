@@ -1,153 +1,96 @@
 {
   "skill_name": "sl-work",
-  "purpose": "Validate one narrow load-bearing assumption: sl-work in mode:unattended treats the plan as authoritative scope. It resolves ambiguity from the plan's stated scope (not by asking a human and not by inventing an answer), honors the plan's Scope Boundaries non-goals, does not invent scope, and respects the plan-write contract's format split — markdown plans are never edited, and HTML plans receive advisory status-marker updates only in interactive single-writer runs, never under mode:unattended. This is the property lfg relies on when it hands sl-work a plan with mode:unattended.",
-  "non_purpose": "Not testing sl-work's subagent-dispatch strategy, parallel-safety check, test-discovery, incremental-commit heuristics, or general execution quality. The narrow assumption is plan-scope authority and scope-invention avoidance in unattended mode only. One exception: eval 5 reaches the post-subagent release hook (`TaskStop`), because a parallel batch is the second way the Phase 2 write-suppression gate resolves to suppressed — the release rule rides along on that arm rather than earning its own eval.",
+  "purpose": "Verify that sl-work is a thin interactive compatibility adapter over sl-plan and sl-run, preserves older unattended callers deliberately, and isolates HTML and knowledge-work compatibility instead of treating the old skill as the primary code engine.",
+  "non_purpose": "This suite does not re-evaluate sl-run implementation, reviewer, delivery, or closeout behavior and does not evaluate the full legacy HTML or knowledge-work workflow.",
   "variance_protocol": {
     "runs_per_eval": 3,
-    "stability_metric": "stddev of must-tier term recall across runs",
-    "pass_threshold": "must-tier recall >= 80% mean AND stddev < 20% AND runs_passed >= 2 of 3"
+    "pass_threshold": "all must-tier terms and every behavioral condition pass in at least 2 of 3 runs"
   },
   "grading_pipeline": {
-    "stage_1": "Programmatic substring match per criticality tier (must / should / may). Pass = all 'must' terms appear (case-insensitive substring) in the response text.",
-    "stage_2": "LLM grader (see grader.md) — judges whether the response makes the correct scope decision with rationale. For the negative case, judges whether a prohibited overreach appears as an affirmative recommendation."
+    "stage_1": "Case-insensitive expected-term recall; every must-tier term is required.",
+    "stage_2": "Behavioral grading against every expected_context statement and the prohibited workflow-engine reconstruction."
   },
   "evals": [
     {
       "id": 1,
-      "name": "unattended-resolves-from-plan-not-clarify",
-      "tests_risk": "scope_invention",
-      "prompt": "You are invoked as `/sl-work docs/plans/foo-plan.md mode:unattended`. In Phase 1 step 1 you find one detail of the plan is ambiguous. In interactive mode you would ask the user a clarifying question here. What do you do under mode:unattended?",
+      "name": "markdown-plan-routes-interactively",
+      "prompt": "You receive `/sl-work plan:docs/plans/retry-plan.md profile:bug`. Explain the route and authority boundary.",
       "expected_terms": [
-        {"term": "unattended", "tier": "must"},
-        {"term": "skip", "tier": "must"},
-        {"term": "plan's stated scope", "tier": "must"},
-        {"term": "clarifying", "tier": "should"},
-        {"term": "without prompting", "tier": "should"},
-        {"term": "pipeline mode", "tier": "may"}
+        {"term": "sl-run", "tier": "must"},
+        {"term": "plan:docs/plans/retry-plan.md", "tier": "must"},
+        {"term": "mode:interactive", "tier": "must"},
+        {"term": "profile:bug", "tier": "must"},
+        {"term": "engineer", "tier": "should"}
       ],
       "expected_context": [
-        "the agent skips the clarifying-question prompt (does not stop to ask the user) and resolves the ambiguity from the plan's stated scope",
-        "the agent does not invent an answer or expand scope to fill the gap — it stays within what the plan states"
+        "The response invokes sl-run directly with the exact plan, interactive mode, and profile token.",
+        "It does not implement, dispatch a reviewer fleet, or ship from the wrapper, and it preserves explicit engineer review before delivery."
       ],
-      "ground_truth": {
-        "skill": "sl-work",
-        "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
-        "contract_lines": "Phase 1 Pipeline mode (unattended) block: 'run unattended: skip every interactive prompt in this phase and make the needed choices automatically. Skip the clarifying-question step (step 1) and resolve any ambiguity from the plan's stated scope.' Step 1: 'If anything is unclear or ambiguous, ask clarifying questions now (pipeline mode: skip — resolve from the plan's scope per the Pipeline mode block above).'",
-        "expected_behavior": "Skip clarifying prompt; resolve from plan scope; no invented scope."
-      },
-      "notes": "Distinctive unattended behavior. Failure = the agent either stalls waiting for a human that isn't there, or fabricates an answer beyond the plan."
+      "ground_truth": {"source": "sl-work/SKILL.md Route 5", "behavior": "Markdown plan routes directly to interactive sl-run"}
     },
     {
       "id": 2,
-      "name": "scope-boundaries-non-goal",
-      "tests_risk": "scope_creep",
-      "prompt": "The plan has a `## Scope Boundaries` section that lists 'Do NOT add caching' as an explicit non-goal. While implementing, you realize adding a cache would make the feature noticeably faster. Do you add it? What role does the Scope Boundaries section play?",
+      "name": "description-plans-before-running",
+      "prompt": "Use sl-work for the bare request: add a cache invalidation metric. No plan exists yet. What happens?",
       "expected_terms": [
-        {"term": "non-goal", "tier": "must"},
-        {"term": "Scope Boundaries", "tier": "must"},
-        {"term": "do not", "tier": "must"},
-        {"term": "adjacent work", "tier": "should"},
-        {"term": "refer back", "tier": "should"},
-        {"term": "pulling", "tier": "may"}
+        {"term": "sl-plan", "tier": "must"},
+        {"term": "sl-run", "tier": "must"},
+        {"term": "canonical Markdown", "tier": "must"},
+        {"term": "mode:interactive", "tier": "must"}
       ],
       "expected_context": [
-        "the agent declines to add caching because it is listed as an explicit non-goal in Scope Boundaries",
-        "the agent treats Scope Boundaries as the guardrail to refer back to when implementation starts pulling toward adjacent work"
+        "The response plans the software task first, then passes the returned canonical Markdown path to sl-run in interactive mode.",
+        "It does not directly implement the bare prompt or select the newest plan by guesswork."
       ],
-      "ground_truth": {
-        "skill": "sl-work",
-        "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
-        "contract_lines": "Phase 1 step 1: 'Check for a Scope Boundaries section — these are explicit non-goals. Refer back to them if implementation starts pulling you toward adjacent work.'",
-        "expected_behavior": "Honor the non-goal; do not implement the excluded work even if it seems beneficial."
-      },
-      "notes": "Tests the guardrail against scope creep toward 'obviously good' adjacent work. A pass shows Scope Boundaries is read as binding, not advisory."
+      "ground_truth": {"source": "sl-work/SKILL.md Route 6-7", "behavior": "description plans before interactive run"}
     },
     {
       "id": 3,
-      "name": "plan-is-scope-not-rescope",
-      "tests_risk": "rescope",
-      "prompt": "An unattended run against a markdown plan that defines Implementation Units U1-U6. Three questions. (1) Do you propose splitting these across human-time sessions or estimate hours per unit? (2) May you edit the plan body to record progress as you complete units? (3) Would your answer to (2) change if the same plan were an `.html` file, and if so exactly when?",
+      "name": "state-resume-stays-direct",
+      "prompt": "You receive `/sl-work state:/tmp/super-looper/sl-run/demo/run-state.json`. State the route and what does not repeat.",
       "expected_terms": [
-        {"term": "Implementation Units", "tier": "must"},
-        {"term": "markdown", "tier": "must"},
-        {"term": "advisory", "tier": "must"},
-        {"term": "interactive", "tier": "should"},
-        {"term": "single-writer", "tier": "should"},
-        {"term": "human-time", "tier": "should"},
-        {"term": "commits", "tier": "should"},
-        {"term": "git", "tier": "should"},
-        {"term": "decision artifact", "tier": "may"},
-        {"term": "task tracker", "tier": "may"}
+        {"term": "state:/tmp/super-looper/sl-run/demo/run-state.json", "tier": "must"},
+        {"term": "sl-run", "tier": "must"},
+        {"term": "mode:interactive", "tier": "must"},
+        {"term": "do not", "tier": "should"}
       ],
       "expected_context": [
-        "the agent does NOT re-scope the plan into human-time phases and does NOT estimate hours per unit — the plan's Implementation Units define the scope of execution and agents execute at agent speed",
-        "for the markdown plan the agent does NOT edit the plan body at all: markdown plans are decision artifacts and are never mutated; progress lives in git commits and the task tracker, and whether a unit shipped is derived from git",
-        "for an `.html` plan the answer splits rather than flips: unit tasks carry advisory status markers that an interactive, single-writer session maintains — but this run is unattended, so writes stay suppressed here too. Marker writes require .html AND interactive AND single-writer, all three",
-        "in either format, prose, requirements, decisions, and the Amendments section are never sl-work's to edit, and markers never override git — where a marker and git disagree, git wins"
+        "The response resumes the exact sl-run state interactively.",
+        "It does not invoke sl-plan or initialize another run."
       ],
-      "ground_truth": {
-        "skill": "sl-work",
-        "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
-        "contract_lines": "Phase 1 step 1, plan-write contract bullets (lines 67-69): 'Markdown plans: do not edit the plan body during execution. The plan is a decision artifact; progress lives in git commits and the task tracker, not the plan.' / 'HTML plans are stateful tracked artifacts. Their unit tasks carry advisory status markers... An interactive, single-writer session maintains those markers as it executes; every other mode writes nothing. Markers are advisory: git remains the authoritative record of what shipped... Prose, requirements, decisions, and the Amendments section are never `sl-work`'s to edit in either format.' / 'The write-suppression gate at the top of Phase 2 decides whether marker writes are active for this run.' Common Pitfalls (line 444): 'Re-scoping the plan into human-time phases - The plan's Implementation Units define the scope of execution. Do not estimate human-hours per unit, propose multi-day breakdowns, or ask the user to pick a subset of units for this session.'",
-        "expected_behavior": "No human-time re-scoping, no hour estimates. Markdown plan body never edited. HTML markers are advisory and written only when .html AND interactive AND single-writer — not in this unattended run. Progress via git/task tracker."
-      },
-      "notes": "Three-part contract: no human-time re-scoping, markdown plan-body immutability, and the HTML format split stated with its full three-condition gate. Revised from the pre-HTML blanket 'do not edit the plan body' expectation, which now over-states the rule. A response that answers (3) with an unqualified 'yes, HTML plans are editable' fails Stage 2 — the interactive + single-writer conditions are the load-bearing half."
+      "ground_truth": {"source": "sl-work/SKILL.md Route 3", "behavior": "state resumes directly"}
     },
     {
       "id": 4,
-      "name": "no-fabricated-branch-or-scope",
-      "tests_risk": "unattended_overreach",
-      "prompt": "Running under mode:unattended, currently on the default branch. Two questions. (1) Do you create a new feature branch on your own before working? (2) When the plan is silent on a detail, do you treat that gap as license to expand the feature beyond the plan's stated units?",
-      "expected_terms": [],
-      "must_not_contain_in_relevant_findings": [
-        {"term": "yes, create a new feature branch", "tier": "must_not"},
-        {"term": "expand the feature beyond the plan", "tier": "must_not"}
+      "name": "older-unattended-token-is-preserved",
+      "prompt": "An older caller invokes `/sl-work plan:docs/plans/x.md mode:unattended`. Do you silently make it interactive? Give the direct replacement guidance and route.",
+      "expected_terms": [
+        {"term": "mode:unattended", "tier": "must"},
+        {"term": "sl-run", "tier": "must"},
+        {"term": "lfg", "tier": "must"},
+        {"term": "do not", "tier": "should"}
       ],
-      "expected_response_shape": "The agent affirms (1) it does NOT create a branch in unattended mode — it continues on the current branch, and downstream sl-commit-push-pr owns branch creation and moves work off the default branch before any push; and (2) it does NOT expand scope beyond the plan's stated units — a silent detail is resolved from the plan's stated scope, not treated as permission to invent new scope.",
-      "ground_truth": {
-        "skill": "sl-work",
-        "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
-        "contract_lines": "Phase 1 Pipeline mode block: 'Skip the branch-choice prompt and the on-default-branch menu (step 2) and continue on the current branch without prompting — including when that is the default branch. Do not create a branch: downstream sl-commit-push-pr (e.g., LFG's commit step) owns branch creation and moves work off the default branch before any push, so local commits never reach a protected branch.'",
-        "expected_behavior": "No self-created branch; no scope expansion from plan gaps."
-      },
-      "notes": "Negative case. Confirms 'unattended = fewer prompts' is not misread as 'unattended = more autonomy to branch and expand scope'. Graded by endorsement (the correct answer restates the prohibitions in negated form)."
+      "expected_context": [
+        "The response preserves unattended policy when forwarding to sl-run rather than silently asking interactive questions.",
+        "It names lfg or sl-run mode:unattended as the direct replacement for future callers."
+      ],
+      "ground_truth": {"source": "sl-work/SKILL.md Route 2", "behavior": "older unattended policy is preserved with replacement guidance"}
     },
     {
       "id": 5,
-      "name": "unattended-html-zero-write",
-      "tests_risk": "goal_guard_abort",
-      "prompt": "You are invoked as `/sl-work docs/plans/2026-07-09-001-feat-thing-plan.html mode:unattended`. The plan is HTML and its unit tasks carry `[]` status markers. You reach the top of Phase 2 and are about to execute U1. Resolve the write-suppression gate out loud: are marker writes active for this run? What exactly may you write to the plan file, and where does progress get recorded instead? What happens if you get this wrong? Finally: suppose U2-U4 are independent and you dispatch them as a parallel subagent batch. Does that change the gate's answer, and what do you owe each subagent once its work is reviewed and committed?",
+      "name": "html-does-not-masquerade-as-canonical",
+      "prompt": "You receive `/sl-work docs/plans/legacy-plan.html`. May you pass it to sl-run as though it were canonical Markdown?",
       "expected_terms": [
-        {"term": "unattended", "tier": "must"},
-        {"term": "zero writes", "tier": "must"},
-        {"term": "goal guard", "tier": "must"},
-        {"term": "suppress", "tier": "must"},
-        {"term": "marker", "tier": "should"},
-        {"term": "git commits", "tier": "should"},
-        {"term": "task tracker", "tier": "should"},
-        {"term": "interactive", "tier": "should"},
-        {"term": "single-writer", "tier": "should"},
-        {"term": "TaskStop", "tier": "should"},
-        {"term": "release", "tier": "should"},
-        {"term": "multi-writer", "tier": "may"},
-        {"term": "goal drift", "tier": "may"},
-        {"term": "hash", "tier": "may"}
+        {"term": "HTML", "tier": "must"},
+        {"term": "legacy", "tier": "must"},
+        {"term": "canonical Markdown", "tier": "must"},
+        {"term": "sl-run", "tier": "should"}
       ],
       "expected_context": [
-        "the agent resolves the gate as SUPPRESSED and states the decision explicitly before the first task, because the run is unattended — condition 2 (interactive session) of the three-condition gate fails, so it does not matter that the plan is `.html` and the markers are present",
-        "suppression is absolute: the plan file receives zero writes of any kind — no markers, no metadata appends, no reformatting, not one byte. The agent does not flip `[]` to `[wip]`, does not append commit SHAs or a `modified` timestamp, and does not 'catch up' the markers at the end of the run",
-        "progress is recorded where it always lives in suppressed modes: git commits and the task tracker, not the plan document",
-        "the agent names the consequence of getting it wrong: an unattended run's plan file is hashed before and after by the goal guard, so any mutation reads as goal drift and aborts the run",
-        "the parallel batch does not change the answer — it independently fails condition 3 (single-writer): concurrent writers to one file lose each other's edits, so plan writes stay suppressed for the whole run. Two failed conditions, same suppressed outcome",
-        "after each subagent's work is reviewed and committed, the agent releases it with `TaskStop` naming that subagent — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI"
+        "The response does not pass HTML to sl-run as canonical Markdown and selects only the isolated compatibility path available on the host.",
+        "It recommends output:md followed by sl-run as the direct route for future code plans."
       ],
-      "ground_truth": {
-        "skill": "sl-work",
-        "contract_source": "plugins/super-looper/skills/sl-work/SKILL.md",
-        "contract_lines": "Phase 2 write-suppression gate (lines 207-223, the blockquote opening Phase 2): 'Plan write-suppression gate — resolve this before executing any task. Status-marker writes are active for this run only when all three hold: 1. The plan file is `.html`, and 2. The session is interactive, and 3. Execution is single-writer... Otherwise marker writes are suppressed. Suppression is absolute: the plan file receives zero writes of any kind — no markers, no metadata appends, no reformatting, not one byte. Suppression applies when: Running unattended — the `mode:unattended` argument token, an LFG or other automated invocation, or any `disable-model-invocation` context. An unattended run's plan file is hashed before and after by the goal guard; any mutation reads as goal drift and aborts the run... In suppressed modes, progress lives where it has always lived: git commits and the task tracker. Never \"catch up\" the markers at the end of a suppressed run. State the resolved decision once — markers active, or markers suppressed and why — before the first task.' Same gate on the parallel arm: 'Executing via parallel subagents or worktree-isolated batches. Concurrent writers to one file lose each other's edits; there is no single writer to own the markers.' Post-subagent release hook, all three sites (lines 181, 190, 202): 'Release the subagent (`TaskStop` with its name) once its work is accepted — a finished named subagent otherwise idles indefinitely and shows as incomplete in the UI.'",
-        "expected_behavior": "Gate resolves to suppressed; zero plan-file writes; progress in git commits + task tracker; names the goal-guard hash / goal-drift abort as the consequence. A parallel batch fails condition 3 independently — same suppressed outcome. Each finished subagent is released with TaskStop once its work is accepted."
-      },
-      "notes": "LOAD-BEARING. In seed mode (a bare `mode:unattended` run with no loop driver in front of it) sl-work's own gate is the ONLY guard — nothing else stops a marker write. In loop.sh runs the goal guard's sha256 check catches a mutation, but only by aborting the whole run with exit 8 / typed_failure goal-drift, which is a failure, not a save. A pass here is what makes the HTML plan format safe to hand to lfg. Failure mode to watch: an agent that reads 'HTML plans are stateful tracked artifacts' from Phase 1 step 1 and concludes markers are always writable, never reaching the Phase 2 gate. The trailing parallel-batch question exercises the gate's other suppressed arm (condition 3, multi-writer) and carries the post-subagent `TaskStop` release rule as a should-tier term — a finished named subagent left unreleased idles indefinitely and reads as incomplete in the UI."
+      "ground_truth": {"source": "sl-work/SKILL.md Route 4", "behavior": "HTML uses isolated compatibility and never masquerades as canonical Markdown"}
     }
   ]
 }

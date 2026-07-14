@@ -1,10 +1,12 @@
 ---
 name: sl-learn
-description: "Capture a ship-time learning at the close of an autopilot run: invoke sl-compound headless against the still-hot session context, then commit its docs/solutions learning (plus any CONCEPTS.md and instruction-file edits it produced) into the run's open PR and re-confirm CI green before the loop reports done. Triggered by lfg after CI reaches green and before DONE so an unattended loop.sh run captures what it learned instead of dropping it. Skips cleanly when no open PR exists or the run ended with CI unresolved."
+description: "Compatibility learning seam for the legacy lfg pipeline: invoke sl-compound headless, evaluate the result, commit an accepted docs/solutions learning into the open PR, and re-confirm CI. Use only when legacy lfg invokes ship-time learning; new sl-run workflows use their typed evidence closeout instead."
 argument-hint: "[brief context hint about what the run solved]"
 ---
 
 # Learn Seam
+
+This remains a compatibility capability for legacy `lfg`. Do not invoke it from the streamlined `sl-run` workflow: `sl-run` builds a durable closeout packet, treats `no-learning` as normal, and records the result through its kernel without depending on hot transcript context.
 
 Capture what an autopilot run learned, into the run's PR, while the solving context is still hot — then leave the loop's verifiable-green stop intact.
 

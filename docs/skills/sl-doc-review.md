@@ -4,7 +4,7 @@
 
 `sl-doc-review` is the **document review** skill — sibling to `/sl-code-review` for the docs side of the chain. It analyzes a requirements doc or implementation plan, selects reviewer personas based on what the doc contains (product framing, design surfaces, security implications, scope sprawl), dispatches them in parallel, then auto-applies safe fixes and routes the rest through a structured four-option interaction (per-finding walk-through, auto-resolve with best judgment, append to Open Questions, report-only).
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-doc-review` is the **review skill for the artifacts produced by `sl-brainstorm` and `sl-plan`** — invoked at their respective Phase 4 / Phase 5.3.8 handoffs, and also directly when you want a structured review of a doc on disk.
+The three-command core is `/sl-strategy -> /sl-plan -> /sl-run`; `sl-doc-review` remains a standalone review skill for requirements and plan documents when a deeper document pass is useful.
 
 ---
 
@@ -128,7 +128,7 @@ The skill reads the doc, classifies it as `plan` from content-shape signals (U-I
 
 Three reviewers dispatch in parallel. They return 9 raw findings. Synthesis merges them into 6 distinct findings: 2 `safe_auto` (typo, broken cross-reference), 3 `gated_auto` (wording on the durability tradeoff, missing edge case in test scenarios for U2, design-lens flag on the toggle copy), 1 FYI (suggested scope clarification).
 
-The 2 `safe_auto` apply directly. Headless mode returns the rest as structured text — no walkthrough, no per-finding routing. A single summary line surfaces above the post-generation menu: `Doc review applied 2 fixes. 3 decisions, 1 FYI remain.` The user picks `Start /sl-work` and goes. Had they wanted to address the 3 decisions interactively, they'd have picked `Run deeper doc review` instead.
+The 2 `safe_auto` apply directly. Headless mode returns the rest as structured text — no walkthrough, no per-finding routing. A single summary line surfaces above the post-generation menu: `Doc review applied 2 fixes. 3 decisions, 1 FYI remain.` The user can proceed to `/sl-run plan:<path>` or choose a deeper interactive review.
 
 ---
 

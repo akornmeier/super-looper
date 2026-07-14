@@ -4,7 +4,7 @@
 
 `sl-strategy` is the **upstream anchor** skill. It produces and maintains a single canonical document at the repo root (peer of `README.md`) that downstream skills read as grounding. The document is short and structured on purpose — good answers to a handful of sharp questions produce a better strategy than any amount of prose. This skill asks those questions, pushes back on weak answers, and writes the doc.
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `STRATEGY.md` sits **upstream of the chain** — `sl-ideate`, `sl-brainstorm`, and `sl-plan` all read it as grounding when it exists, weighting their suggestions toward the active tracks and stated approach. `sl-product-pulse` also reads it to seed the metrics that get measured.
+The three-command core is `/sl-strategy -> /sl-plan -> /sl-run`; optional ideation and brainstorming sit between strategy and planning. `STRATEGY.md` grounds `sl-ideate`, `sl-brainstorm`, and `sl-plan`, while `sl-product-pulse` reads it to seed the metrics that get measured.
 
 ---
 
@@ -121,7 +121,7 @@ Skip `sl-strategy` when:
 `sl-strategy` is upstream of the chain. The recommended sequence on a new product or major direction shift:
 
 ```text
-/sl-strategy → /sl-ideate (consults STRATEGY.md) → /sl-brainstorm → /sl-plan → /sl-work
+/sl-strategy -> /sl-ideate (optional) -> /sl-brainstorm (optional) -> /sl-plan -> /sl-run
                                                               ↑
                                           all read STRATEGY.md as grounding
 ```

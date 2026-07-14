@@ -1,6 +1,6 @@
 ---
 name: sl-strategy
-description: "Create or maintain STRATEGY.md - the product's target problem, approach, users, key metrics, and tracks of work. Use when starting a new product, updating direction, or when prompts like 'write our strategy', 'update the roadmap', 'what are we working on', or 'set up the strategy doc' come up. Also triggers when sl-ideate, sl-brainstorm, or sl-plan need upstream grounding and no strategy doc exists yet."
+description: "Create or maintain STRATEGY.md - the product's target problem, approach, users, key metrics, and tracks of work - or interactively reconcile an evidence-backed sl-run strategy proposal. Use when starting or updating product direction, when asked to write or review strategy, when downstream planning needs missing strategy, or when given a reconcile:path argument."
 argument-hint: "[optional: section to revisit, e.g. 'metrics' or 'approach']"
 ---
 
@@ -22,7 +22,7 @@ Ask one question at a time. Prefer free-form responses for the substantive secti
 
 <focus_hint> #$ARGUMENTS </focus_hint>
 
-Interpret any argument as an optional focus: a section name to revisit (`metrics`, `approach`, `tracks`) or a scope hint. With no argument, proceed open-ended and let the file state decide the path.
+Interpret `reconcile:<absolute-strategy-proposal-path>` as a post-run reconciliation request. Otherwise interpret the argument as an optional focus: a section name to revisit (`metrics`, `approach`, `tracks`) or a scope hint.
 
 ## Core Principles
 
@@ -34,6 +34,8 @@ Interpret any argument as an optional focus: a section name to revisit (`metrics
 ## Execution Flow
 
 ### Phase 0: Route by File State
+
+If `reconcile:` is present, read the proposal and current `STRATEGY.md`, show the observations and exact proposed delta, and require explicit interactive approval. Reject unattended or inferred approval. On approval, update only the affected strategy section through Phase 2's interview and pushback rules; the proposal is evidence, not authoritative text. On rejection, leave strategy byte-identical and stop.
 
 Read `STRATEGY.md` using the native file-read tool.
 
