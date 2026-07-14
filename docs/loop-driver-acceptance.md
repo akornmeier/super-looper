@@ -74,24 +74,20 @@ Success here means `DONE` + `bun test` exit 0. The committed smoke proves the
 **local-verify** predicate; the faithful run above proves the **CI-green**
 predicate. Sign-off uses the faithful run.
 
-## Plan-input routing smoke (live — pins the execution-time unknown)
+## `sl-run` plan-input routing smoke
 
 `--plan-file` puts the driver into **plan-input mode**: instead of inlining a seed
-task, it names a committed plan via the literal `plan:<path>` marker so `lfg`'s
-plan-input branch executes it and **skips planning**. `bun test` only asserts the
-*constructed prompt* (the marker is present, the plan body is not inlined) — it
-cannot prove the headless `claude -p` run actually routes into that branch. That
-routing is the same execution-time unknown the seed smoke pins, so confirm it
-live.
+task, it names a canonical plan via `plan:<path>`, selects a durable
+`state-path:`, and launches `sl-run` in unattended mode. The committed tests pin
+the prompt route, reject `DONE` without durable review-ready state, and exercise a
+crash -> validated `state:` resume -> green verification sequence.
 
 ### Setup (reproducible)
 
 1. In the **throwaway** target, write a small plan at
-   `docs/plans/<date>-<slug>-plan.md` with plan frontmatter and an
-   `## Implementation Units` section (e.g., the `isPalindrome` task expressed as a
-   one-unit plan). **Commit it in the target** — `reset_target`'s `git clean -fd`
-   on a retry would otherwise delete an untracked plan before the next attempt.
-2. (Optional) Produce a handoff doc with `/sl-handoff` and note its temp path.
+   `docs/plans/<date>-<slug>-plan.md` using the canonical `sl-plan` Markdown
+   contract. Use at least two dependent phases to observe a boundary resume.
+2. Commit the goal files so the test starts from a reproducible branch and HEAD.
 
 ### Run
 
@@ -102,26 +98,30 @@ bash scripts/loop.sh \
   --plan-file docs/plans/<date>-<slug>-plan.md \
   --verify-cmd bun test
 
-# Optionally carry the planning-session handoff into the fresh process:
-#   --handoff-file /abs/path/to/handoff.md   (valid only with --plan-file)
 ```
 
 Preview with `--dry-run` first: it prints `mode: plan-input (skips planning)`, the
-`plan-file:` path, and a constructed prompt that names `plan:<path>` without
-inlining the plan body.
+`workflow: sl-run`, `plan-file:`, the durable state path, and a constructed
+prompt that names `plan:<path>` without inlining the plan body.
 
 ### Expected outcome
 
-- The run log shows **no planning phase** — `sl-plan` is not invoked; `lfg` goes
-  straight from the plan-input gate to `sl-work` executing the supplied plan.
-- `sl-work` does **not** stall on its clarifying / branch-choice prompts (the
-  `mode:unattended` signal `lfg` passes suppresses them).
-- The pipeline then runs unchanged (simplify → review → commit → push → PR →
-  CI/verify), ending with `<promise>DONE</promise>` and green verification.
+- The run log shows **no planning phase** and dispatches no more than one implementation, repair, or verifier agent
+  at a time.
+- Required command entries run through kernel `run-checks`; a fresh verifier evaluates each phase afterward.
+- An interrupted phase boundary resumes from `state:<path>` without re-running
+  the completed phase.
+- The state remains at `/tmp/super-looper/sl-run/<run-id>/run-state.json`, and the
+  terminal run record surfaces its completed gates, review-ready state, and review packet.
+- `<promise>DONE</promise>` is accepted only with matching durable `review_ready` state
+  and green `--verify-cmd` output.
 - A missing or unreadable `--plan-file` exits `2` in `loop.sh` **before**
-  launching the agent. A readable-but-non-plan file is rejected at launch by
-  `lfg`'s hard plan-shape gate, which stops with a clear error — either way there
-  is no silent fallback to planning.
+  launching the agent. A malformed plan is rejected by `sl-run`; either way
+  there is no silent fallback to planning.
+
+The previous plan-to-PR acceptance remains available with
+`--legacy-lfg-plan`; `loop-phases.sh` selects it explicitly until U7 delivery is
+part of `sl-run`.
 
 ## Origin DoD — second clause (learning validity + retrievability)
 
@@ -151,10 +151,11 @@ a first implementation that fails the committed test, so `lfg` step 9's autofix
 loop repairs it and writes a `fix(ci):` commit (the seam's stage-1 signal).
 
 ```bash
-# Remote present, no --verify-cmd → loop.sh uses GitHub-CI verification and lfg opens a PR:
+# Explicit legacy route: GitHub-CI verification and lfg opens a PR.
 bash scripts/loop.sh \
   --target /abs/path/to/loop-throwaway \
-  --plan-file docs/plans/<date>-<slug>-plan.md
+  --plan-file docs/plans/<date>-<slug>-plan.md \
+  --legacy-lfg-plan
 ```
 
 ### Expected outcome

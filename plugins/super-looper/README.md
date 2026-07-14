@@ -2,44 +2,43 @@
 
 AI-powered development tools that get smarter with every use. Make each unit of engineering work easier than the last.
 
-## Getting Started
+## Start here
 
-After installing, run `/sl-setup` in any project. It diagnoses your environment, installs missing tools, and bootstraps project config in one interactive flow.
+The primary product is a three-command, code-first workflow:
 
-## Using the loop
+| Command | Outcome |
+|---------|---------|
+| `/sl-strategy` | Durable product direction in `STRATEGY.md` |
+| `/sl-plan` | Canonical Markdown with dependency-ordered units and verification |
+| `/sl-run` | Resumable implementation, direct checks, independent verification, engineer review, approved delivery, CI repair, and evidence closeout |
 
-Super looper is a loop, not a toolbox: set direction once, then run the loop per iteration and let each pass compound into the next. The skills below are the catalog; this is the order to run them in and why. (See the [root README](../../README.md) for the philosophy and a loop diagram.)
+```text
+/sl-strategy
+/sl-plan "describe the change"
+/sl-run plan:docs/plans/<plan>.md
+```
 
-**Once per project**
+`sl-run` chooses one of four profiles:
 
-| Command | Why |
-|---------|-----|
-| `/sl-setup` | Diagnose environment, install tools, bootstrap config. |
-| `/sl-strategy` | Anchor `STRATEGY.md` — target problem, persona, metrics, tracks. Every downstream skill reads it as grounding. |
+| Profile | Intended work | Added floor |
+|---------|---------------|-------------|
+| `chore` | Bounded maintenance | Completion plus configured checks |
+| `bug` | Defect repair | Causal or reproduction evidence and regression coverage |
+| `feature` | Product or cross-cutting work | Acceptance, scope, testing, and independent verification |
+| `hotfix` | Active production incident | Proposal approval, surgical scope, rollback evidence, and final delivery approval |
 
-**Each iteration**
+The engineer review boundary is invariant. Unattended execution stops at durable `review_ready`; it never treats green checks as approval. Resume `/sl-run state:<absolute-path>` interactively to approve, reject, or request a named repair. Commit, push, PR, CI, and closeout operations occur only after the kernel emits an authorized action.
 
-| # | Command | Why it's here |
-|---|---------|---------------|
-| 1 | `/sl-ideate` | Pick the highest-leverage next slice — ranks grounded ideas against strategy and past learnings. Optional once direction is clear. |
-| 2 | `/sl-brainstorm` | Explore the chosen idea into a requirements doc (the *what*: scope, success criteria, boundaries). |
-| 3 | `/sl-plan` | Turn requirements into an implementation plan (the *how*: dependency-ordered units, test scenarios). |
-| 4 | _execute_ | Ship the plan — interactively or on autopilot (below). |
-| 5 | `/sl-compound` | Capture the learning from anything non-trivial you solved. Read back automatically by ideate, plan, and review on later passes. |
+For a clean unattended process, run `scripts/loop.sh --plan-file <path> --verify-cmd ...`. `/lfg` remains a compatibility form that plans and launches `sl-run mode:unattended`; `/sl-work` remains a compatibility form that defaults to interactive `sl-run`. New workflows should call the three primary commands directly. `sl-handoff` is for non-run cross-session context only—the run state and review packet already provide a run handoff.
 
-**Step 4 has two modes**
+Optional `/sl-brainstorm` helps settle ambiguous product behavior before planning. Standalone code review, Git, debug, design, and platform-testing skills remain available without becoming required workflow nodes. Run `/sl-setup` when you want environment diagnostics and optional tool setup.
 
-- **Steer each stage:** `/sl-work` → `/sl-code-review` → `/sl-commit-push-pr`. Stay in the driver's seat.
-- **Autopilot:** `/lfg "<task>"` runs work → review → commit → PR → watch CI to green in one shot; or `/sl-handoff` + `scripts/loop.sh` for an unattended clean-context run. You do *not* call work/review/commit separately in this mode — `lfg` orchestrates them. Unattended runs lock their goals: set `STRATEGY.md` and the plan *before* launching — a run that edits either mid-run aborts (exit 8, goal drift) rather than shipping the drift. Goal changes go through interactive `/sl-strategy` or a plan revision, then relaunch.
-
-**Right-size it.** Skip brainstorm for small, obvious changes — go straight to `/sl-plan` or `/sl-work`. Use `/sl-debug` for bugs, not the build loop. Save the full chain for ambiguous or cross-cutting features.
-
-## Components
+## Complete component reference
 
 | Component | Count |
 |-----------|-------|
 | Agents | 42 |
-| Skills | 39 |
+| Skills | 41 |
 
 ## Skills
 
@@ -54,15 +53,16 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-strategy`](../../docs/skills/sl-strategy.md) | Create or maintain `STRATEGY.md` — the product's target problem, approach, persona, key metrics, and tracks. Re-runnable to update. Read as grounding by `/sl-ideate`, `/sl-brainstorm`, and `/sl-plan` when present |
 | [`/sl-ideate`](../../docs/skills/sl-ideate.md) | Optional big-picture ideation: generate and critically evaluate grounded ideas, then route the strongest one into brainstorming. Writes the ranked ideation artifact as a single self-contained HTML file by default (human-facing); pass `output:md` for markdown (exclusive — html OR md, never both) |
 | [`/sl-brainstorm`](../../docs/skills/sl-brainstorm.md) | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning. Pass `output:html` to write the doc as a single self-contained HTML file instead of markdown (exclusive — md OR html, never both) |
-| [`/sl-plan`](../../docs/skills/sl-plan.md) | Create structured plans for any multi-step task -- software features, research workflows, events, study plans -- with automatic confidence checking. Pass `output:html` to write the plan as a single self-contained HTML file instead of markdown (exclusive — md OR html, never both); HTML plans are stamped from a canonical template with generated per-section images (requires `OPENAI_API_KEY`; set `plan_images: off` to skip) and in-plan status markers that interactive `/sl-work` keeps updated |
+| [`/sl-plan`](../../docs/skills/sl-plan.md) | Use the parent frontier model to create a grounded, dependency-ordered execution plan with zero default subagents. Markdown is canonical; `output:html` preserves the optional self-contained renderer, while paid images require a separate explicit `images:on` request |
+| [`/sl-run`](../../docs/skills/sl-run.md) | Route a canonical plan to a chore, bug, feature, or hotfix workflow with code-owned isolation policy, bounded implementation agents, deterministic checks, repair routing, and independent verification on Claude Code or Codex |
 | [`/sl-code-review`](../../docs/skills/sl-code-review.md) | Structured code review with tiered persona agents, confidence gating, and dedup pipeline |
-| [`/sl-work`](../../docs/skills/sl-work.md) | Execute work items systematically. Interactive runs keep an HTML plan's status markers current; unattended and parallel runs never write to the plan |
+| [`/sl-work`](../../docs/skills/sl-work.md) | Compatibility wrapper: plan when needed, then route code work through `sl-run` (interactive by default); retains explicit HTML and knowledge-work compatibility |
 | [`/sl-debug`](../../docs/skills/sl-debug.md) | Systematically find root causes and fix bugs -- traces causal chains, forms testable hypotheses, and implements test-first fixes |
 | [`/sl-compound`](../../docs/skills/sl-compound.md) | Document solved problems to compound team knowledge |
 | [`/sl-compound-refresh`](../../docs/skills/sl-compound-refresh.md) | Refresh stale or drifting learnings and decide whether to keep, update, replace, or archive them |
 | [`/sl-optimize`](../../docs/skills/sl-optimize.md) | Run iterative optimization loops with parallel experiments, measurement gates, and LLM-as-judge quality scoring |
 | [`/sl-product-pulse`](../../docs/skills/sl-product-pulse.md) | Generate a single-page, time-windowed report on usage, performance, errors, and followups. Saves reports to `docs/pulse-reports/` as a browseable timeline of what users experienced |
-| [`/lfg`](../../docs/skills/lfg.md) | Autopilot: run the entire loop end-to-end — plan, work, review, commit, open a PR, then watch CI and take bounded passes at fixing failures, recording anything it can't resolve. The hands-off path; `scripts/loop.sh` wraps it for unattended runs |
+| [`/lfg`](../../docs/skills/lfg.md) | Compatibility wrapper: plan when needed, then route unattended execution through `sl-run`; the old delivery pipeline is explicit as `mode:legacy-pipeline` only |
 
 ### Research & Context
 
@@ -86,7 +86,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | Skill | Description |
 |-------|-------------|
 | [`/sl-demo-reel`](../../docs/skills/sl-demo-reel.md) | Capture a visual demo reel (GIF demos, terminal recordings, screenshots) for PRs with project-type-aware tier selection |
-| [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact the current session into a clean handoff doc a fresh agent can pick up — references artifacts by path, used at the plan→work seam to carry planning context into a clean run (e.g. `loop.sh --handoff-file`) |
+| [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact genuinely non-run session context; active `sl-run` work resumes from its state path instead of creating a competing handoff document |
 | [`sl-learn`](../../docs/skills/sl-learn.md) | Capture a ship-time learning at the close of an autopilot run — invoke `sl-compound` headless against the hot session context, commit the resulting `docs/solutions/` learning into the run's PR, and re-confirm CI green. Triggered by `lfg` after CI green and before `DONE`; skips when no open PR exists or CI is unresolved |
 | [`/sl-promote`](../../docs/skills/sl-promote.md) | Draft user-facing announcement copy for a shipped feature (X post, changelog blurb, LinkedIn, email); voice-matched via the Spiral CLI when installed, a lite layer of editorial & social expertise without it |
 | [`/sl-report-bug`](../../docs/skills/sl-report-bug.md) | Report a bug in the super-looper plugin |
@@ -96,6 +96,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`/sl-setup`](../../docs/skills/sl-setup.md) | Diagnose environment, install missing tools, and bootstrap project config |
 | [`/sl-update`](../../docs/skills/sl-update.md) | Check super-looper plugin version and fix stale cache (Claude Code only) |
 | [`/sl-release-notes`](../../docs/skills/sl-release-notes.md) | Summarize recent super-looper plugin releases, or answer a question about a past release with a version citation |
+| [`/sl-host-smoke`](../../docs/skills/sl-host-smoke.md) | Explicit, non-mutating diagnostic for shared Claude Code and Codex plugin loading, questions, bundled scripts, references, and worker dispatch |
 
 ### Development Frameworks
 
@@ -197,7 +198,7 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 
 ## Installation
 
-See the repo root [Install section](../../README.md#install) for current installation instructions for Claude Code.
+See the repo root [Install section](../../README.md#install) for Claude Code and Codex installation instructions.
 
 Then run `/sl-setup` to check your environment and install recommended tools.
 

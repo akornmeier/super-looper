@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 #
-# loop.sh — unattended run-until-green driver for the lfg pipeline.
+# loop.sh — unattended process supervisor for sl-run and compatibility lfg.
 #
-# Runs the `lfg` skill pipeline (plan -> work -> simplify -> review -> commit ->
-# push -> PR -> CI-watch -> autofix) headlessly against a *target* directory, with
-# a wall-clock + retry cap and a TARGET-SCOPED stop predicate. It is a thin
-# invoker, not a second loop: lfg already loops CI to green and emits
-# <promise>DONE</promise> in every exit path. This driver adds only what lfg
-# lacks for unattended use — headless launch, permission bypass, a cap,
-# target/plugin wiring, and a final stop-predicate check.
+# Plan input launches `sl-run` directly. Seed input uses the thin `lfg` adapter
+# to plan once and launch the same coordinator. The shell owns only process
+# supervision: isolation, permission containment, timeout/retry caps, durable
+# state routing, goal hashes, terminal records, and independent target checks.
 #
-# DONE is a ROUTING signal, never a success signal: lfg emits DONE even when it
-# gives up on red CI (its "CI Failures Unresolved" path). Success therefore
-# requires DONE *and* an independent, target-scoped green verification.
+# DONE is a ROUTING signal, never a success signal. Success requires DONE and
+# independent target verification; direct plan mode also checks durable state.
 #
 # This driver never runs this repo's own gate scripts (solutions / plugin /
 # release validators) against the target — those validate *this* repo and would
@@ -54,16 +50,18 @@ JQ_BIN="${LOOP_JQ_BIN:-jq}"
 # exact trigger form (this inline instruction vs. a `/lfg` slash command) is the
 # execution-time unknown the U2 smoke pins; keep it here and mirrored in
 # scripts/loop.example.env so the acceptance and the driver never diverge.
-readonly LOOP_PROMPT_PREFIX='Run the lfg workflow to completion on the task below, fully unattended. lfg plans, implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Task:'
+readonly LOOP_PROMPT_PREFIX='Use the lfg compatibility workflow on the software task below. Plan it once with sl-plan, then execute the returned canonical Markdown plan through sl-run in unattended mode. Stop at durable engineer review_ready unless already-authorized delivery state exists, and output <promise>DONE</promise> only for durable review_ready or completed state. Do not ask questions or infer approval. Task:'
 
 # Plan-input variant: the task is ALREADY planned, so lfg skips planning and
 # executes the supplied plan. The plan is NAMED (not inlined) using the literal
-# `plan:<path>` marker lfg's plan-input branch detects; a relative path resolves
+# `plan:<path>` marker sl-run detects; a relative path resolves
 # against the target (the agent's CWD), an absolute path is used as-is. Built in
 # the same inline-instruction
 # style as LOOP_PROMPT_PREFIX (not a `/lfg` slash command) per the same
 # execution-time-unknown pinned by the acceptance smoke.
-readonly LOOP_PLAN_PROMPT_PREFIX='Run the lfg workflow to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. lfg implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'
+readonly LOOP_PLAN_PROMPT_PREFIX='Use the sl-run workflow to execute the canonical plan named below in unattended mode; do not re-plan. Initialize with the code-owned kernel, use one implementation or repair agent at a time, run required checks through the kernel, use an independent verifier, and output <promise>DONE</promise> only after durable review_ready state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. Plan to execute:'
+readonly LOOP_PLAN_RESUME_PROMPT_PREFIX='Use the sl-run workflow to resume the durable state named below in unattended mode. Validate it before implementation activity, never repeat completed nodes or blindly redispatch an in-progress agent, and output <promise>DONE</promise> only after durable review_ready state. Do not commit, push, deliver, edit the plan or strategy, or ask questions. State to resume:'
+readonly LOOP_LEGACY_PLAN_PROMPT_PREFIX='Run lfg mode:legacy-pipeline to completion on the plan named below, fully unattended. The task is already planned — execute that plan, do not re-plan. This explicit compatibility route implements, simplifies, reviews, applies fixes, commits, pushes, opens a pull request, watches CI, and autofixes to green, then outputs <promise>DONE</promise> as its final output. Do not stop to ask for confirmation. Plan to execute:'
 
 # --- Defaults -----------------------------------------------------------------
 TARGET=""
@@ -81,6 +79,7 @@ LOG_DIR="/tmp/super-looper/loop"
 DRY_RUN=0
 VERIFY_MODE="github"
 VERIFY_CMD=()
+PLAN_WORKFLOW="sl-run"
 
 usage() {
   cat >&2 <<'EOF'
@@ -91,7 +90,7 @@ Required (pick ONE task source):
   --seed <text>             Seed task (inline), OR
   --seed-file <path>        Seed task read from a file, OR
   --plan-file <path>        Plan doc IN THE TARGET to execute; skips planning and
-                            runs lfg's plan-input branch. Commit the plan in the
+                            runs sl-run directly. Commit the plan in the
                             target so a retry's reset does not delete it.
 
 Options:
@@ -99,8 +98,10 @@ Options:
                             (valid only with --plan-file). One run, one PR, one
                             phase. Normally set by scripts/loop-phases.sh rather
                             than by hand.
-  --handoff-file <path>     Handoff doc carried as orienting context for the run
-                            (valid only with --plan-file).
+  --handoff-file <path>     Non-run handoff carried as orienting context
+                            (legacy lfg plan mode only).
+  --legacy-lfg-plan         Preserve the old plan -> PR pipeline for compatibility.
+                            Valid only with --plan-file; used by loop-phases.sh.
   --plugin-dir <path>       Pinned Super Looper checkout (default: this repo root).
   --model <model>           Orchestrator model, e.g. opus or fable (default: opus).
   --timeout <seconds>       Per-attempt wall-clock cap (default: 1800).
@@ -135,6 +136,7 @@ while [ $# -gt 0 ]; do
     --plan-file) require_val --plan-file "$#"; PLAN_FILE="$2"; shift 2 ;;
     --phase) require_val --phase "$#"; PHASE="$2"; shift 2 ;;
     --handoff-file) require_val --handoff-file "$#"; HANDOFF_FILE="$2"; shift 2 ;;
+    --legacy-lfg-plan) PLAN_WORKFLOW="legacy-lfg"; shift ;;
     --plugin-dir) require_val --plugin-dir "$#"; PLUGIN_DIR="$2"; shift 2 ;;
     --model) require_val --model "$#"; MODEL="$2"; shift 2 ;;
     --timeout) require_val --timeout "$#"; TIMEOUT_SECONDS="$2"; shift 2 ;;
@@ -195,6 +197,12 @@ fi
 if [ -n "$HANDOFF_FILE" ] && [ -z "$PLAN_FILE" ]; then
   fail "$EX_USAGE" "--handoff-file is only valid with --plan-file."
 fi
+if [ "$PLAN_WORKFLOW" = "legacy-lfg" ] && [ -z "$PLAN_FILE" ]; then
+  fail "$EX_USAGE" "--legacy-lfg-plan is only valid with --plan-file."
+fi
+if [ "$PLAN_WORKFLOW" = "sl-run" ] && { [ -n "$PHASE" ] || [ -n "$HANDOFF_FILE" ]; }; then
+  fail "$EX_USAGE" "--phase and --handoff-file belong to the legacy per-PR workflow; add --legacy-lfg-plan or run the whole canonical plan with sl-run."
+fi
 
 # --- Numeric-cap validation ---------------------------------------------------
 # An unattended, permission-bypassed driver must never loop unbounded. A
@@ -236,10 +244,15 @@ if [ -n "$HANDOFF_FILE" ]; then
 fi
 
 if [ -n "$PLAN_FILE" ]; then
-  # Plan mode: NAME the plan for lfg's plan-input branch (literal `plan:<path>`),
-  # do not inline its content as a task. The path resolves against the target
-  # (the agent's CWD); existence is validated after canonicalization below.
-  PROMPT="$LOOP_PLAN_PROMPT_PREFIX
+  # Plan mode names the canonical plan rather than inlining it. sl-run is the
+  # default; the old lfg delivery pipeline stays available behind an explicit
+  # compatibility flag while callers migrate.
+  if [ "$PLAN_WORKFLOW" = "legacy-lfg" ]; then
+    plan_prompt_prefix="$LOOP_LEGACY_PLAN_PROMPT_PREFIX"
+  else
+    plan_prompt_prefix="$LOOP_PLAN_PROMPT_PREFIX"
+  fi
+  PROMPT="$plan_prompt_prefix
 plan:$PLAN_FILE"
   # Phase scoping: the plan is the same, but only these units ship this run. The
   # rest of the plan stays context, not work -- an agent that "helpfully" finishes
@@ -278,16 +291,21 @@ fi
 RUN_ID="loop-$(date +%Y%m%d-%H%M%S)-$$"
 LOG_FILE="$LOG_DIR/$RUN_ID.log"
 RECORD_FILE="$LOG_DIR/$RUN_ID.json"
-# Run-progress file (KTD5): loop.sh owns this path, under its log dir and OUTSIDE
-# the target tree — so reset_target's `git clean -fd` cannot delete it and lfg
-# step 8 cannot sweep it into the PR. lfg writes it at each step boundary; loop.sh
-# validates it on a no-PR retry to resume (U8) and scrubs it at every terminal.
-PROGRESS_FILE="$LOG_DIR/$RUN_ID.progress.json"
-# Name it for lfg via a progress:<path> marker (same literal-prefix convention as
-# plan:). Present in BOTH plan and seed mode; lfg writes the file at each step
-# boundary and re-reads it on a resume relaunch. No marker (interactive) = no writes.
-PROMPT="$PROMPT
+# Durable workflow state always lives outside the target tree. sl-run uses its
+# stable /tmp bundle as a resume/audit handle; legacy lfg uses a log-dir progress
+# file that is scrubbed at terminal.
+if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+  PROGRESS_FILE="/tmp/super-looper/sl-run/$RUN_ID/run-state.json"
+  PROMPT="$PROMPT
+state-path:$PROGRESS_FILE
+run-id:$RUN_ID
+mode:unattended"
+else
+  PROGRESS_FILE="$LOG_DIR/$RUN_ID.progress.json"
+  # Name legacy progress for the explicit lfg pipeline. No marker means no writes.
+  PROMPT="$PROMPT
 progress:$PROGRESS_FILE"
+fi
 RUN_STARTED_EPOCH="$(date +%s)"
 RUN_STARTED_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 readonly RECORD_SCHEMA_VERSION=1
@@ -364,6 +382,34 @@ emit_record() {
     refresh_due_json="$(lift_progress_field refresh_due)"
   fi
 
+  local coordinator_json="null"
+  if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ] && [ -f "$PROGRESS_FILE" ] && command -v "$JQ_BIN" >/dev/null 2>&1; then
+    coordinator_json="$( "$JQ_BIN" -c --arg state_path "$PROGRESS_FILE" '
+      ([.phases[] | select(.status == "in_progress")][0]) as $phase
+      | ([($phase.units // [])[] | select(.status == "in_progress")][0]) as $unit
+      | {
+          state_path: $state_path,
+          status: .status,
+          current_phase: ($phase.id // null),
+          current_unit: ($unit.id // null),
+          completed_gates: [.phases[] | select(.status == "completed") | .id],
+          next_action: (
+            if .status == "review_ready" then "await-engineer-review"
+            elif (.status == "completed" or .status == "failed" or .status == "cancelled") then "none"
+            elif .status == "blocked" then "resolve-blocker"
+            elif .workflow.stage == "checking" then "run-checks"
+            elif (.workflow.stage == "awaiting-worker" or .workflow.stage == "awaiting-repair") then "reconcile-in-progress-agent"
+            elif .workflow.stage == "awaiting-verifier" then "reconcile-in-progress-verifier"
+            elif $unit != null then "reconcile-in-progress-unit"
+            elif ($phase != null and ([$phase.units[].status] | all(. == "completed"))) then "verify-phase"
+            else "start-next" end
+          ),
+          terminal_reason: (.terminal.reason // null)
+        }
+    ' "$PROGRESS_FILE" 2>/dev/null || printf 'null' )"
+    [ -n "$coordinator_json" ] || coordinator_json="null"
+  fi
+
   local route=""
   if [ "${done_reached:-0}" -eq 1 ]; then
     if [ "${routed_via_pr:-0}" -eq 1 ]; then route="open-PR (crash-reconciled)"; else route="DONE"; fi
@@ -413,6 +459,7 @@ emit_record() {
   "goal_fidelity": $goal_fidelity_json,
   "learning_rejection": $learning_rejection_json,
   "refresh_due": $refresh_due_json,
+  "coordinator": $coordinator_json,
   "route": $(json_str_or_null "$route"),
   "verification": { "mode": "$VERIFY_MODE", "result": "$verification_result" },
   "attempts": {
@@ -443,12 +490,15 @@ emit_record() {
 }
 EOF
 
-  # Scrub the run-progress file at every terminal (R16). emit_record is the single
+  # Scrub legacy lfg progress at every terminal (R16). sl-run state is the durable
+  # resume/audit handle and must survive every supervisor terminal.
   # writer invoked at every operational exit (0/3/4/5/6/7/8), so this one site
   # covers success and every failure; cold restarts scrub separately (they are not
   # terminals). Stale state must never seed a later run. rm -f is a no-op when lfg
   # never wrote the file (pre-launch refusals, interactive runs).
-  rm -f "$PROGRESS_FILE" 2>/dev/null || true
+  if [ -z "$PLAN_FILE" ] || [ "$PLAN_WORKFLOW" = "legacy-lfg" ]; then
+    rm -f "$PROGRESS_FILE" 2>/dev/null || true
+  fi
 }
 
 # --- Canonicalize + isolation guard (self-edit hazard) ------------------------
@@ -540,7 +590,11 @@ claude_env+=( "LOOP_GOAL_GUARD_PATHS=$GOAL_GUARD_PATHS" )
 # carries no markers anyway. Letting the hook wave a marker-shaped edit through on
 # STRATEGY.md would put the two guards into disagreement -- the hook allows, the
 # raw checksum kills it at done_reached, and the run throws away all its work.
-claude_env+=( "LOOP_GOAL_GUARD_MARKER_PATH=$GUARD_PLAN_PATH" )
+if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+  claude_env+=( "LOOP_GOAL_GUARD_MARKER_PATH=" )
+else
+  claude_env+=( "LOOP_GOAL_GUARD_MARKER_PATH=$GUARD_PLAN_PATH" )
+fi
 
 claude_cmd=( "$CLAUDE_BIN" -p "$PROMPT" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
 
@@ -556,14 +610,19 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "[dry-run] model: $MODEL"
   if [ -n "$PLAN_FILE" ]; then
     echo "[dry-run] mode: plan-input (skips planning)"
+    echo "[dry-run] workflow: $PLAN_WORKFLOW"
     echo "[dry-run] plan-file: $PLAN_FILE"
+    if [ "$PLAN_WORKFLOW" = "sl-run" ]; then echo "[dry-run] state: $PROGRESS_FILE"; fi
     if [ -n "$PHASE" ]; then echo "[dry-run] phase: $PHASE"; fi
     if [ -n "$HANDOFF_FILE" ]; then echo "[dry-run] handoff-file: $HANDOFF_FILE"; fi
   else
     echo "[dry-run] mode: seed"
+    echo "[dry-run] workflow: lfg -> sl-plan -> sl-run"
   fi
   echo "[dry-run] verify-mode: $VERIFY_MODE"
-  if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
+  if [ "$VERIFY_MODE" = "github" ] && [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+    echo "[dry-run] WARNING: the streamlined unattended workflow stops at review-ready without inferring delivery authority; a real run requires --verify-cmd (exit $EX_NO_VERIFY)."
+  elif [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
     echo "[dry-run] WARNING: github verify-mode but target has no git remote — a real run would fail fast (exit $EX_NO_VERIFY)."
   fi
   if [ -z "$TIMEOUT_RESOLVED" ]; then
@@ -592,6 +651,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 # --- Fail fast when there is no verification path -----------------------------
+if [ "$VERIFY_MODE" = "github" ] && [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+  emit_record "$EX_NO_VERIFY" || true
+  fail "$EX_NO_VERIFY" "the streamlined unattended workflow stops at review-ready before unapproved delivery, so it requires an explicit target --verify-cmd."
+fi
 if [ "$VERIFY_MODE" = "github" ] && [ "$TARGET_HAS_REMOTE" -eq 0 ]; then
   emit_record "$EX_NO_VERIFY" || true
   fail "$EX_NO_VERIFY" "no verification mode available: target has no git remote and no --verify-cmd was supplied."
@@ -653,6 +716,32 @@ validate_progress_file() {
   [ -f "$PROGRESS_FILE" ] || return 1
   command -v "$JQ_BIN" >/dev/null 2>&1 || return 1
 
+  if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+    "$JQ_BIN" -e '
+      (.schema_version == 1)
+      and (.run_id | type == "string")
+      and (.status == "initialized" or .status == "running" or .status == "blocked" or .status == "review_ready" or .status == "completed" or .status == "failed" or .status == "cancelled")
+      and (.git.branch | type == "string" and (length > 0))
+      and (.git.base_ref | type == "string" and (length > 0))
+      and (.git.head_sha | type == "string" and (length > 0))
+    ' "$PROGRESS_FILE" >/dev/null 2>&1 || return 1
+
+    local p_run_id p_branch p_base_ref p_head_sha
+    p_run_id="$( "$JQ_BIN" -r '.run_id' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+    p_branch="$( "$JQ_BIN" -r '.git.branch' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+    p_base_ref="$( "$JQ_BIN" -r '.git.base_ref' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+    p_head_sha="$( "$JQ_BIN" -r '.git.head_sha' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+    [ "$p_run_id" = "$RUN_ID" ] || return 1
+    [ "$p_base_ref" = "$BASE_REF" ] || return 1
+    ( cd "$CT" && git rev-parse --verify --quiet "refs/heads/$p_branch" ) >/dev/null 2>&1 || return 1
+    ( cd "$CT" && git merge-base --is-ancestor "$p_head_sha" HEAD ) >/dev/null 2>&1 || return 1
+
+    progress_branch="$p_branch"
+    progress_step="$( "$JQ_BIN" -r '(.current_phase // "boundary") + ":" + ([.phases[].units[] | select(.status == "in_progress") | .id][0] // "none") + ":" + .status' "$PROGRESS_FILE" 2>/dev/null )" || return 1
+    progress_head_sha="$p_head_sha"
+    return 0
+  fi
+
   # Shape: valid JSON, a schema_version we understand, and every binding field
   # present as the right type. jq -e exits non-zero on a false/null result or on
   # invalid JSON, so a corrupt or truncated file fails here.
@@ -695,6 +784,27 @@ validate_progress_file() {
   progress_step="$p_step"
   progress_head_sha="$p_head_sha"
   return 0
+}
+
+sl_run_status() {
+  if [ ! -f "$PROGRESS_FILE" ] || ! command -v "$JQ_BIN" >/dev/null 2>&1; then
+    printf ''
+    return 0
+  fi
+  "$JQ_BIN" -r --arg run_id "$RUN_ID" 'if .run_id == $run_id then .status else empty end' "$PROGRESS_FILE" 2>/dev/null || true
+}
+
+sl_run_completed() {
+  [ -f "$PROGRESS_FILE" ] || return 1
+  command -v "$JQ_BIN" >/dev/null 2>&1 || return 1
+  "$JQ_BIN" -e --arg run_id "$RUN_ID" '
+    .run_id == $run_id
+    and (
+      (.status == "review_ready" and .workflow.stage == "review-ready" and .workflow.review.status == "ready" and .terminal == null)
+      or (.status == "completed" and .terminal.status == "completed")
+    )
+    and ([.phases[].status] | all(. == "completed"))
+  ' "$PROGRESS_FILE" >/dev/null 2>&1
 }
 
 # --- Goal-file hashing (goal-drift guard) -------------------------------------
@@ -769,6 +879,40 @@ drift_kind_of() {
   else printf 'modified'; fi
 }
 
+detect_goal_drift_now() {
+  # Sets goal_drift_file/kind and returns 0 when either immutable goal changed.
+  # sl-run checks this after every process exit so its own typed exit 8 cannot be
+  # flattened into the supervisor's retry-cap exit 5.
+  local strategy_hash_end plan_hash_end
+  goal_drift_file=""
+  goal_drift_kind=""
+  strategy_hash_end="$(hash_file "$STRATEGY_PATH")"
+  if [ "$strategy_hash_start" != "$strategy_hash_end" ]; then
+    goal_drift_file="$STRATEGY_PATH"
+    goal_drift_kind="$(drift_kind_of "$strategy_hash_start" "$strategy_hash_end")"
+  elif [ -n "$GUARD_PLAN_PATH" ]; then
+    if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+      plan_hash_end="$(hash_file "$GUARD_PLAN_PATH")"
+    else
+      plan_hash_end="$(hash_plan "$GUARD_PLAN_PATH")"
+    fi
+    if [ "$plan_hash_start" != "$plan_hash_end" ]; then
+      goal_drift_file="$GUARD_PLAN_PATH"
+      goal_drift_kind="$(drift_kind_of "$plan_hash_start" "$plan_hash_end")"
+    fi
+  fi
+  [ -n "$goal_drift_file" ]
+}
+
+exit_goal_drift() {
+  echo "loop.sh: FAILED (goal drift) — a goal file changed during the run; refusing to report success." >&2
+  echo "         file: $goal_drift_file" >&2
+  echo "         change: $goal_drift_kind" >&2
+  echo "         Goal changes route through interactive sl-strategy or a human-approved plan revision, never an unattended run. Log: $LOG_FILE" >&2
+  emit_record "$EX_GOAL_DRIFT" || true
+  exit "$EX_GOAL_DRIFT"
+}
+
 # DONE is the routing signal. Match the LAST non-empty line only, so the literal
 # sentinel echoed mid-transcript (it appears verbatim in lfg's own source) never
 # counts as a finish on its own.
@@ -794,9 +938,8 @@ attempt=0
 done_reached=0
 routed_via_pr=0
 timed_out=0
-# Resume state (U8): resume_active=1 relaunches lfg with a resume:<path> marker on
-# the recorded branch (no reset); set at the loop tail when the progress file
-# validates, consumed when building the next attempt's command.
+# Resume state: resume_active=1 relaunches the selected workflow against its
+# validated durable state without resetting the target.
 resume_active=0
 progress_branch=""
 progress_step=""
@@ -827,18 +970,31 @@ while :; do
   # compared on the done_reached path below.
   if [ "$resume_active" -ne 1 ]; then
     strategy_hash_start="$(hash_file "$STRATEGY_PATH")"
-    if [ -n "$GUARD_PLAN_PATH" ]; then plan_hash_start="$(hash_plan "$GUARD_PLAN_PATH")"; fi
+    if [ -n "$GUARD_PLAN_PATH" ]; then
+      if [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+        plan_hash_start="$(hash_file "$GUARD_PLAN_PATH")"
+      else
+        plan_hash_start="$(hash_plan "$GUARD_PLAN_PATH")"
+      fi
+    fi
   fi
 
   # Build this attempt's command. A resuming relaunch (a validated no-PR retry)
-  # appends a resume:<path> marker so lfg re-verifies steps 1..N-1 and continues
-  # at the recorded step; a cold attempt uses the base prompt (the progress:<path>
-  # marker is already in PROMPT for both). Rebuilt per attempt because only the
+  # routes streamlined state directly back to sl-run; the explicit legacy route
+  # appends resume:<path> so the old pipeline re-verifies prior step boundaries.
+  # Rebuilt per attempt because only the
   # prompt differs — env, plugin-dir, model, flags, and wrapper are identical.
   attempt_prompt="$PROMPT"
   if [ "$resume_active" -eq 1 ]; then
-    attempt_prompt="$PROMPT
+    if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+      attempt_prompt="$LOOP_PLAN_RESUME_PROMPT_PREFIX
+state:$PROGRESS_FILE
+run-id:$RUN_ID
+mode:unattended"
+    else
+      attempt_prompt="$PROMPT
 resume:$PROGRESS_FILE"
+    fi
   fi
   attempt_claude_cmd=( "$CLAUDE_BIN" -p "$attempt_prompt" --plugin-dir "$CP" --model "$MODEL" --dangerously-skip-permissions )
   full_cmd=()
@@ -864,10 +1020,14 @@ resume:$PROGRESS_FILE"
   tee -a "$LOG_FILE" <"$attempt_log" >/dev/null
 
   if detect_done "$attempt_log"; then
-    log "attempt $attempt reached DONE"
-    done_reached=1
-    attempt_results+=("done")
-    break
+    if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ] && ! sl_run_completed; then
+      log "attempt $attempt emitted DONE without durable review-ready sl-run state — refusing the routing signal"
+    else
+      log "attempt $attempt reached DONE"
+      done_reached=1
+      attempt_results+=("done")
+      break
+    fi
   fi
 
   # Only a real timeout wrapper firing means "timed out". An uncapped run that
@@ -885,7 +1045,7 @@ resume:$PROGRESS_FILE"
   # branch. This reconciliation keeps PRECEDENCE over resume: it breaks out here,
   # before the resume/reset decision below, so resume never fires once a PR exists
   # (resume is scoped to pre-PR steps 1-7, KTD6).
-  if target_open_pr; then
+  if { [ -z "$PLAN_FILE" ] || [ "$PLAN_WORKFLOW" = "legacy-lfg" ]; } && target_open_pr; then
     log "attempt $attempt: an open PR already exists for the target — routing to verification (no re-launch)"
     routed_via_pr=1
     done_reached=1
@@ -895,6 +1055,23 @@ resume:$PROGRESS_FILE"
 
   # This attempt neither reached DONE nor reconciled to an open PR.
   if [ "$timed_out" -eq 1 ]; then attempt_results+=("timeout"); else attempt_results+=("crash"); fi
+
+  if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ]; then
+    if detect_goal_drift_now; then exit_goal_drift; fi
+    coordinator_status="$(sl_run_status)"
+    if { [ "$coordinator_status" = "review_ready" ] || [ "$coordinator_status" = "completed" ]; } && sl_run_completed; then
+      log "attempt $attempt: reconciled durable finished sl-run state after process exit"
+      done_reached=1
+      attempt_results+=("state-finished-reconciled")
+      break
+    fi
+    case "$coordinator_status" in
+      blocked|failed|cancelled)
+        log "attempt $attempt: sl-run entered $coordinator_status state — not retrying terminal/decision work"
+        break
+        ;;
+    esac
+  fi
 
   # Give-up floor FIRST (KTD6): the cap is checked before the resume/reset
   # decision, so resume never extends the retry budget — exit 5 stays the floor.
@@ -918,7 +1095,10 @@ resume:$PROGRESS_FILE"
     # retry cold-restarts honestly" postcondition-mismatch promise. Real progress
     # (an advanced step or a new head_sha) re-arms the resume.
     armed_state="$progress_step:$progress_head_sha"
-    if [ "$resume_active" -eq 1 ] && [ "$armed_state" = "$resume_armed_state" ]; then
+    if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ] && [ "$resume_active" -eq 1 ] && [ "$armed_state" = "$resume_armed_state" ]; then
+      log "attempt $attempt: resumed sl-run made no durable progress (state '$armed_state') — stopping without redispatch or reset"
+      break
+    elif [ "$resume_active" -eq 1 ] && [ "$armed_state" = "$resume_armed_state" ]; then
       log "attempt $attempt: resumed attempt made no progress (state '$armed_state') — scrubbing and cold-restarting"
       rm -f "$PROGRESS_FILE" 2>/dev/null || true
       reset_target
@@ -930,10 +1110,15 @@ resume:$PROGRESS_FILE"
       resume_armed_state="$armed_state"
     fi
   else
-    log "attempt $attempt: no valid progress file — scrubbing it and resetting to clean base before retrying"
-    rm -f "$PROGRESS_FILE" 2>/dev/null || true
-    reset_target
-    resume_active=0
+    if [ -n "$PLAN_FILE" ] && [ "$PLAN_WORKFLOW" = "sl-run" ] && [ -e "$PROGRESS_FILE" ]; then
+      log "attempt $attempt: sl-run state exists but is invalid — preserving it and stopping fail-closed"
+      break
+    else
+      log "attempt $attempt: no valid progress file — scrubbing it and resetting to clean base before retrying"
+      rm -f "$PROGRESS_FILE" 2>/dev/null || true
+      reset_target
+      resume_active=0
+    fi
   fi
 done
 
@@ -956,29 +1141,7 @@ fi
 # reported. Drift is TERMINAL, not retryable — a finish reached on a mutated goal
 # is completed-but-untrustworthy, mirroring exit 7's semantics. Mirrors the
 # isolation guard's shape: stderr explanation, emit_record || true, exit.
-goal_drift_file=""
-goal_drift_kind=""
-strategy_hash_end="$(hash_file "$STRATEGY_PATH")"
-if [ "$strategy_hash_start" != "$strategy_hash_end" ]; then
-  goal_drift_file="$STRATEGY_PATH"
-  goal_drift_kind="$(drift_kind_of "$strategy_hash_start" "$strategy_hash_end")"
-elif [ -n "$GUARD_PLAN_PATH" ]; then
-  # hash_plan, not hash_file: a status-marker update is progress state the run
-  # produced, not a goal edit. Symmetric with the plan_hash_start snapshot (C3).
-  plan_hash_end="$(hash_plan "$GUARD_PLAN_PATH")"
-  if [ "$plan_hash_start" != "$plan_hash_end" ]; then
-    goal_drift_file="$GUARD_PLAN_PATH"
-    goal_drift_kind="$(drift_kind_of "$plan_hash_start" "$plan_hash_end")"
-  fi
-fi
-if [ -n "$goal_drift_file" ]; then
-  echo "loop.sh: FAILED (goal drift) — a goal file changed during the run; refusing to report success." >&2
-  echo "         file: $goal_drift_file" >&2
-  echo "         change: $goal_drift_kind" >&2
-  echo "         Goal changes route through interactive sl-strategy or a human-approved plan revision, never an unattended run. Log: $LOG_FILE" >&2
-  emit_record "$EX_GOAL_DRIFT" || true
-  exit "$EX_GOAL_DRIFT"
-fi
+if detect_goal_drift_now; then exit_goal_drift; fi
 
 # --- Verification (TARGET-scoped, evaluated AFTER DONE) -----------------------
 verify_green=0

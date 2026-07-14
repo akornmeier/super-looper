@@ -125,7 +125,7 @@ Skip `sl-riffrec-feedback-analysis` when:
 The skill is a **front-door entry point** to the chain:
 
 ```text
-recording → /sl-riffrec-feedback-analysis → (extensive) → /sl-brainstorm → /sl-plan → /sl-work
+recording -> /sl-riffrec-feedback-analysis -> (extensive) -> /sl-brainstorm -> /sl-plan -> /sl-run
                                           → (quick)     → bug report (standalone)
                                           → (setup)     → instructions for capturing
 ```

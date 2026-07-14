@@ -6,7 +6,7 @@
 
 The skill is opinionated about a few specific things that have burned past contributors: it never `git add -A`, it splits naturally distinct concerns into separate commits when present, and it writes PR bodies via temp files (never via stdin pipes, which can silently produce empty PR bodies while `gh` still exits 0).
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-commit-push-pr` is `/sl-work`'s Phase 4 handoff target — it produces the PR with summary, testing notes, evidence (when behavior is observable), and the operational validation section. It's also commonly invoked directly when you've already written the code and want to ship.
+`sl-commit-push-pr` is a standalone Git utility for code already ready to ship. The primary `/sl-run` workflow performs authorized delivery through its code-owned kernel instead of invoking this skill.
 
 ---
 

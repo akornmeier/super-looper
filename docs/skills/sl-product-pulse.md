@@ -4,7 +4,7 @@
 
 `sl-product-pulse` is the **observation-loop** skill. It queries the product's data sources for a given time window (24h, 7d, 1h, etc.) and produces a single-page report covering usage, performance, errors, and follow-ups. The report saves to `docs/pulse-reports/` as a browseable timeline of what users experienced — the team's working memory of how the product is actually performing in the world.
 
-The super-looper ideation chain is `/sl-ideate → /sl-brainstorm → /sl-plan → /sl-work`. `sl-product-pulse` **closes the outer loop** — once features are shipped, the pulse surfaces signals from real usage that feed back into ideation ("what's worth exploring?") and brainstorming ("what does this need to be?"). Combined with `sl-strategy` as the upstream anchor and `sl-compound` capturing learnings, the chain becomes a feedback system rather than a one-way pipeline.
+`sl-product-pulse` closes the outer feedback loop around `/sl-strategy -> /sl-plan -> /sl-run`: shipped-product signals can inform the next strategy reconciliation, plan, or optional brainstorm.
 
 ---
 
