@@ -12,7 +12,7 @@ Dispatch one worker with the Codex subagent collaboration tool. Inject the bound
 
 ## Bundled renderer scripts
 
-Resolve the skill directory from the absolute `SKILL.md` source path provided when the skill loaded. Invoke Bash with the absolute script path; do not execute Python files directly and do not assume the project CWD contains them:
+Resolve the skill directory from the absolute `SKILL.md` source path provided when the skill loaded. Run the scripts through Bash, passing the interpreter an absolute path built from that directory — as shown below. Do not hand a `.py` file to a direct file-execution tool, rely on its executable bit, or assume the project CWD contains it:
 
 ```bash
 python3 "<absolute-skill-directory>/scripts/generate-plan-images.py" <plan-path> [--max-images <n>]
