@@ -1,0 +1,6 @@
+interface:
+  display_name: "Run Plan"
+  short_description: "Run reviewed plans through delivery and closeout"
+  default_prompt: "Use $sl-run to execute this plan through risk routing, engineer review, approved delivery, and evidence closeout."
+policy:
+  allow_implicit_invocation: true

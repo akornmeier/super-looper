@@ -152,82 +152,28 @@ describe("sl-plan testing contract", () => {
   test("flags blank test scenarios on feature-bearing units as incomplete", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-plan/SKILL.md")
 
-    // Phase 5.1 review checklist addresses blank test scenarios
-    expect(content).toContain("blank or missing test scenarios")
+    expect(content).toMatch(/Blank or missing test scenarios make the plan incomplete/i)
     expect(content).toContain("Test expectation: none")
-
-    // Template comment mentions the annotation convention
-    expect(content).toContain("Test expectation: none -- [reason]")
+    expect(content).toContain("Test expectation: none -- <reason>")
   })
 })
 
 describe("sl-plan review contract", () => {
-  test("requires document review after confidence check", async () => {
-    // Document review instructions extracted to references/plan-handoff.md
-    const content = await readRepoFile("plugins/super-looper/skills/sl-plan/references/plan-handoff.md")
-
-    // Phase 5.3.8 runs document-review before final checks (5.3.9)
-    expect(content).toContain("## 5.3.8 Document Review")
-    expect(content).toContain("`sl-doc-review` skill")
-
-    // Document review must come before final checks so auto-applied edits are validated
-    const docReviewIdx = content.indexOf("5.3.8 Document Review")
-    const finalChecksIdx = content.indexOf("5.3.9 Final Checks")
-    expect(docReviewIdx).toBeLessThan(finalChecksIdx)
-  })
-
-  test("SKILL.md stub points to plan-handoff reference", async () => {
+  test("uses a risk/confidence critic gate instead of mandatory review", async () => {
     const content = await readRepoFile("plugins/super-looper/skills/sl-plan/SKILL.md")
 
-    // Stub references the handoff file and marks document review as mandatory
-    expect(content).toContain("`references/plan-handoff.md`")
-    expect(content).toContain("Document review is mandatory")
+    expect(content).toContain("### 6. Critic gate")
+    expect(content).toContain("Use one independent critic only if")
+    expect(content).toContain("Normal and merely large plans do not automatically qualify")
+    expect(content).not.toContain("Document review is mandatory")
   })
 
-  test("uses headless mode by default and in pipeline context", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-plan/references/plan-handoff.md")
+  test("normal planning is parent-owned and subagent-free", async () => {
+    const content = await readRepoFile("plugins/super-looper/skills/sl-plan/SKILL.md")
 
-    // Default at Phase 5.3.8 is `mode:headless` so users opt into deeper interactive review
-    // explicitly from the post-generation menu rather than being forced through it.
-    expect(content).toContain("sl-doc-review` with `mode:headless`")
-    expect(content).not.toContain("skip document-review and return control")
-
-    // The interactive walkthrough is opt-in via the post-generation menu, not automatic
-    expect(content).toContain("Run deeper doc review")
-  })
-
-  test("handoff options expose deeper-review opt-in alongside sl-work", async () => {
-    const content = await readRepoFile("plugins/super-looper/skills/sl-plan/references/plan-handoff.md")
-
-    // sl-work remains the recommended next-stage action (planning is done; review already ran)
-    expect(content).toContain("**Start `/sl-work`** (recommended) - Begin implementing this plan in the current session")
-
-    // The work loop (lfg) is a first-class peer option: it produces a clean handoff via
-    // sl-handoff and surfaces a ready-to-run loop.sh command, but never auto-spawns a run.
-    expect(content).toContain("**Start the work loop (`lfg`)**")
-    expect(content).toContain("`sl-handoff`")
-    expect(content).toContain("loop.sh --target")
-    expect(content).toContain("do not auto-spawn")
-
-    // Deeper review is a first-class menu fixture so users can engage with surfaced findings
-    // without relying on free-form prompting; routed through sl-doc-review without headless mode.
-    expect(content).toContain("**Run deeper doc review**")
-    expect(content).toContain("`sl-doc-review`")
-    expect(content).toContain("without** `mode:headless`")
-
-    // Deeper-review menu fixture is hidden when no actionable findings remain; the menu then
-    // collapses from 6 to 5 options (still a numbered list — above the 4-option AskUserQuestion
-    // cap). FYI-only state also hides the option since sl-doc-review's walkthrough is gated to
-    // actionable findings (anchor 75/100, gated_auto/manual) and FYIs (anchor 50) bypass it.
-    expect(content).toContain("Hide `Run deeper doc review` when no actionable findings remain")
-    expect(content).toContain("proposed_fixes_count + decisions_count > 0")
-
-    // Summary line above the menu surfaces autofix counts and remaining-bucket counts
-    expect(content).toContain("Summary line above the menu")
-
-    // No conditional ordering based on plan depth (review already ran)
-    expect(content).not.toContain("**Options when sl-doc-review is recommended:**")
-    expect(content).not.toContain("**Options for Standard or Lightweight plans:**")
+    expect(content).toContain("A normal planning run uses zero subagents")
+    expect(content).toContain("Do not dispatch parallel specialists")
+    expect(content).toContain("The parent model is the planner")
   })
 })
 

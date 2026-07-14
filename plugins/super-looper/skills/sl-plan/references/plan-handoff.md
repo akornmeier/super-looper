@@ -49,7 +49,7 @@ After all mutations in this run have settled (initial write, deepening synthesis
 
 ## 5.4 Post-Generation Options
 
-**Pipeline mode:** If invoked from an automated workflow such as LFG or any `disable-model-invocation` context, skip the interactive menu below and return control to the caller immediately. The plan file has already been written, the confidence check has already run, and sl-doc-review has already run — the caller (e.g., lfg) determines the next step.
+**Pipeline mode:** If invoked from an automated workflow such as the `lfg` compatibility wrapper or any `disable-model-invocation` context, skip the interactive menu below and return the canonical Markdown plan path to the caller immediately. The caller passes that path to `sl-run mode:unattended`.
 
 **Path format:** Use absolute paths for chat-output file references — relative paths are not auto-linked as clickable in most terminals.
 
@@ -57,35 +57,36 @@ After all mutations in this run have settled (initial write, deepening synthesis
 
 **Question:** "Plan ready at `<absolute path to plan>`. What would you like to do next?"
 
-**Options:**
-1. **Start `/sl-work`** (recommended) - Begin implementing this plan in the current session
-2. **Start the work loop (`lfg`)** - Hand off to the full autopilot (work → review → commit → PR → watch CI to green). Produces a clean handoff doc and surfaces a ready-to-run `loop.sh` command; does not start work in this session
-3. **Run deeper doc review** - Walk through the remaining findings interactively (full sl-doc-review walkthrough)
-4. **Create Issue** - Create a tracked issue from this plan in your configured issue tracker (GitHub or Linear)
-5. **Open in Proof (web app) — review and comment to iterate with the agent** - Open the doc in Every's Proof editor, iterate with the agent via comments, or copy a link to share with others. **Render only when `OUTPUT_FORMAT=md`.**
-5. **Open in browser** - Open the HTML plan file locally for review and sharing. Opens with embedded images when the slots were filled at Phase 5.2b; otherwise the figures show their captions and the images can be filled later. **Render only when `OUTPUT_FORMAT=html`.**
-6. **Done for now** - Pause; the plan file is saved and can be resumed later
+**Options.** Membership is computed, not fixed: each option below carries a render gate, and several are mutually exclusive alternatives keyed to `OUTPUT_FORMAT`. Do not print these indices. Evaluate the gates first, then number the surviving options `1..N` in the order listed here, so the user always sees a contiguous sequence with no gaps or repeats.
 
-**Open-in-Proof / Open-in-browser is format-keyed.** Under exclusive output mode, the plan exists as exactly one artifact — `.md` or `.html`, never both. Render the label matching the produced format (Proof for markdown, browser for HTML). Proof operates on markdown plans (it ingests the `.md` source and rewrites markdown), so it does not apply to HTML runs; the browser option opens the local `.html` file directly. `/sl-work` and **Start the work loop (`lfg`)** remain available in both modes — both read either format (see the sl-work skill's plan-input handling).
+- **Start `/sl-run`** (recommended) - Begin the code-owned workflow in this session. **Render only when `OUTPUT_FORMAT=md`.**
+- **Start `/sl-work` compatibility** - Execute this older HTML plan through the compatibility path. **Render only when `OUTPUT_FORMAT=html`.**
+- **Launch an unattended `/sl-run`** - Surface a ready-to-run `loop.sh` command. The run stops at durable engineer review; it does not infer approval or delivery. **Render only when `OUTPUT_FORMAT=md`.**
+- **Run deeper doc review** - Walk through the remaining findings interactively (full sl-doc-review walkthrough). **Render only when actionable findings remain — see the hide rule below.**
+- **Create Issue** - Create a tracked issue from this plan in your configured issue tracker (GitHub or Linear)
+- **Open in Proof (web app) — review and comment to iterate with the agent** - Open the doc in Every's Proof editor, iterate with the agent via comments, or copy a link to share with others. **Render only when `OUTPUT_FORMAT=md`.**
+- **Open in browser** - Open the HTML plan file locally for review and sharing. Opens with embedded images when the slots were filled at Phase 5.2b; otherwise the figures show their captions and the images can be filled later. **Render only when `OUTPUT_FORMAT=html`.**
+- **Done for now** - Pause; the plan file is saved and can be resumed later
 
-**Menu rendering:** The interactive menu has 6 options (5 when `Run deeper doc review` is hidden — see below), both of which exceed the `AskUserQuestion` 4-option cap. Per the AGENTS.md narrow exception for legitimate option overflow, always render this menu as a numbered list in chat with the hint "Pick a number or describe what you want." rather than trimming to fit the cap. Each option is a distinct destination/workflow and none are removable without losing real user choice (in-session work, the work loop, deeper review, issue creation, Proof/browser, and pause are each separately requested in practice). Never silently skip the question.
+Route the user's pick by the option's label, not by the number they typed — the number is a render-time artifact and the same index maps to different options across formats.
+
+**Format-keyed execution.** Under exclusive output mode, the plan exists as exactly one artifact — `.md` or `.html`, never both. Canonical Markdown routes to `sl-run`. HTML remains available for human-readable compatibility and routes through `sl-work`'s isolated legacy path; it is not silently treated as a canonical `sl-run` plan. Proof operates on Markdown, while the browser option opens local HTML.
+
+**Menu rendering:** After the gates are applied, a markdown run renders 6 options (5 when `Run deeper doc review` is hidden — see below) and an HTML run renders 4. Per the AGENTS.md narrow exception for legitimate option overflow, render the menu the same way in every case — a numbered list in chat — rather than switching surfaces on the count: the free-form routing below (e.g. typing "review" instead of a number) depends on the chat list being present. Include the hint "Pick a number or describe what you want." rather than trimming options to fit the cap. Each option is a distinct destination/workflow and none are removable without losing real user choice (in-session work, the work loop, deeper review, issue creation, Proof/browser, and pause are each separately requested in practice). Never silently skip the question.
 
 **Hide `Run deeper doc review` when no actionable findings remain or doc review was skipped.** Show the **Run deeper doc review** option only when the headless envelope reports `proposed_fixes_count + decisions_count > 0` — i.e., at least one `gated_auto` or `manual` finding at confidence anchor `75` or `100`. Drop it in any other case, including FYI-only state. FYI observations (anchor `50`) do not enter `sl-doc-review`'s interactive routing question or walkthrough — that flow is gated to actionable findings — so a `Run deeper doc review` option that only has FYIs to show is a dead-end: sl-doc-review would re-dispatch the persona team, find the same FYIs, skip the routing question, and fall through to the terminal question with nothing to walk through. The user paid the dispatch cost for no engagement surface. **Also drop it when the envelope carries `skipped_reason: output_format_html`** — sl-doc-review's mutation mechanics are markdown-only today (see Phase 5.3.8 format gate), so a `Run deeper doc review` option on an HTML plan would route into the same markdown-oriented walkthrough the gate exists to prevent. When it is dropped, the menu becomes 5 options and renumbers in display so users see a clean sequence — still rendered as a numbered list in chat (5 exceeds the 4-option `AskUserQuestion` cap). The summary line above the menu still names the FYI count when present (`Doc review applied 3 fixes. 2 FYI observations remain.`) so the user sees what was found, even though there is no menu action attached to it — the FYIs are visible in the headless envelope text the menu rendered alongside.
 
 Based on selection (the bare per-option routing is also stated inline in the SKILL.md so it cannot be missed when this reference is not loaded; the elaborate sub-flows below are the reason this reference still exists):
-- **Start `/sl-work`** -> Invoke the `sl-work` skill via the `Skill` tool, passing the plan path as the skill argument. Do not merely tell the user to type `/sl-work` — fire the invocation now so the plan executes in this session.
-- **Start the work loop (`lfg`)** -> Produce the handoff, then surface the launch command — do not auto-spawn anything (the human stays in control of launching the unattended run, consistent with the loop-fork model):
-  1. Load the `sl-handoff` skill to write a clean handoff doc; pass the focus "execute this plan with `lfg`". It returns a temp path.
-  2. Surface the **clean path** as a ready-to-run command, naming the flags the operator must still supply: `loop.sh --target <repo dir> --plan-file <plan path> --handoff-file <handoff path>`. Add `--verify-cmd <cmd>` for a repo without a GitHub remote (`loop.sh` uses GitHub CI by default). Use the plan path **relative to the repo root** (the run's `--target`), since the agent resolves it against the target.
-  3. Name the in-session convenience: the user may instead run `/lfg plan:<plan path>` here — but state the cost concretely at this decision point: "it runs in this session's accumulated context; use the `loop.sh` command for a clean run."
-  4. Do not start a background process and do not invoke `lfg`/`sl-work` yourself — producing the handoff and surfacing the command is the whole action. Then end the turn; the user launches the clean run.
+- **Start `/sl-run`** -> Invoke `sl-run` with `plan:<plan-path> mode:interactive`. Do not route through `sl-work` or dispatch implementation directly.
+- **Start `/sl-work` compatibility** -> Invoke `sl-work` with the HTML plan path. State that `/sl-plan output:md` followed by `/sl-run` is the direct replacement for future runs.
+- **Launch an unattended `/sl-run`** -> Surface `loop.sh --target <repo-dir> --plan-file <repo-relative-plan-path> --verify-cmd <command...>`. Do not create a `sl-handoff` document: the canonical plan and durable run-state path are the handoff. Do not start a background process. The user may instead invoke `/lfg plan:<plan-path>` as the compatibility form.
 - **Run deeper doc review** -> Re-invoke the `sl-doc-review` skill on the plan path **without** `mode:headless` so the interactive routing question and walkthrough fire. The headless pass already applied `safe_auto` fixes and recorded its findings in the session, so the interactive pass picks up where headless stopped — its R29 suppression rule prevents prior-round Skipped/Deferred entries from re-raising. After it returns, re-render this menu with the refreshed counts so the user can pick what to do next.
 - **Create Issue** -> Follow the Issue Creation section below
 - **Open in Proof (web app) — review and comment to iterate with the agent** -> Load the `sl-proof` skill in HITL-review mode with:
   - source file: `docs/plans/<plan_filename>.md`
   - doc title: `Plan: <plan title from frontmatter>`
   - identity: `ai:super-looper` / `Super Looper`
-  - recommended next step: `/sl-work` (shown in the sl-proof skill's final terminal output)
+  - recommended next step: `/sl-run plan:<path>` (shown in the sl-proof skill's final terminal output)
 
   Follow the HITL-review workflow in the sl-proof skill (the sl-proof skill loads its own hitl-review reference). It uploads the plan, prompts the user for review in Proof's web UI, ingests filtered comment threads, applies agreed edits through the current Proof edit APIs, replies/resolves in-thread, and syncs the final markdown back to the plan file atomically on proceed.
 
@@ -93,7 +94,7 @@ Based on selection (the bare per-option routing is also stated inline in the SKI
 
   When the sl-proof skill returns:
   - `status: proceeded` with `localSynced: true` -> the plan on disk now reflects the review. Re-run `sl-doc-review` on the updated plan before re-rendering the menu — HITL can materially rewrite the plan body, so the prior sl-doc-review pass no longer covers the current file and section 5.3.8 requires a review before any handoff option is offered. Then return to the post-generation options with the refreshed residual findings.
-  - `status: proceeded` with `localSynced: false` -> the reviewed version lives in Proof at `docUrl` but the local copy is stale. Offer to pull the Proof doc to `localPath` using the sl-proof skill's Pull workflow. If the pull happened, re-run `sl-doc-review` on the pulled file before re-rendering the options (same 5.3.8 rationale — the local plan was materially updated by the pull). If the pull was declined, include a one-line note above the menu that `<localPath>` is stale vs. Proof — otherwise `Start /sl-work` or `Create Issue` will silently use the pre-review copy.
+  - `status: proceeded` with `localSynced: false` -> the reviewed version lives in Proof at `docUrl` but the local copy is stale. Offer to pull the Proof doc to `localPath` using the sl-proof skill's Pull workflow. If the pull happened, re-run `sl-doc-review` on the pulled file before re-rendering the options (same 5.3.8 rationale — the local plan was materially updated by the pull). If the pull was declined, include a one-line note above the menu that `<localPath>` is stale vs. Proof — otherwise `Start /sl-run` or `Create Issue` will silently use the pre-review copy.
   - `status: done_for_now` -> the plan on disk may be stale if the user edited in Proof before leaving. Offer to pull the Proof doc to `localPath` so the local plan file stays in sync. If the pull happened, re-run `sl-doc-review` on the pulled file before re-rendering the options (same 5.3.8 rationale). If the pull was declined, include the stale-local note above the menu. `done_for_now` means the user stopped the HITL loop — it does not mean they ended the whole plan session; they may still want to start work or create an issue.
   - `status: aborted` -> fall back to the options without changes.
 
@@ -129,4 +130,4 @@ When the user selects "Create Issue", detect their project tracker:
 
 After issue creation:
 - Display the issue URL
-- Ask whether to proceed to `/sl-work` using the platform's blocking question tool
+- Ask whether to proceed to `/sl-run` using the platform's blocking question tool

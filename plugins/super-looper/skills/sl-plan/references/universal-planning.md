@@ -8,7 +8,7 @@ The detection stub in SKILL.md routes here for anything that isn't clearly softw
 
 - **Is this actually a software task?** The key distinction is task-type, not topic-domain. A study guide about Rust is non-software (producing educational content). A Rust library refactor is software (modifying code). If this is actually software, return to Phase 0.2 in the main SKILL.md.
 - **Is this a trivial single-fact lookup?** Only a question answerable from one fact with no research, retrieval, or judgment skips planning — answer it directly and stop, in the user's terms. Do not narrate that it "isn't a planning task" or explain the routing; that is process exhaust (see Veil of value below). Examples: "zsh: command not found: brew", "what's the capital of France." A question that needs multiple steps, any retrieval, or synthesis to answer well does **not** qualify: it is an answer-seeking task (see Disposition below), not a quick-help exit. When unsure, do not exit.
-- **Pipeline mode?** If invoked from LFG or any `disable-model-invocation` context: output "This is a non-software task. The LFG pipeline requires sl-work, which only supports software tasks. Use `/sl-plan` directly for non-software planning." and stop.
+- **Pipeline mode?** If invoked from `lfg` or any `disable-model-invocation` context: output "This is a non-software task. The streamlined `sl-run` workflow executes canonical software plans. Use `/sl-plan` directly for non-software planning or a purpose-built knowledge workflow." and stop.
 
 Once past these checks, commit to the task — do not bail because it looks like a "lookup" or "research question." The user invoked the planning tool on purpose. Then choose the disposition below.
 
@@ -41,7 +41,7 @@ Carry out the approach. When the answer depends on facts the model can't reliabl
 
 **Ground answers about the user's own code, repo, or named artifacts in the actual sources — not memory.** When the question references local code, a specific file, a named CLI or service, or "our X", read those sources first (and any resource the user named — see Core Principle 8 in SKILL.md). "The model already knows the topic" covers general knowledge only, never the contents of the user's codebase: a comparison or recommendation about local code that was never read is ungrounded. Inspect, then answer.
 
-**Execution here is research and analysis only — never code.** Reading code and artifacts to understand them is in-bounds research; writing or running code to change the system is not — that belongs in `sl-work`. This keeps the planning/execution boundary intact.
+**Execution here is research and analysis only — never code.** Reading code and artifacts to understand them is in-bounds research; writing or running code to change the system is not — canonical code execution belongs in `sl-run`. This keeps the planning/execution boundary intact.
 
 ### Deliver the answer
 

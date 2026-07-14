@@ -1,0 +1,6 @@
+interface:
+  display_name: "Frontier Planner"
+  short_description: "Create a grounded phased execution plan"
+  default_prompt: "Use $sl-plan to create an executable phased plan for this task."
+policy:
+  allow_implicit_invocation: true
