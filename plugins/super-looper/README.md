@@ -87,7 +87,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 |-------|-------------|
 | [`/sl-demo-reel`](../../docs/skills/sl-demo-reel.md) | Capture a visual demo reel (GIF demos, terminal recordings, screenshots) for PRs with project-type-aware tier selection |
 | [`sl-handoff`](../../docs/skills/sl-handoff.md) | Compact genuinely non-run session context; active `sl-run` work resumes from its state path instead of creating a competing handoff document |
-| [`sl-learn`](../../docs/skills/sl-learn.md) | Capture a ship-time learning at the close of an autopilot run — invoke `sl-compound` headless against the hot session context, commit the resulting `docs/solutions/` learning into the run's PR, and re-confirm CI green. Triggered by `lfg` after CI green and before `DONE`; skips when no open PR exists or CI is unresolved |
+| [`sl-learn`](../../docs/skills/sl-learn.md) | Compatibility learning seam for the legacy lfg pipeline: invoke `sl-compound` headless, commit accepted learning into the open PR, and re-confirm CI; fires only when legacy lfg invokes ship-time learning; new `sl-run` workflows use their typed evidence closeout instead |
 | [`/sl-promote`](../../docs/skills/sl-promote.md) | Draft user-facing announcement copy for a shipped feature (X post, changelog blurb, LinkedIn, email); voice-matched via the Spiral CLI when installed, a lite layer of editorial & social expertise without it |
 | [`/sl-report-bug`](../../docs/skills/sl-report-bug.md) | Report a bug in the super-looper plugin |
 | [`/sl-resolve-pr-feedback`](../../docs/skills/sl-resolve-pr-feedback.md) | Resolve PR review feedback in parallel |

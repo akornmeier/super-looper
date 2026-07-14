@@ -1,10 +1,10 @@
 # `sl-learn`
 
-> Capture a ship-time learning at the close of an autopilot run — invoke `sl-compound` headless against the still-hot session context, commit its learning into the run's open PR, and re-confirm CI green before the loop reports done.
+> Compatibility learning seam for the legacy `lfg` pipeline — invoke `sl-compound` headless against the still-hot session context, evaluate the result, and commit accepted learnings to the run's PR. Use only when legacy `lfg` fires ship-time learning; new `sl-run` workflows use their typed evidence closeout instead.
 
-`sl-learn` is the **learning-capture seam** for unattended runs. The autopilot *consumes* learnings — `sl-plan` and `sl-code-review` read `docs/solutions/` — but on its own produces none: when a headless `loop.sh` run solves a real problem and exits at DONE, no human is present to run `/sl-compound`, so the learning evaporates. `sl-learn` closes that gap. It runs **in the same process** as the solving session so `sl-compound` sees the hot context, not just the final diff.
+`sl-learn` is **compatibility-only for the legacy `lfg` pipeline**. It does not run on new `sl-run` workflows, which build a durable closeout packet, treat `no-learning` as a normal outcome, and record evidence through their own kernel without depending on hot transcript context.
 
-It writes and commits — the one way it diverges from `sl-handoff`'s read-only shape. It is fired by `lfg` after CI reaches green and before DONE; it is not a skill you invoke by hand.
+When legacy `lfg` invokes learning at ship-time, `sl-learn` captures what was learned by running `sl-compound` headless in the same process — so the hot solving context is available — evaluates the result independently, and commits accepted learnings into the run's PR. It writes and commits — the one way it diverges from `sl-handoff`'s read-only shape. It is fired by `lfg` (mode:legacy-pipeline) after CI reaches green and before DONE; it is not a skill you invoke by hand.
 
 ---
 
@@ -13,9 +13,9 @@ It writes and commits — the one way it diverges from `sl-handoff`'s read-only 
 | Question | Answer |
 |----------|--------|
 | What does it do? | Runs `sl-compound` headless in-session, commits the learning (plus any `CONCEPTS.md` / instruction-file edits) into the run's PR, and re-confirms CI green |
-| When to use it | Automatically, by `lfg`, at the close of an autopilot run — not a manual invocation |
+| When to use it | Automatically, by legacy `lfg` only (`mode:legacy-pipeline` / `loop.sh --legacy-lfg-plan`), at the close of an autopilot run — not invoked from new `sl-run` workflows or manual invocation |
 | What it produces | A `docs(<scope>):` commit on the PR branch, on a verified-green PR — or a clean skip |
-| Skip when | No open PR exists, or the run ended with CI unresolved (the seam self-skips) |
+| Skip when | No open PR exists, or the run ended with CI unresolved (the seam self-skips). New `sl-run` workflows never fire it — they handle their own closeout |
 
 ---
 
@@ -65,7 +65,7 @@ An unattended run fixes a flaky CI job (a `fix(ci):` commit lands, CI goes red�
 
 ## When to Reach For It
 
-You don't — `lfg` fires it. It exists as a distinct skill so the seam's gates and constraints are versioned and testable independently of the pipeline that calls it.
+You don't — legacy `lfg` fires it only. It exists as a distinct skill so the seam's gates and constraints are versioned and testable independently of the pipeline that calls it. New `sl-run` workflows do not invoke it; they perform their own evidence-gated closeout and record learning through their typed kernel.
 
 Reach for `/sl-compound` directly when you're in an interactive session and want to capture a learning yourself.
 
@@ -73,7 +73,7 @@ Reach for `/sl-compound` directly when you're in an interactive session and want
 
 ## Use as Part of the Workflow
 
-`sl-learn` is the last step of the `lfg` pipeline, after the CI watch-and-autofix loop reaches green and before DONE. It skips cleanly when there is no PR to commit into or the run ended red, so it never blocks the loop's stop.
+`sl-learn` is the last step of the legacy `lfg` pipeline only (when invoked with `mode:legacy-pipeline` / `loop.sh --legacy-lfg-plan`), after the CI watch-and-autofix loop reaches green and before DONE. It skips cleanly when there is no PR to commit into or the run ended red, so it never blocks the loop's stop. New `sl-run` workflows do not use this seam — they handle their own closeout and learning record within their workflow kernel.
 
 ---
 
